@@ -767,7 +767,7 @@ public class ConstructionTask {
                 positions.add(info.pos());
             }
         }
-        return List.copyOf(positions);
+        return Objects.requireNonNull(List.copyOf(positions));
     }
 
     private static boolean isControlBoxBlock(@Nonnull BlockState state) {

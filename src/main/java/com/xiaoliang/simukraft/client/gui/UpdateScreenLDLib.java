@@ -45,7 +45,6 @@ public class UpdateScreenLDLib extends ModularUIGuiContainer {
     private static final int COLOR_HEADER_BG = 0xFF2D5A6B;
     private static final int COLOR_BUTTON_BG = 0xFF3A5A6A;
     private static final int COLOR_BUTTON_HOVER = 0xFF4A7A8A;
-    private static final int COLOR_TEXT_TITLE = 0xFFFFFFFF;
     private static final int COLOR_TEXT_NORMAL = 0xFFE0E0E0;
     private static final int COLOR_TEXT_GOLD = 0xFFFFD700;
     private static final int COLOR_TEXT_GREEN = 0xFF00FF00;
@@ -65,7 +64,6 @@ public class UpdateScreenLDLib extends ModularUIGuiContainer {
     private String statusMessage = "";
     private int statusColor = COLOR_TEXT_NORMAL;
     private List<Component> changelogLines = new ArrayList<>();
-    private int scrollOffset = 0;
 
     public UpdateScreenLDLib(Screen parent, GiteeUpdateChecker updateChecker) {
         super(createHolderAndUI(parent, updateChecker), 0);

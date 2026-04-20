@@ -29,6 +29,7 @@ public abstract class MixinModularUIGuiContainer extends AbstractContainerScreen
             ),
             remap = true
     )
+    @SuppressWarnings("null")
     private static Inventory simukraft$redirectGetInventory(Player player) {
         return player != null ? player.getInventory() : new Inventory(null);
     }

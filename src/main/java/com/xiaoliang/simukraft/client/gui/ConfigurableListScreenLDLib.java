@@ -50,7 +50,6 @@ public abstract class ConfigurableListScreenLDLib extends ModularUIGuiContainer 
     private static final int COLOR_HEADER_BG = 0xFF2D5A6B;
     private static final int COLOR_PANEL_BG = 0xCC2A2A2A;
     private static final int COLOR_ITEM_BG = 0xFF353535;
-    private static final int COLOR_ITEM_BG_HOVER = 0xFF454545;
     private static final int COLOR_BUTTON_BG = 0xFF3A5A6A;
     private static final int COLOR_BUTTON_HOVER = 0xFF4A7A8A;
     private static final int COLOR_DELETE_BUTTON = 0xFFFF5555;
@@ -58,8 +57,6 @@ public abstract class ConfigurableListScreenLDLib extends ModularUIGuiContainer 
     private static final int COLOR_TEXT_TITLE = 0xFFFFFFFF;
     private static final int COLOR_TEXT_NORMAL = 0xFFE0E0E0;
     private static final int COLOR_TEXT_GRAY = 0xFFAAAAAA;
-    private static final int COLOR_TEXT_HIGHLIGHT = 0xFF88CCFF;
-    private static final int COLOR_INPUT_BG = 0xFF2A2A2A;
     private static final int COLOR_INPUT_BORDER = 0xFF5A5A5A;
 
     // 窗口尺寸

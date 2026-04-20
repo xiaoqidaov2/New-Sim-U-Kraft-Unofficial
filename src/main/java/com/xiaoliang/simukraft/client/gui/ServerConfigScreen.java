@@ -24,13 +24,10 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.Consumer;
 
 // 使用完整类名避免与Minecraft的Runnable冲突
@@ -61,8 +58,6 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
     private static final int COLOR_TEXT_NORMAL = 0xFFE0E0E0;    // 正常文本
     private static final int COLOR_TEXT_HIGHLIGHT = 0xFF88CCFF; // 高亮文本
     private static final int COLOR_TEXT_GRAY = 0xFFAAAAAA;      // 灰色文本
-    private static final int COLOR_INPUT_BG = 0xFF2A2A2A;       // 输入框背景
-    private static final int COLOR_INPUT_BORDER = 0xFF5A5A5A;   // 输入框边框
 
     // 布局常量
     private static final int WINDOW_WIDTH = 360;
@@ -85,11 +80,6 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
     private final Screen parent;
     private int currentPage = 0;
     private final ConfigUIHolder holder;
-
-    @Nonnull
-    private static <T> T nn(@Nullable T value) {
-        return Objects.requireNonNull(value);
-    }
 
     public ServerConfigScreen(Screen parent) {
         super(createHolderAndUI(), 0);

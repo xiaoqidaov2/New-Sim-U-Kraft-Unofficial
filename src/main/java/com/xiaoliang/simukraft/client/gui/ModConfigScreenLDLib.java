@@ -19,6 +19,8 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 
+import javax.annotation.Nonnull;
+
 /**
  * 客户端配置界面 - LDLib版本
  * 简化为单个按钮入口，点击进入HUD位置调整界面
@@ -55,7 +57,7 @@ public class ModConfigScreenLDLib extends ModularUIGuiContainer {
     }
 
     private static ModularUI createHolderAndUI(Screen parent) {
-        return new ConfigUIHolder(parent).createModularUI();
+        return new ConfigUIHolder().createModularUI();
     }
 
     @Override
@@ -83,16 +85,14 @@ public class ModConfigScreenLDLib extends ModularUIGuiContainer {
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
+    public void render(@Nonnull GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
         GuiScaleManager.apply3x();
         super.render(graphics, mouseX, mouseY, partialTicks);
     }
 
     private static class ConfigUIHolder implements IUIHolder {
-        private final Screen parent;
 
-        public ConfigUIHolder(Screen parent) {
-            this.parent = parent;
+        public ConfigUIHolder() {
         }
 
         @Override

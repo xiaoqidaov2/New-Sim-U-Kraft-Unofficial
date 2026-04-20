@@ -83,7 +83,7 @@ public class ResidentialControlBoxBlock extends Block {
             return;
         }
 
-        initializeResidence(server, pos, boxInfo.buildingFileName, boxInfo.cityId);
+        initializeResidence(server, Objects.requireNonNull(pos), boxInfo.buildingFileName, boxInfo.cityId);
         ConstructionBoxMapping.removePendingBox(level, pos);
     }
 

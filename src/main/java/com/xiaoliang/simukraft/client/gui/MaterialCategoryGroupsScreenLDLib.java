@@ -54,9 +54,7 @@ public class MaterialCategoryGroupsScreenLDLib extends ModularUIGuiContainer {
     private static final int COLOR_ITEM_BG_HOVER = 0xFF454545;
     private static final int COLOR_ITEM_SELECTED = 0xFF5555AA;
     private static final int COLOR_HEADER_ITEM_BG = 0xFF664400;
-    private static final int COLOR_HEADER_ITEM_HOVER = 0xFF885500;
     private static final int COLOR_MEMBER_ITEM_BG = 0xFF334466;
-    private static final int COLOR_MEMBER_ITEM_HOVER = 0xFF446688;
     private static final int COLOR_BUTTON_BG = 0xFF3A5A6A;
     private static final int COLOR_BUTTON_HOVER = 0xFF4A7A8A;
     private static final int COLOR_DELETE_BUTTON = 0xFFFF5555;
@@ -66,7 +64,6 @@ public class MaterialCategoryGroupsScreenLDLib extends ModularUIGuiContainer {
     private static final int COLOR_TEXT_GRAY = 0xFFAAAAAA;
     private static final int COLOR_TEXT_HEADER = 0xFFFFAA00;
     private static final int COLOR_TEXT_MEMBER = 0xFF88AAFF;
-    private static final int COLOR_INPUT_BG = 0xFF2A2A2A;
     private static final int COLOR_INPUT_BORDER = 0xFF5A5A5A;
 
     // 窗口尺寸
