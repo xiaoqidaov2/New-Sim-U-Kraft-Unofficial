@@ -32,7 +32,7 @@ import java.util.function.Consumer;
 
 // 使用完整类名避免与Minecraft的Runnable冲突
 
-/**
+/*
  * 服务器配置界面 - LDLib现代化版本
  * 使用LDLib组件实现简约现代化UI设计
  * 该界面以固定3x缩放渲染
@@ -95,8 +95,8 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
     }
 
     private static ModularUI createHolderAndUI() {
-        // simukraft: 应用3x缩放
-        GuiScaleManager.apply3x();
+        // simukraft: 根据窗口尺寸选择能完整显示的最大缩放
+        GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
 
         ConfigUIHolder holder = new ConfigUIHolder();
         return holder.createModularUI();
@@ -116,8 +116,8 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
     @Override
     public void init() {
         super.init();
-        // simukraft: 初始化时重新应用3x缩放（从子界面返回时）
-        GuiScaleManager.apply3x();
+        // simukraft: 初始化时重新应用可完整显示的最佳缩放
+        GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
     }
 
     @Override
@@ -131,8 +131,8 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
-        // simukraft: 保持3x缩放
-        GuiScaleManager.apply3x();
+        // simukraft: 保持可完整显示的最佳缩放
+        GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
         super.render(graphics, mouseX, mouseY, partialTicks);
     }
 

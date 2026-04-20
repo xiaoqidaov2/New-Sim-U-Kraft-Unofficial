@@ -33,6 +33,7 @@ import net.minecraftforge.fml.ModLoadingContext;
 @SuppressWarnings("null")
 public class ModMenuIntegration {
 
+    @SuppressWarnings("removal")
     public static void registerConfigScreen() {
         ModLoadingContext.get().registerExtensionPoint(
                 ConfigScreenHandler.ConfigScreenFactory.class,
@@ -65,7 +66,7 @@ public class ModMenuIntegration {
             super(createHolderAndUI(parent), 0);
             this.parent = parent;
             currentInstance = this;
-            GuiScaleManager.apply3x();
+            GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
         }
 
         private static ModularUI createHolderAndUI(Screen parent) {
@@ -74,13 +75,14 @@ public class ModMenuIntegration {
 
         @Override
         public void onClose() {
-            GuiScaleManager.restore();
+            GuiScaleManager.forceRestore();
+            currentInstance = null;
             Minecraft.getInstance().setScreen(parent);
         }
 
         @Override
         public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
-            GuiScaleManager.apply3x();
+            GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
             super.render(graphics, mouseX, mouseY, partialTicks);
         }
 

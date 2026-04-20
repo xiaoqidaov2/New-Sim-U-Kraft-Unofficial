@@ -70,8 +70,8 @@ public class UpdateScreenLDLib extends ModularUIGuiContainer {
         this.parent = parent;
         this.updateChecker = updateChecker;
         currentInstance = this;
-        // simukraft: 应用3x缩放
-        GuiScaleManager.apply3x();
+        // simukraft: 根据窗口尺寸选择能完整显示的最大缩放
+        GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
         parseChangelog();
     }
 
@@ -90,8 +90,8 @@ public class UpdateScreenLDLib extends ModularUIGuiContainer {
     @Override
     public void init() {
         super.init();
-        // simukraft: 初始化时重新应用3x缩放（从子界面返回时）
-        GuiScaleManager.apply3x();
+        // simukraft: 初始化时重新应用可完整显示的最佳缩放
+        GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
     }
 
     @Override
@@ -105,8 +105,8 @@ public class UpdateScreenLDLib extends ModularUIGuiContainer {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
-        // simukraft: 保持3x缩放
-        GuiScaleManager.apply3x();
+        // simukraft: 保持可完整显示的最佳缩放
+        GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
         super.render(graphics, mouseX, mouseY, partialTicks);
     }
 

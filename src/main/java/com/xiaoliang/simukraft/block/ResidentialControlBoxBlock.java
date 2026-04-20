@@ -63,7 +63,7 @@ public class ResidentialControlBoxBlock extends Block {
         }
     }
 
-    public static void activatePendingResidence(Level level, BlockPos pos) {
+    public static void activatePendingResidence(@Nonnull Level level, @Nonnull BlockPos pos) {
         if (level.isClientSide) {
             return;
         }
@@ -83,11 +83,17 @@ public class ResidentialControlBoxBlock extends Block {
             return;
         }
 
-        initializeResidence(server, Objects.requireNonNull(pos), boxInfo.buildingFileName, boxInfo.cityId);
+        String buildingFileName = boxInfo.buildingFileName;
+        if (buildingFileName == null || buildingFileName.isBlank()) {
+            LOGGER.warn("[ResidentialControlBoxBlock] 控制盒 {} 缺少建筑文件名，回退为 unknown", pos);
+            buildingFileName = "unknown";
+        }
+
+        initializeResidence(server, pos, buildingFileName, boxInfo.cityId);
         ConstructionBoxMapping.removePendingBox(level, pos);
     }
 
-    private static void initializeResidence(MinecraftServer server, BlockPos pos, String buildingFileName, java.util.UUID cityId) {
+    private static void initializeResidence(@Nonnull MinecraftServer server, @Nonnull BlockPos pos, @Nonnull String buildingFileName, java.util.UUID cityId) {
         ControlBoxDataManager.writeResidentialControlBox(server, pos, buildingFileName, null, cityId);
 
         if (cityId != null) {

@@ -310,8 +310,7 @@ public class HUDPositionEditorScreen extends Screen {
 
     @Override
     public void onClose() {
-        // simukraft: 返回上级菜单前重新应用3x缩放
-        GuiScaleManager.apply3x();
+        // simukraft: 交由上级界面在 init/render 中按当前窗口尺寸自适应设置缩放
         Minecraft.getInstance().setScreen(parent);
     }
 

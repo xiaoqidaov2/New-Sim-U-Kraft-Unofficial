@@ -1,14 +1,18 @@
 package com.xiaoliang.simukraft.client;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraftforge.client.gui.overlay.ForgeGui;
 import net.minecraftforge.client.gui.overlay.IGuiOverlay;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -18,6 +22,10 @@ public class ClientToastHUDOverlay implements IGuiOverlay {
     private static final ResourceLocation W1_TEXTURE = ResourceLocation.parse("simukraft:textures/gui/w1.png");
     private static final ResourceLocation W2_TEXTURE = ResourceLocation.parse("simukraft:textures/gui/w2.png");
     private static final ResourceLocation G1_TEXTURE = ResourceLocation.parse("simukraft:textures/gui/g1.png");
+    private static final float TITLE_MAX_SCALE = 4.0F;
+    private static final float TITLE_MIN_SCALE = 1.2F;
+    private static final float DESCRIPTION_MAX_SCALE = 2.2F;
+    private static final float DESCRIPTION_MIN_SCALE = 1.0F;
     
     // 存储每个玩家的toast显示状态
     private static final Map<UUID, ToastInfo> playerToasts = new HashMap<>();
@@ -85,13 +93,13 @@ public class ClientToastHUDOverlay implements IGuiOverlay {
                 // 使用固定的16:9宽高比
                 double aspectRatio = 16.0 / 9.0;
                 
-                // 宽度优先，占满屏幕宽度
-                int displayWidth = screenWidth;
+                // 保证背景图始终完整显示，并以屏幕中心为锚点布局
+                int displayWidth = Math.min(screenWidth, (int) Math.round(screenHeight * aspectRatio));
                 // 按16:9比例计算高度
                 int displayHeight = (int) Math.round(displayWidth / aspectRatio);
                 
-                // 垂直居中
-                int xPos = 0;
+                // 水平和垂直均以屏幕中心定位
+                int xPos = (screenWidth - displayWidth) / 2;
                 int yPos = (screenHeight - displayHeight) / 2;
                 
                 // 计算屏幕中心位置
@@ -122,8 +130,8 @@ public class ClientToastHUDOverlay implements IGuiOverlay {
                         textureWidth, textureHeight
                 );
                 
-                // 4. 绘制文本：在居中处绘制大字体（升级名称）和中字体（升级描述）
-                var font = Objects.requireNonNull(Minecraft.getInstance().font);
+                // 4. 绘制文本：以屏幕中心为锚点，根据可用区域自适应缩放与换行
+                Font font = Objects.requireNonNull(Minecraft.getInstance().font);
                 
                 // 获取升级信息，用于显示文本
                 String largeText = "未知";
@@ -133,45 +141,32 @@ public class ClientToastHUDOverlay implements IGuiOverlay {
                     mediumText = toastInfo.upgrade.description();
                 }
                 
-                // 基于屏幕高度计算垂直偏移量
-                // 大字体位于中轴线上方，偏移量为屏幕高度的10%
-                int largeTextOffset = (int) (screenHeight * 0.10);
-                // 中字体位于中轴线下方，偏移量为屏幕高度的5%
-                int mediumTextOffset = (int) (screenHeight * 0.05);
-                
-                // 5. 大字体文本：升级名称
-                // 计算大字体文本宽度
-                int largeTextWidth = font.width(Objects.requireNonNull(largeText));
-                // 大字体文本位置
-                int largeTextX = centerX;
-                int largeTextY = centerY - largeTextOffset;
-                
-                // 缩放大字体：放大4倍
-                float largeScale = 4.0F;
-                // 移动到文本中心位置
-                guiGraphics.pose().pushPose();
-                guiGraphics.pose().translate(largeTextX, largeTextY, 0);
-                guiGraphics.pose().scale(largeScale, largeScale, 1.0F);
-                // 绘制大字体文本（使用描边效果）
-                guiGraphics.drawString(font, largeText, -largeTextWidth / 2, 0, 0xFFFFFF, true);
-                guiGraphics.pose().popPose();
-                
-                // 6. 中字体文本：升级描述
-                // 计算中字体文本宽度
-                int mediumTextWidth = font.width(Objects.requireNonNull(mediumText));
-                // 中字体文本位置
-                int mediumTextX = centerX;
-                int mediumTextY = centerY + mediumTextOffset;
-                
-                // 缩放中字体：放大3倍
-                float mediumScale = 3.0F;
-                // 移动到文本中心位置
-                guiGraphics.pose().pushPose();
-                guiGraphics.pose().translate(mediumTextX, mediumTextY, 0);
-                guiGraphics.pose().scale(mediumScale, mediumScale, 1.0F);
-                // 绘制中字体文本（使用描边效果）
-                guiGraphics.drawString(font, mediumText, -mediumTextWidth / 2, 0, 0xFFFFFF, true);
-                guiGraphics.pose().popPose();
+                // 标题和描述使用不同的可用宽度，避免长描述把标题一起压得过小。
+                int titleAreaWidth = Math.max(120, (int) (displayWidth * 0.55F));
+                int descriptionAreaWidth = Math.max(160, (int) (displayWidth * 0.68F));
+                float preferredTitleScale = Math.min(TITLE_MAX_SCALE, Math.max(2.0F, displayWidth / 320.0F));
+                float titleScale = computeBoundedScale(font.width(largeText), titleAreaWidth, preferredTitleScale, TITLE_MIN_SCALE);
+                List<FormattedCharSequence> titleLines = font.split(Component.literal(largeText),
+                        Math.max(1, (int) (titleAreaWidth / titleScale)));
+
+                float preferredDescriptionScale = Math.min(DESCRIPTION_MAX_SCALE, Math.max(DESCRIPTION_MIN_SCALE, displayWidth / 360.0F));
+                TextLayout descriptionLayout = splitToFit(font, Component.literal(mediumText),
+                        descriptionAreaWidth, preferredDescriptionScale);
+                List<FormattedCharSequence> descriptionLines = descriptionLayout.lines();
+                float descriptionScale = descriptionLayout.scale();
+
+                int gap = Math.max(10, displayHeight / 24);
+                int titleLineHeight = Math.max(1, Math.round(font.lineHeight * titleScale));
+                int descriptionLineHeight = Math.max(1, Math.round(font.lineHeight * descriptionScale));
+                int titleBlockHeight = titleLines.size() * titleLineHeight;
+                int descriptionBlockHeight = descriptionLines.size() * descriptionLineHeight;
+                // 以屏幕中心为锚点，把标题块和描述块作为一个整体做垂直居中。
+                int contentHeight = titleBlockHeight + gap + descriptionBlockHeight;
+                int contentTop = centerY - contentHeight / 2;
+
+                drawCenteredScaledLines(guiGraphics, font, titleLines, centerX, contentTop, titleScale, 0xFFFFFF, true);
+                drawCenteredScaledLines(guiGraphics, font, descriptionLines, centerX,
+                        contentTop + titleBlockHeight + gap, descriptionScale, 0xFFFFFF, true);
                 
                 // 恢复矩阵
                 guiGraphics.pose().popPose();
@@ -229,5 +224,43 @@ public class ClientToastHUDOverlay implements IGuiOverlay {
      */
     public static void clearToast(UUID playerId) {
         playerToasts.remove(playerId);
+    }
+
+    private static float computeBoundedScale(int textWidth, int maxWidth, float preferredScale, float minScale) {
+        if (textWidth <= 0) {
+            return preferredScale;
+        }
+        // 单行能放下时保持偏大的展示比例，放不下时再压到最小可接受比例。
+        float fitScale = (float) maxWidth / (float) textWidth;
+        return Math.max(minScale, Math.min(preferredScale, fitScale));
+    }
+
+    private static TextLayout splitToFit(Font font, Component text, int maxWidth, float preferredScale) {
+        float scale = preferredScale;
+        List<FormattedCharSequence> lines = font.split(text, Math.max(1, (int) (maxWidth / scale)));
+        // 最多保留三行；如果行数过多，就逐步缩小字号而不是直接裁字。
+        while (lines.size() > 3 && scale > DESCRIPTION_MIN_SCALE) {
+            scale = Math.max(DESCRIPTION_MIN_SCALE, scale - 0.15F);
+            lines = font.split(text, Math.max(1, (int) (maxWidth / scale)));
+        }
+        return new TextLayout(lines, scale);
+    }
+
+    private static void drawCenteredScaledLines(GuiGraphics guiGraphics, Font font, List<FormattedCharSequence> lines,
+                                                int centerX, int startY, float scale, int color, boolean shadow) {
+        int lineHeight = Math.max(1, Math.round(font.lineHeight * scale));
+        int currentY = startY;
+        for (FormattedCharSequence line : lines) {
+            int lineWidth = font.width(line);
+            guiGraphics.pose().pushPose();
+            guiGraphics.pose().translate(centerX, currentY, 0);
+            guiGraphics.pose().scale(scale, scale, 1.0F);
+            guiGraphics.drawString(font, line, -lineWidth / 2, 0, color, shadow);
+            guiGraphics.pose().popPose();
+            currentY += lineHeight;
+        }
+    }
+
+    private record TextLayout(List<FormattedCharSequence> lines, float scale) {
     }
 }

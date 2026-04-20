@@ -96,8 +96,8 @@ public abstract class ConfigurableListScreenLDLib extends ModularUIGuiContainer 
         this.onSave = onSave;
         currentInstance = this;
 
-        // simukraft: 应用3x缩放
-        GuiScaleManager.apply3x();
+        // simukraft: 根据窗口尺寸选择能完整显示的最大缩放
+        GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
     }
 
     private static ModularUI createHolderAndUI(String title) {
@@ -189,8 +189,8 @@ public abstract class ConfigurableListScreenLDLib extends ModularUIGuiContainer 
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
-        // simukraft: 保持3x缩放
-        GuiScaleManager.apply3x();
+        // simukraft: 保持可完整显示的最佳缩放
+        GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
         super.render(graphics, mouseX, mouseY, partialTicks);
     }
 

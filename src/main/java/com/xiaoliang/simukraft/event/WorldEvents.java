@@ -319,26 +319,15 @@ public class WorldEvents {
             return;
         }
 
-        // 检测是否从夜晚（13000-23999）过渡到早晨（0-12000）
-        // 关键修复：正确处理时间循环边界（23999 -> 0）
-        boolean wasNight = lastRecordedTimeOfDay >= 13000;
-        boolean isMorning = currentTimeOfDay <= 12000;
+        // 既支持“夜里直接睡到天亮”的时间跳变，也支持自然走到清晨时的每日结算。
+        boolean crossedNightToMorning = lastRecordedTimeOfDay >= 13000
+                && currentTimeOfDay <= 12000
+                && lastRecordedTimeOfDay != currentTimeOfDay;
+        boolean isEarlyMorningWindow = currentTimeOfDay >= 0 && currentTimeOfDay <= 200;
 
-        // 新增：检测从白天（12000之前）到夜晚（13000之后）的过渡，覆盖早晨睡觉的情况
-        boolean wasDay = lastRecordedTimeOfDay <= 12000;
-        boolean becameNight = currentTimeOfDay >= 13000;
-
-        // 新增：检测新的一天开始（游戏时间0刻）
-        boolean isNewDay = currentTimeOfDay == 0 && lastRecordedTimeOfDay == 23999;
-
-        // 新增：每日强制收租检测（在早上6:00左右触发，确保每天至少收租一次）
-        boolean isMorningRentTime = currentTimeOfDay >= 0 && currentTimeOfDay <= 200 &&
-                                    lastRecordedTimeOfDay >= 23900;
-
-        // 每日结算只在夜晚跨到次日清晨时触发一次。
-        // 这样 /time set 到晚上不会先触发，睡觉到早上也不会再重复结算两次。
-        boolean shouldTriggerRent = ((wasNight && isMorning && lastRecordedTimeOfDay != currentTimeOfDay) ||
-                                    isNewDay || isMorningRentTime);
+        // 只要还是新的游戏日，并且已经进入清晨窗口或发生了跨夜跳变，就触发一次。
+        boolean shouldTriggerRent = currentDay > lastRentCollectionDay
+                && (crossedNightToMorning || isEarlyMorningWindow);
 
         // 新增：每日一次限制，避免重复触发
         if (shouldTriggerRent) {
@@ -401,10 +390,15 @@ public class WorldEvents {
         if (event.getLevel().isClientSide()) return;
         lastRecordedDay = -1;
         lastRecordedTimeOfDay = -1;
+        lastRentCollectionDay = -1;
         lastCityIncomeCollectionDay = -1;
         collectedIncomeByCity.clear();
 
         if (event.getLevel() instanceof ServerLevel serverLevel) {
+            if (serverLevel.dimension() == Level.OVERWORLD) {
+                // 以当前游戏日作为基准，避免服务器刚启动时在白天立刻补发一次房租。
+                lastRentCollectionDay = serverLevel.getDayTime() / 24000L;
+            }
             // 初始化城市区块数据，确保数据文件被生成
             com.xiaoliang.simukraft.world.CityChunkData.get(serverLevel);
 

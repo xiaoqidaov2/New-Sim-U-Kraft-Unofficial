@@ -14,6 +14,7 @@ import java.nio.file.Files;
 public class GuiScaleManager {
 
     private static float originalScale = -1;
+    private static final int DEFAULT_SCREEN_MARGIN = 16;
 
     /**
      * 从options.txt读取原始缩放值
@@ -45,6 +46,24 @@ public class GuiScaleManager {
             originalScale = readOriginalScale();
         }
         setScale(3);
+    }
+
+    /**
+     * 优先使用 3x 缩放；若界面在当前分辨率下放不下，则自动降为 2x/1x。
+     */
+    public static void applyBestFitScale(int contentWidth, int contentHeight) {
+        applyBestFitScale(3, contentWidth, contentHeight, DEFAULT_SCREEN_MARGIN);
+    }
+
+    /**
+     * 根据目标界面尺寸选择能完整显示的最大 GUI 缩放。
+     */
+    public static void applyBestFitScale(int preferredScale, int contentWidth, int contentHeight, int margin) {
+        if (originalScale < 0) {
+            originalScale = readOriginalScale();
+        }
+        // 直接按内容尺寸反推可用 guiScale，避免固定 3x 时界面超出屏幕。
+        setScale(chooseBestScale(preferredScale, contentWidth, contentHeight, margin));
     }
 
     /**
@@ -83,6 +102,25 @@ public class GuiScaleManager {
         Window window = mc.getWindow();
         mc.options.guiScale().set(scale);
         window.setGuiScale(scale);
+    }
+
+    private static int chooseBestScale(int preferredScale, int contentWidth, int contentHeight, int margin) {
+        Minecraft mc = Minecraft.getInstance();
+        Window window = mc.getWindow();
+        int windowWidth = Math.max(1, window.getWidth());
+        int windowHeight = Math.max(1, window.getHeight());
+        int requiredWidth = Math.max(1, contentWidth + margin * 2);
+        int requiredHeight = Math.max(1, contentHeight + margin * 2);
+
+        // 从期望缩放开始向下尝试，保留“能完整放下界面”的最大缩放级别。
+        for (int scale = Math.max(1, preferredScale); scale >= 1; scale--) {
+            int scaledWidth = Math.max(1, windowWidth / scale);
+            int scaledHeight = Math.max(1, windowHeight / scale);
+            if (scaledWidth >= requiredWidth && scaledHeight >= requiredHeight) {
+                return scale;
+            }
+        }
+        return 1;
     }
 
     /**

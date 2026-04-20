@@ -116,7 +116,7 @@ public class MaterialCategoryGroupsScreenLDLib extends ModularUIGuiContainer {
         // simukraft: 在super调用后设置currentInstance，但UI创建时还不能访问它
         // 需要在init()中重新赋值UI引用
         currentInstance = this;
-        GuiScaleManager.apply3x();
+        GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
     }
 
     private static ModularUI createHolderAndUI() {
@@ -232,7 +232,7 @@ public class MaterialCategoryGroupsScreenLDLib extends ModularUIGuiContainer {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
-        GuiScaleManager.apply3x();
+        GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
         // simukraft: 首次渲染时刷新列表
         if (needsRefresh && groupListGroup != null) {
             refreshAllLists();
