@@ -14,7 +14,6 @@ import com.lowdragmc.lowdraglib.gui.widget.ImageWidget;
 import com.lowdragmc.lowdraglib.gui.widget.TextFieldWidget;
 import com.lowdragmc.lowdraglib.gui.widget.WidgetGroup;
 import com.lowdragmc.lowdraglib.utils.Size;
-import com.mojang.blaze3d.platform.Window;
 import com.xiaoliang.simukraft.config.ServerConfig;
 import com.xiaoliang.simukraft.network.NetworkManager;
 import com.xiaoliang.simukraft.network.SyncConfigPacket;
@@ -42,6 +41,7 @@ import java.util.function.Consumer;
  * 该界面以固定3x缩放渲染
  */
 @OnlyIn(Dist.CLIENT)
+@SuppressWarnings("null")
 public class ServerConfigScreen extends ModularUIGuiContainer {
 
     // 颜色定义 - 现代化简约风格
@@ -105,67 +105,44 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
     }
 
     private static ModularUI createHolderAndUI() {
-        // 在创建UI前设置3x缩放，确保LDLib使用正确的尺寸计算
-        applyFixedScale();
-        
+        // simukraft: 应用3x缩放
+        GuiScaleManager.apply3x();
+
         ConfigUIHolder holder = new ConfigUIHolder();
         return holder.createModularUI();
     }
 
     @Override
     public void onClose() {
-        // menglan: 先恢复原始缩放
-        restoreOriginalScale();
-        
+        // simukraft: 恢复原始缩放并重置状态（返回到非3x界面）
+        GuiScaleManager.forceRestore();
+
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft != null) {
             minecraft.setScreen(parent);
         }
     }
 
-    // menglan: 保存原始缩放值 - 使用静态变量确保在构造函数中可用
-    private static float originalScale = -1;
-    // menglan: 标记是否已经保存过原始缩放
-    private static boolean scaleSaved = false;
-
-    // menglan: 在渲染前设置3x缩放 - 静态方法供构造函数使用
-    private static void applyFixedScale() {
-        Minecraft mc = Minecraft.getInstance();
-        Window window = mc.getWindow();
-        
-        // menglan: 只在第一次保存原始缩放
-        if (!scaleSaved) {
-            originalScale = mc.options.guiScale().get().floatValue();
-            scaleSaved = true;
-        }
-        
-        // menglan: 设置3x缩放
-        mc.options.guiScale().set(3);
-        window.setGuiScale(3.0);
+    @Override
+    public void init() {
+        super.init();
+        // simukraft: 初始化时重新应用3x缩放（从子界面返回时）
+        GuiScaleManager.apply3x();
     }
 
-    // menglan: 恢复原始缩放
-    private void restoreOriginalScale() {
-        if (scaleSaved && originalScale > 0) {
-            Minecraft mc = Minecraft.getInstance();
-            Window window = mc.getWindow();
-            
-            int scale = Math.round(originalScale);
-            mc.options.guiScale().set(scale);
-            window.setGuiScale(originalScale);
-            
-            // menglan: 重置标记，允许下次保存新的原始缩放
-            scaleSaved = false;
-            originalScale = -1;
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // simukraft: 使用GuiScaleManager统一处理ESC键
+        if (GuiScaleManager.handleEscKey(keyCode, this::onClose)) {
+            return true;
         }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
-        // 应用固定缩放
-        applyFixedScale();
-        
-        // 调用父类渲染
+        // simukraft: 保持3x缩放
+        GuiScaleManager.apply3x();
         super.render(graphics, mouseX, mouseY, partialTicks);
     }
 
@@ -763,28 +740,28 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
         private void openPlanningBlacklist() {
             Minecraft mc = Minecraft.getInstance();
             if (mc != null && screen != null) {
-                mc.setScreen(BlockBlacklistScreen.createPlanningBlacklistScreen(screen, () -> {}));
+                mc.setScreen(BlockBlacklistScreenLDLib.createPlanningBlacklistScreen(screen, () -> {}));
             }
         }
 
         private void openBuilderBlacklist() {
             Minecraft mc = Minecraft.getInstance();
             if (mc != null && screen != null) {
-                mc.setScreen(BlockBlacklistScreen.createConstructionBlacklistScreen(screen, () -> {}));
+                mc.setScreen(BlockBlacklistScreenLDLib.createConstructionBlacklistScreen(screen, () -> {}));
             }
         }
 
         private void openBasicMaterials() {
             Minecraft mc = Minecraft.getInstance();
             if (mc != null && screen != null) {
-                mc.setScreen(BasicMaterialsScreen.createScreen(screen, () -> {}));
+                mc.setScreen(BasicMaterialsScreenLDLib.createScreen(screen, () -> {}));
             }
         }
 
         private void openMaterialCategoryGroups() {
             Minecraft mc = Minecraft.getInstance();
             if (mc != null && screen != null) {
-                mc.setScreen(new MaterialCategoryGroupsScreen(screen,
+                mc.setScreen(new MaterialCategoryGroupsScreenLDLib(screen,
                         ServerConfig.parseMaterialCategoryGroups(),
                         list -> {
                             ServerConfig.setMaterialCategoryGroups(list);
@@ -796,7 +773,7 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
         private void openExpertModeSkipList() {
             Minecraft mc = Minecraft.getInstance();
             if (mc != null && screen != null) {
-                mc.setScreen(ExpertModeSkipListScreen.createScreen(screen, () -> {}));
+                mc.setScreen(ExpertModeSkipListScreenLDLib.createScreen(screen, () -> {}));
             }
         }
 

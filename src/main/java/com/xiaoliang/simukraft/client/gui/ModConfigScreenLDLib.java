@@ -60,10 +60,26 @@ public class ModConfigScreenLDLib extends ModularUIGuiContainer {
 
     @Override
     public void onClose() {
-        // simukraft: 恢复原始缩放
-        GuiScaleManager.restore();
+        // simukraft: 恢复原始缩放并重置状态（返回到非3x界面）
+        GuiScaleManager.forceRestore();
         currentInstance = null;
         Minecraft.getInstance().setScreen(parent);
+    }
+
+    @Override
+    public void init() {
+        super.init();
+        // simukraft: 初始化时重新应用3x缩放（从子界面返回时）
+        GuiScaleManager.apply3x();
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // simukraft: 使用GuiScaleManager统一处理ESC键
+        if (GuiScaleManager.handleEscKey(keyCode, this::onClose)) {
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
@@ -137,14 +153,26 @@ public class ModConfigScreenLDLib extends ModularUIGuiContainer {
             button.setSelfPosition(x, y);
             button.setSize(width, height);
             button.setOnPressCallback(callback);
-            button.setButtonTexture(new GuiTextureGroup(
+
+            // 正常状态背景+文字
+            TextTexture normalText = new TextTexture(text, COLOR_TEXT_NORMAL);
+            normalText.setType(TextTexture.TextType.NORMAL);
+            normalText.setWidth(width);
+            button.setBackground(new GuiTextureGroup(
                     new ColorRectTexture(COLOR_BUTTON_BG).setRadius(4),
-                    new ColorBorderTexture(1, COLOR_WINDOW_BORDER).setRadius(4)
-            ), new TextTexture(text, COLOR_TEXT_NORMAL).setType(TextTexture.TextType.NORMAL));
+                    new ColorBorderTexture(1, COLOR_WINDOW_BORDER).setRadius(4),
+                    normalText
+            ));
+
+            // 悬停状态
+            TextTexture hoverText = new TextTexture(text, COLOR_TEXT_TITLE);
+            hoverText.setType(TextTexture.TextType.NORMAL);
+            hoverText.setWidth(width);
             button.setHoverTexture(new GuiTextureGroup(
                     new ColorRectTexture(COLOR_BUTTON_HOVER).setRadius(4),
-                    new ColorBorderTexture(1, COLOR_WINDOW_BORDER).setRadius(4)
-            ), new TextTexture(text, COLOR_TEXT_TITLE).setType(TextTexture.TextType.NORMAL));
+                    new ColorBorderTexture(1, COLOR_WINDOW_BORDER).setRadius(4),
+                    hoverText
+            ));
             return button;
         }
 

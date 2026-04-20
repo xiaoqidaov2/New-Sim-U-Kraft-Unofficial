@@ -41,7 +41,10 @@ public class HUDPositionEditorScreen extends Screen {
     public HUDPositionEditorScreen(Screen parent) {
         super(Component.translatable("gui.hud_editor.title"));
         this.parent = parent;
-        
+
+        // simukraft: 进入此界面时恢复原始缩放
+        GuiScaleManager.restore();
+
         // 创建预览文本
         this.previewText = createPreviewText();
     }
@@ -307,6 +310,8 @@ public class HUDPositionEditorScreen extends Screen {
 
     @Override
     public void onClose() {
+        // simukraft: 返回上级菜单前重新应用3x缩放
+        GuiScaleManager.apply3x();
         Minecraft.getInstance().setScreen(parent);
     }
 

@@ -189,7 +189,7 @@ public class ModMenuIntegration {
 
             private void openUpdateScreen() {
                 Minecraft mc = Minecraft.getInstance();
-                mc.setScreen(new com.xiaoliang.simukraft.client.gui.UpdateScreen(
+                mc.setScreen(new com.xiaoliang.simukraft.client.gui.UpdateScreenLDLib(
                         parent,
                         com.xiaoliang.simukraft.client.update.UpdateHandler.getInstance().getUpdateChecker()
                 ));
