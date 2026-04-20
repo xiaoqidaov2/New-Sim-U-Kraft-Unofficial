@@ -68,7 +68,7 @@ public class BuildingDataManager {
     private static String SIMUKRAFT_BUILDING_FOLDER;
     private static final String[] CATEGORIES = {"residential", "commercial", "industry", "other"};
 
-    // 建筑信息缓存 - menglan: 缓存建筑类别数据避免重复文件读取
+    // 建筑信息缓存 - 缓存建筑类别数据避免重复文件读取
     private static final Map<String, List<BuildingInfo>> BUILDING_CATEGORY_CACHE = new HashMap<>();
     private static final Map<String, BuildingInfo> BUILDING_FILE_CACHE = new HashMap<>();
     private static volatile boolean cacheInitialized = false;
@@ -123,7 +123,7 @@ public class BuildingDataManager {
     }
     
     public static List<BuildingInfo> getBuildingsByCategory(String category) {
-        // menglan: 检查缓存
+        // 检查缓存
         if (cacheInitialized) {
             List<BuildingInfo> cached = BUILDING_CATEGORY_CACHE.get(category);
             if (cached != null) {
@@ -200,7 +200,7 @@ public class BuildingDataManager {
             buildings.addAll(fallbackBuildings);
         }
         
-        // menglan: 存入缓存
+        // 存入缓存
         if (!buildings.isEmpty()) {
             BUILDING_CATEGORY_CACHE.put(category, new ArrayList<>(buildings));
             cacheInitialized = true;
@@ -388,7 +388,7 @@ public class BuildingDataManager {
     }
     
     /**
-     * menglan: 清理建筑数据缓存
+     * 清理建筑数据缓存
      */
     public static void clearCache() {
         BUILDING_CATEGORY_CACHE.clear();
@@ -398,7 +398,7 @@ public class BuildingDataManager {
     }
     
     /**
-     * menglan: 重新初始化缓存
+     * 重新初始化缓存
      */
     public static void reloadCache() {
         clearCache();

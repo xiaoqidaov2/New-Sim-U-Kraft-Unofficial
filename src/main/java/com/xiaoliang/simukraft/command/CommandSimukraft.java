@@ -44,7 +44,7 @@ public class CommandSimukraft {
                         }
                         
                         try {
-                            // menglan: 清理并重新加载所有建筑相关缓存
+                            // 清理并重新加载所有建筑相关缓存
                             // 1. 清理建筑数据管理器缓存
                             com.xiaoliang.simukraft.utils.BuildingDataManager.clearCache();
 
