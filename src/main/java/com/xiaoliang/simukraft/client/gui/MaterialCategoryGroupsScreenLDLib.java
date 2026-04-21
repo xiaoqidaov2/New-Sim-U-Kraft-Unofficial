@@ -586,6 +586,132 @@ public class MaterialCategoryGroupsScreenLDLib extends ModularUIGuiContainer {
         onClose();
     }
 
+    // ==================== JEI 拖拽支持 ====================
+
+    /**
+     * 处理 JEI 物品拖拽（通用）
+     */
+    public void handleJEIItemDrop(ItemStack itemStack) {
+        // simukraft: 默认添加到组头
+        handleJEIItemDropToHeader(itemStack);
+    }
+
+    /**
+     * 处理 JEI 物品拖拽到组头区域
+     */
+    public void handleJEIItemDropToHeader(ItemStack itemStack) {
+        if (selectedGroup == null || itemStack.isEmpty()) {
+            return;
+        }
+
+        String itemId = getItemIdFromStack(itemStack);
+        if (itemId == null) {
+            return;
+        }
+
+        List<String> headers = groupHeaders.get(selectedGroup);
+        if (headers == null) {
+            return;
+        }
+
+        if (!headers.contains(itemId)) {
+            headers.add(itemId);
+            refreshHeaderList();
+            // simukraft: 添加后自动滚动到新物品
+            scrollToItemInHeaderList(itemId);
+        }
+    }
+
+    /**
+     * 处理 JEI 物品拖拽到组员区域
+     */
+    public void handleJEIItemDropToMember(ItemStack itemStack) {
+        if (selectedGroup == null || itemStack.isEmpty()) {
+            return;
+        }
+
+        String itemId = getItemIdFromStack(itemStack);
+        if (itemId == null) {
+            return;
+        }
+
+        List<String> members = groupMembers.get(selectedGroup);
+        if (members == null) {
+            return;
+        }
+
+        if (!members.contains(itemId)) {
+            members.add(itemId);
+            refreshMemberList();
+            // simukraft: 添加后自动滚动到新物品
+            scrollToItemInMemberList(itemId);
+        }
+    }
+
+    /**
+     * 滚动到组头列表中的指定物品
+     */
+    private void scrollToItemInHeaderList(String itemId) {
+        if (headerListGroup == null || selectedGroup == null) return;
+
+        List<String> headers = groupHeaders.getOrDefault(selectedGroup, new ArrayList<>());
+        int index = headers.indexOf(itemId);
+        if (index < 0) return;
+
+        scrollToIndex(headerListGroup, index, headers.size());
+    }
+
+    /**
+     * 滚动到组员列表中的指定物品
+     */
+    private void scrollToItemInMemberList(String itemId) {
+        if (memberListGroup == null || selectedGroup == null) return;
+
+        List<String> members = groupMembers.getOrDefault(selectedGroup, new ArrayList<>());
+        int index = members.indexOf(itemId);
+        if (index < 0) return;
+
+        scrollToIndex(memberListGroup, index, members.size());
+    }
+
+    /**
+     * 滚动到指定索引位置
+     */
+    private void scrollToIndex(DraggableScrollableWidgetGroup listGroup, int index, int totalSize) {
+        // simukraft: 计算目标滚动位置（每个项目高度 24）
+        int targetY = index * ITEM_HEIGHT;
+
+        // simukraft: 获取列表可视区域高度
+        int visibleHeight = listGroup.getSize().height;
+
+        // simukraft: 计算需要滚动的偏移量，使目标物品显示在列表中间
+        int scrollOffset = targetY - visibleHeight / 2 + ITEM_HEIGHT / 2;
+
+        // simukraft: 确保滚动位置在有效范围内
+        int maxScroll = Math.max(0, totalSize * ITEM_HEIGHT - visibleHeight);
+        scrollOffset = Math.max(0, Math.min(scrollOffset, maxScroll));
+
+        // simukraft: 设置滚动位置
+        listGroup.setScrollYOffset(scrollOffset);
+    }
+
+    /**
+     * 从物品堆栈获取物品ID
+     */
+    private String getItemIdFromStack(ItemStack itemStack) {
+        if (itemStack.isEmpty()) {
+            return null;
+        }
+
+        var item = itemStack.getItem();
+        var key = item.builtInRegistryHolder().key();
+        if (key != null) {
+            return key.location().toString();
+        }
+
+        return null;
+    }
+
     // ==================== UI Holder ====================
 
     private static class GroupsUIHolder implements IUIHolder {

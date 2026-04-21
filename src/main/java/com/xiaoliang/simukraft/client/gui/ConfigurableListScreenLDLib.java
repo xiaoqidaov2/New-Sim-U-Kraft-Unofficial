@@ -15,6 +15,7 @@ import com.lowdragmc.lowdraglib.gui.widget.TextFieldWidget;
 import com.lowdragmc.lowdraglib.gui.widget.Widget;
 import com.lowdragmc.lowdraglib.gui.widget.WidgetGroup;
 import com.lowdragmc.lowdraglib.utils.Size;
+import com.xiaoliang.simukraft.integration.jei.JEIIntegrationManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -174,6 +175,8 @@ public abstract class ConfigurableListScreenLDLib extends ModularUIGuiContainer 
         // simukraft: 子界面不恢复缩放，由父界面自己管理
         // GuiScaleManager.restore();
         currentInstance = null;
+        // simukraft: 清除 JEI 拖拽目标
+        JEIIntegrationManager.getInstance().clearDropTargets();
         Minecraft.getInstance().setScreen(parent);
         // simukraft: 父界面会在init/render中重新应用3x
     }
@@ -355,7 +358,14 @@ public abstract class ConfigurableListScreenLDLib extends ModularUIGuiContainer 
     protected void addCurrentItem() {
         if (addField == null) return;
         String itemId = addField.getCurrentString().trim();
-        if (itemId.isEmpty()) return;
+        addItemById(itemId);
+    }
+
+    /**
+     * 通过物品ID添加物品（支持 JEI 拖拽）
+     */
+    public void addItemById(String itemId) {
+        if (itemId == null || itemId.isEmpty()) return;
 
         if (!isValidItem(itemId)) {
             if (Minecraft.getInstance().player != null) {
@@ -367,9 +377,40 @@ public abstract class ConfigurableListScreenLDLib extends ModularUIGuiContainer 
 
         if (!items.contains(itemId)) {
             items.add(itemId);
-            addField.setCurrentString("");
+            if (addField != null) {
+                addField.setCurrentString("");
+            }
             updateFilteredItems();
+            // simukraft: 添加后自动滚动到新物品
+            scrollToItem(itemId);
         }
+    }
+
+    /**
+     * 滚动到指定物品位置
+     */
+    private void scrollToItem(String itemId) {
+        if (listGroup == null) return;
+
+        // simukraft: 找到物品在过滤后列表中的索引
+        int index = filteredItems.indexOf(itemId);
+        if (index < 0) return;
+
+        // simukraft: 计算目标滚动位置（每个项目高度 24）
+        int targetY = index * ITEM_HEIGHT;
+
+        // simukraft: 获取列表可视区域高度
+        int visibleHeight = listGroup.getSize().height;
+
+        // simukraft: 计算需要滚动的偏移量，使目标物品显示在列表中间
+        int scrollOffset = targetY - visibleHeight / 2 + ITEM_HEIGHT / 2;
+
+        // simukraft: 确保滚动位置在有效范围内
+        int maxScroll = Math.max(0, filteredItems.size() * ITEM_HEIGHT - visibleHeight);
+        scrollOffset = Math.max(0, Math.min(scrollOffset, maxScroll));
+
+        // simukraft: 设置滚动位置
+        listGroup.setScrollYOffset(scrollOffset);
     }
 
     /**

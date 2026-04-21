@@ -149,6 +149,12 @@ repositories {
         url = "https://maven.firstdark.dev/snapshots"
     }
 
+    // JEI Maven - 用于 JEI 集成
+    maven {
+        name = "BlameJared"
+        url = "https://maven.blamejared.com"
+    }
+
     // If you have mod jar dependencies in ./libs, you can declare them as a repository like so.
     // See https://docs.gradle.org/current/userguide/declaring_repositories.html#sub:flat_dir_resolver
     // flatDir {
@@ -182,11 +188,10 @@ dependencies {
     implementation fg.deobf("com.lowdragmc.ldlib:ldlib-forge-1.20.1:1.0.49") { transitive = false }
     
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
-    // Example mod dependency with JEI - using fg.deobf() ensures the dependency is remapped to your development mappings
-    // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
-    // compileOnly fg.deobf("mezz.jei:jei-${mc_version}-common-api:${jei_version}")
-    // compileOnly fg.deobf("mezz.jei:jei-${mc_version}-forge-api:${jei_version}")
-    // runtimeOnly fg.deobf("mezz.jei:jei-${mc_version}-forge:${jei_version}")
+    
+    // JEI - 软依赖，使用 CurseMaven
+    compileOnly fg.deobf("curse.maven:jei-238222:7920915")
+    runtimeOnly fg.deobf("curse.maven:jei-238222:7920915")
 
     // Example mod dependency using a mod jar from ./libs with a flat dir repository
     // This maps to ./libs/coolmod-${mc_version}-${coolmod_version}.jar
