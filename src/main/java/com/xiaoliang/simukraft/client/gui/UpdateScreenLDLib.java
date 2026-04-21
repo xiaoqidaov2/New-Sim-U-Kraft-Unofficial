@@ -10,7 +10,6 @@ import com.lowdragmc.lowdraglib.gui.texture.TextTexture;
 import com.lowdragmc.lowdraglib.gui.util.ClickData;
 import com.lowdragmc.lowdraglib.gui.widget.ButtonWidget;
 import com.lowdragmc.lowdraglib.gui.widget.ImageWidget;
-import com.lowdragmc.lowdraglib.gui.widget.ProgressWidget;
 import com.lowdragmc.lowdraglib.gui.widget.WidgetGroup;
 import com.lowdragmc.lowdraglib.utils.Size;
 import com.xiaoliang.simukraft.client.update.GiteeUpdateChecker;
@@ -107,7 +106,63 @@ public class UpdateScreenLDLib extends ModularUIGuiContainer {
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
         // simukraft: 保持可完整显示的最佳缩放
         GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
+
         super.render(graphics, mouseX, mouseY, partialTicks);
+
+        // simukraft: 下载过程中在渲染时动态绘制进度信息
+        if (UpdateManager.getInstance().getState() == UpdateManager.UpdateState.DOWNLOADING) {
+            renderDownloadProgress(graphics);
+        }
+    }
+
+    /**
+     * 渲染下载进度信息（动态更新）
+     */
+    private void renderDownloadProgress(GuiGraphics graphics) {
+        int barX = (width - 200) / 2 + getScreenGuiLeft();
+        int barY = HEADER_HEIGHT + 200 + getScreenGuiTop();
+        int barW = 200;
+        int barH = 12;
+
+        float progress = UpdateManager.getInstance().getDownloadProgress();
+        long downloadedBytes = UpdateManager.getInstance().getDownloadedBytes();
+        long totalBytes = UpdateManager.getInstance().getTotalBytes();
+        long downloadSpeed = UpdateManager.getInstance().getDownloadSpeed();
+
+        // simukraft: 绘制进度条填充
+        int fillWidth = (int) (barW * progress);
+        if (fillWidth > 0) {
+            graphics.fill(barX + 2, barY + 2, barX + 2 + fillWidth, barY + barH - 2, COLOR_PROGRESS_FILL);
+        }
+
+        // simukraft: 绘制百分比文字
+        String percentText = String.format("%.0f%%", progress * 100);
+        graphics.drawString(Minecraft.getInstance().font, percentText,
+                barX + barW / 2 - 10, barY + barH + 5, COLOR_TEXT_NORMAL);
+
+        // simukraft: 绘制下载大小
+        String sizeText = formatBytes(downloadedBytes) + " / " + formatBytes(totalBytes);
+        graphics.drawString(Minecraft.getInstance().font, sizeText,
+                barX, barY + barH + 18, 0xFFAAAAAA);
+
+        // simukraft: 绘制下载速度
+        String speedText = formatBytes(downloadSpeed) + "/s";
+        graphics.drawString(Minecraft.getInstance().font, speedText,
+                barX + barW / 2, barY + barH + 18, COLOR_TEXT_GREEN);
+    }
+
+    /**
+     * 获取GUI左侧偏移量
+     */
+    private int getScreenGuiLeft() {
+        return (width - WINDOW_WIDTH) / 2;
+    }
+
+    /**
+     * 获取GUI顶部偏移量
+     */
+    private int getScreenGuiTop() {
+        return (height - WINDOW_HEIGHT) / 2;
     }
 
     /**
@@ -301,36 +356,7 @@ public class UpdateScreenLDLib extends ModularUIGuiContainer {
             bgWidget.setBackground(new ColorRectTexture(COLOR_PROGRESS_BG).setRadius(3));
             progressGroup.addWidget(bgWidget);
 
-            // 进度填充 - 使用ProgressWidget
-            float progress = UpdateManager.getInstance().getDownloadProgress();
-            ProgressWidget progressWidget = new ProgressWidget(
-                    () -> (double) progress,
-                    2, 2, barW - 4, barH - 4
-            );
-            progressWidget.setProgressTexture(new ColorRectTexture(COLOR_PROGRESS_FILL).setRadius(2));
-            progressGroup.addWidget(progressWidget);
-
-            // 百分比文字
-            String percentText = String.format("%.0f%%", progress * 100);
-            TextTexture percentTexture = new TextTexture(percentText, COLOR_TEXT_NORMAL);
-            percentTexture.setType(TextTexture.TextType.NORMAL);
-            progressGroup.addWidget(new ImageWidget(0, barH + 5, barW, 10, percentTexture));
-
-            // 下载大小和速度
-            long downloadedBytes = UpdateManager.getInstance().getDownloadedBytes();
-            long totalBytes = UpdateManager.getInstance().getTotalBytes();
-            long downloadSpeed = UpdateManager.getInstance().getDownloadSpeed();
-
-            String sizeText = formatBytes(downloadedBytes) + " / " + formatBytes(totalBytes);
-            String speedText = formatBytes(downloadSpeed) + "/s";
-
-            TextTexture sizeTexture = new TextTexture(sizeText, 0xFFAAAAAA);
-            sizeTexture.setType(TextTexture.TextType.NORMAL);
-            progressGroup.addWidget(new ImageWidget(0, barH + 18, barW / 2, 10, sizeTexture));
-
-            TextTexture speedTexture = new TextTexture(speedText, COLOR_TEXT_GREEN);
-            speedTexture.setType(TextTexture.TextType.NORMAL);
-            progressGroup.addWidget(new ImageWidget(barW / 2, barH + 18, barW / 2, 10, speedTexture));
+            // simukraft: 进度条填充和文字在 renderDownloadProgress 中动态绘制
 
             parent.addWidget(progressGroup);
         }
@@ -423,6 +449,13 @@ public class UpdateScreenLDLib extends ModularUIGuiContainer {
 
             UpdateManager.getInstance().setCurrentUpdate(updateInfo);
 
+            // simukraft: 先设置下载中状态
+            currentInstance.statusMessage = "正在下载更新...";
+            currentInstance.statusColor = COLOR_TEXT_YELLOW;
+
+            // simukraft: 立即刷新界面显示下载状态
+            Minecraft.getInstance().setScreen(new UpdateScreenLDLib(parent, updateChecker));
+
             UpdateManager.getInstance().downloadUpdate().thenAccept(success -> {
                 Minecraft.getInstance().execute(() -> {
                     if (success) {
@@ -436,9 +469,6 @@ public class UpdateScreenLDLib extends ModularUIGuiContainer {
                     Minecraft.getInstance().setScreen(new UpdateScreenLDLib(parent, updateChecker));
                 });
             });
-
-            currentInstance.statusMessage = "正在下载更新...";
-            currentInstance.statusColor = COLOR_TEXT_YELLOW;
         }
 
         private void startInstall() {

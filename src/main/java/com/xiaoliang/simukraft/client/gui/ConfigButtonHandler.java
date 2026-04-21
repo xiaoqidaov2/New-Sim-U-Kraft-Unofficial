@@ -112,10 +112,9 @@ public class ConfigButtonHandler {
             btn -> {
                 // 点击按钮打开配置界面或更新界面
                 if (UpdateHandler.getInstance().isUpdateAvailable()) {
-                    // 如果有更新，打开更新界面（使用包装器绕过Inventory Tweaks冲突）
+                    // 如果有更新，打开更新界面（使用LDLib新版界面）
                     Minecraft.getInstance().setScreen(
-                        new ModScreenWrapper(event.getScreen(),
-                            new UpdateScreen(event.getScreen(), UpdateHandler.getInstance().getUpdateChecker()))
+                        new UpdateScreenLDLib(event.getScreen(), UpdateHandler.getInstance().getUpdateChecker())
                     );
                 } else {
                     // 否则打开配置选择界面（使用包装器绕过Inventory Tweaks冲突）
