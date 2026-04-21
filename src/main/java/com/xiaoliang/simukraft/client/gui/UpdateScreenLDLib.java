@@ -51,6 +51,7 @@ public class UpdateScreenLDLib extends ModularUIGuiContainer {
     private static final int COLOR_TEXT_YELLOW = 0xFFFFFF00;
     private static final int COLOR_PROGRESS_BG = 0xFF444444;
     private static final int COLOR_PROGRESS_FILL = 0xFF00AA00;
+    private static final int COLOR_PROGRESS_BORDER = 0xFF666666;
 
     // 窗口尺寸
     private static final int WINDOW_WIDTH = 400;
@@ -119,8 +120,13 @@ public class UpdateScreenLDLib extends ModularUIGuiContainer {
      * 渲染下载进度信息（动态更新）
      */
     private void renderDownloadProgress(GuiGraphics graphics) {
-        int barX = (width - 200) / 2 + getScreenGuiLeft();
-        int barY = HEADER_HEIGHT + 200 + getScreenGuiTop();
+        // simukraft: 计算GUI窗口在屏幕上的位置
+        int guiLeft = (width - WINDOW_WIDTH) / 2;
+        int guiTop = (height - WINDOW_HEIGHT) / 2;
+
+        // simukraft: 进度条相对于GUI窗口的位置（往下挪5像素）
+        int barX = guiLeft + (WINDOW_WIDTH - 200) / 2;
+        int barY = guiTop + HEADER_HEIGHT + 205;
         int barW = 200;
         int barH = 12;
 
@@ -129,10 +135,19 @@ public class UpdateScreenLDLib extends ModularUIGuiContainer {
         long totalBytes = UpdateManager.getInstance().getTotalBytes();
         long downloadSpeed = UpdateManager.getInstance().getDownloadSpeed();
 
+        // simukraft: 绘制进度条边框
+        graphics.fill(barX - 1, barY - 1, barX + barW + 1, barY, COLOR_PROGRESS_BORDER);
+        graphics.fill(barX - 1, barY + barH, barX + barW + 1, barY + barH + 1, COLOR_PROGRESS_BORDER);
+        graphics.fill(barX - 1, barY, barX, barY + barH, COLOR_PROGRESS_BORDER);
+        graphics.fill(barX + barW, barY, barX + barW + 1, barY + barH, COLOR_PROGRESS_BORDER);
+
+        // simukraft: 绘制进度条背景
+        graphics.fill(barX, barY, barX + barW, barY + barH, COLOR_PROGRESS_BG);
+
         // simukraft: 绘制进度条填充
         int fillWidth = (int) (barW * progress);
         if (fillWidth > 0) {
-            graphics.fill(barX + 2, barY + 2, barX + 2 + fillWidth, barY + barH - 2, COLOR_PROGRESS_FILL);
+            graphics.fill(barX, barY, barX + fillWidth, barY + barH, COLOR_PROGRESS_FILL);
         }
 
         // simukraft: 绘制百分比文字
@@ -149,20 +164,6 @@ public class UpdateScreenLDLib extends ModularUIGuiContainer {
         String speedText = formatBytes(downloadSpeed) + "/s";
         graphics.drawString(Minecraft.getInstance().font, speedText,
                 barX + barW / 2, barY + barH + 18, COLOR_TEXT_GREEN);
-    }
-
-    /**
-     * 获取GUI左侧偏移量
-     */
-    private int getScreenGuiLeft() {
-        return (width - WINDOW_WIDTH) / 2;
-    }
-
-    /**
-     * 获取GUI顶部偏移量
-     */
-    private int getScreenGuiTop() {
-        return (height - WINDOW_HEIGHT) / 2;
     }
 
     /**
