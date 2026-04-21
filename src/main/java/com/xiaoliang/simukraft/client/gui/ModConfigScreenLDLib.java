@@ -70,9 +70,9 @@ public class ModConfigScreenLDLib extends ModularUIGuiContainer {
 
     @Override
     public void init() {
-        super.init();
-        // simukraft: 初始化时重新应用可完整显示的最佳缩放
+        // simukraft: 先应用缩放再初始化UI，确保LDLib在正确的缩放下计算布局
         GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
+        super.init();
     }
 
     @Override
