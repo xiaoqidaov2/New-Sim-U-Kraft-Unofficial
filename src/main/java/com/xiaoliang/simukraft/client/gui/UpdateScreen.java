@@ -331,7 +331,7 @@ public class UpdateScreen extends Screen {
      */
     private void backToConfig() {
         nn(Minecraft.getInstance()).setScreen(
-            new com.xiaoliang.simukraft.client.config.ModMenuIntegration.ConfigSelectionScreenLDLib(parent)
+            new com.xiaoliang.simukraft.client.gui.ldlib.ConfigSelectionMenuScreen(parent)
         );
     }
 

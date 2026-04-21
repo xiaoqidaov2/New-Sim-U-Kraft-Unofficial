@@ -1,6 +1,6 @@
 package com.xiaoliang.simukraft.client.gui;
 
-import com.xiaoliang.simukraft.client.config.ModMenuIntegration;
+import com.xiaoliang.simukraft.client.gui.ldlib.ConfigSelectionMenuScreen;
 import com.xiaoliang.simukraft.client.update.UpdateHandler;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
@@ -80,7 +80,7 @@ public class ConfigButtonHandler {
         addAnimatedButtonRightOf(event, statsButton,
             button -> {
                 Minecraft.getInstance().setScreen(
-                    new ModMenuIntegration.ConfigSelectionScreenLDLib(event.getScreen())
+                    new ConfigSelectionMenuScreen(event.getScreen())
                 );
             },
             Component.translatable("gui.config_button.title"));
@@ -118,7 +118,7 @@ public class ConfigButtonHandler {
                 } else {
                     // 否则打开配置选择界面
                     Minecraft.getInstance().setScreen(
-                        new ModMenuIntegration.ConfigSelectionScreenLDLib(event.getScreen())
+                        new ConfigSelectionMenuScreen(event.getScreen())
                     );
                 }
             }

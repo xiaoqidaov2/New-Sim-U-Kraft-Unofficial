@@ -199,6 +199,7 @@ private int readOriginalScale() {
    - ExpertModeSkipListScreenLDLib - 专家模式跳过列表
 5. **MaterialCategoryGroupsScreenLDLib** - 材料分类组配置
 6. **UpdateScreenLDLib** - 更新检查界面
+7. **ConfigSelectionMenuScreen** (LDLibMenuScreen) - 配置选择界面
 
 ### HUDPositionEditorScreen
 
@@ -273,3 +274,26 @@ public HUDPositionEditorScreen(Screen parent) {
 4. 关闭 ModConfigScreenLDLib
    - 恢复 scale=6
 ```
+
+### LDLibMenuScreen 流程
+
+```
+1. 打开 ConfigSelectionMenuScreen (继承 LDLibMenuScreen)
+   - init() 中自动调用 applyBestFitScale(3, 280, 320, 16)
+   - 读取原始值 6
+   - 尝试 scale=3: 检查 280x320 是否能放入当前窗口
+   - 设置 scale=3 (或降级到 2x/1x)
+   
+2. 渲染时
+   - render() 中保持缩放状态
+   
+3. 按 ESC 关闭
+   - keyPressed() 中 handleEscKey 调用 onClose()
+   - onClose() 中 restore() 恢复原始缩放
+   - 恢复 scale=6
+```
+
+**LDLibMenuScreen 特点**:
+- 自动管理缩放，无需手动调用 `apply3x()`
+- 支持 `enableAutoScale()` 和 `getPreferredScale()` 自定义
+- ESC 键自动处理，确保缩放恢复

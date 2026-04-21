@@ -2,7 +2,6 @@ package com.xiaoliang.simukraft.client.gui;
 
 import com.lowdragmc.lowdraglib.gui.modular.IUIHolder;
 import com.lowdragmc.lowdraglib.gui.modular.ModularUI;
-import com.lowdragmc.lowdraglib.gui.modular.ModularUIGuiContainer;
 import com.lowdragmc.lowdraglib.gui.texture.ColorBorderTexture;
 import com.lowdragmc.lowdraglib.gui.texture.ColorRectTexture;
 import com.lowdragmc.lowdraglib.gui.texture.GuiTextureGroup;
@@ -12,6 +11,7 @@ import com.lowdragmc.lowdraglib.gui.widget.ButtonWidget;
 import com.lowdragmc.lowdraglib.gui.widget.ImageWidget;
 import com.lowdragmc.lowdraglib.gui.widget.WidgetGroup;
 import com.lowdragmc.lowdraglib.utils.Size;
+import com.xiaoliang.simukraft.client.gui.ldlib.LDLibMenuScreen;
 import com.xiaoliang.simukraft.client.update.GiteeUpdateChecker;
 import com.xiaoliang.simukraft.client.update.UpdateInfo;
 import com.xiaoliang.simukraft.client.update.UpdateManager;
@@ -28,13 +28,12 @@ import java.util.List;
 
 /**
  * 更新界面 - LDLib版本
- * 使用LDLib Widget实现更新界面和进度条
- * 使用固定3x缩放渲染
+ * simukraft: 使用LDLibMenuScreen基类，继承自原版Screen而非容器界面
+ * 避免被其他模组误识别为箱子容器，解决主菜单玩家为Null的问题
  */
 @OnlyIn(Dist.CLIENT)
 @SuppressWarnings("null")
-public class UpdateScreenLDLib extends ModularUIGuiContainer {
-    private final Screen parent;
+public class UpdateScreenLDLib extends LDLibMenuScreen {
     private final GiteeUpdateChecker updateChecker;
     private static UpdateScreenLDLib currentInstance;
 
@@ -66,48 +65,37 @@ public class UpdateScreenLDLib extends ModularUIGuiContainer {
     private List<Component> changelogLines = new ArrayList<>();
 
     public UpdateScreenLDLib(Screen parent, GiteeUpdateChecker updateChecker) {
-        super(createHolderAndUI(parent, updateChecker), 0);
-        this.parent = parent;
+        super(Component.literal("更新检查"), parent);
         this.updateChecker = updateChecker;
         currentInstance = this;
-        // simukraft: 根据窗口尺寸选择能完整显示的最大缩放
-        GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
         parseChangelog();
     }
 
-    private static ModularUI createHolderAndUI(Screen parent, GiteeUpdateChecker updateChecker) {
+    @Override
+    protected int getUIWidth() {
+        return WINDOW_WIDTH;
+    }
+
+    @Override
+    protected int getUIHeight() {
+        return WINDOW_HEIGHT;
+    }
+
+    @Override
+    protected ModularUI createModularUI() {
         return new UpdateUIHolder(parent, updateChecker).createModularUI();
     }
 
     @Override
     public void onClose() {
-        // simukraft: 恢复原始缩放并重置状态（返回到非3x界面）
+        // simukraft: 恢复原始缩放并重置状态
         GuiScaleManager.forceRestore();
         currentInstance = null;
         Minecraft.getInstance().setScreen(parent);
     }
 
     @Override
-    public void init() {
-        super.init();
-        // simukraft: 初始化时重新应用可完整显示的最佳缩放
-        GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
-    }
-
-    @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        // simukraft: 使用GuiScaleManager统一处理ESC键
-        if (GuiScaleManager.handleEscKey(keyCode, this::onClose)) {
-            return true;
-        }
-        return super.keyPressed(keyCode, scanCode, modifiers);
-    }
-
-    @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
-        // simukraft: 保持可完整显示的最佳缩放
-        GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
-
         super.render(graphics, mouseX, mouseY, partialTicks);
 
         // simukraft: 下载过程中在渲染时动态绘制进度信息
@@ -118,13 +106,10 @@ public class UpdateScreenLDLib extends ModularUIGuiContainer {
 
     /**
      * 渲染下载进度信息（动态更新）
+     * simukraft: 在LDLibMenuScreen.render()之后绘制，覆盖在UI上方
      */
     private void renderDownloadProgress(GuiGraphics graphics) {
-        // simukraft: 计算GUI窗口在屏幕上的位置
-        int guiLeft = (width - WINDOW_WIDTH) / 2;
-        int guiTop = (height - WINDOW_HEIGHT) / 2;
-
-        // simukraft: 进度条相对于GUI窗口的位置（往下挪5像素）
+        // simukraft: 进度条相对于GUI窗口的位置
         int barX = guiLeft + (WINDOW_WIDTH - 200) / 2;
         int barY = guiTop + HEADER_HEIGHT + 205;
         int barW = 200;
@@ -206,8 +191,9 @@ public class UpdateScreenLDLib extends ModularUIGuiContainer {
 
     /**
      * UI持有者类
+     * simukraft: 内部类负责创建ModularUI和Widget布局
      */
-    private static class UpdateUIHolder implements IUIHolder {
+    private class UpdateUIHolder implements IUIHolder {
         private final Screen parent;
         private final GiteeUpdateChecker updateChecker;
 

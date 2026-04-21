@@ -11,17 +11,16 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * simukraft: 拦截鼠标/键盘事件，防止在主菜单打开LDLib界面时传播到Mouse Tweaks等模组
+ * simukraft: 拦截鼠标/键盘事件，防止在主菜单打开LDLib容器界面时传播到Mouse Tweaks等模组
  * 这些模组会尝试访问Minecraft.player.inventory，但主菜单时player为null
- * 只对LDLib界面进行拦截，避免影响其他模组
  */
 @Mixin(ForgeHooksClient.class)
 public class MixinForgeHooksClient {
 
     private static boolean shouldCancelEvent(Screen screen) {
-        // 只在玩家为null且当前是LDLib界面时取消事件
-        // 这样可以避免影响其他正常界面
-        return Minecraft.getInstance().player == null && screen instanceof ModularUIGuiContainer;
+        // 只在玩家为null且当前是LDLib容器界面时取消事件
+        return Minecraft.getInstance().player == null
+                && screen instanceof ModularUIGuiContainer;
     }
 
     @Inject(method = "onScreenMouseClickedPre", at = @At("HEAD"), cancellable = true, remap = false)
