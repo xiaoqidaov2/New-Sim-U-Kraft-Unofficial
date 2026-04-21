@@ -11,6 +11,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.List;
 import java.util.Objects;
 
@@ -21,8 +22,6 @@ import java.util.Objects;
 public class GuideBookScreen extends Screen {
     private static final ResourceLocation COVER_ICON_TEXTURE = ResourceLocation.fromNamespaceAndPath(
             Simukraft.MOD_ID, "textures/gui/guide_book_cover_icon.png");
-    private static final int COVER_BORDER_COLOR = 0x0B2144;
-    private static final int COVER_FILL_COLOR = 0x214F8F;
     private static final int COVER_FRONT_BORDER_COLOR = 0x081B38;
     private static final int COVER_FRONT_FILL_COLOR = 0x1B447D;
     private static final int COVER_BACK_FILL_COLOR = 0x173867;
@@ -46,18 +45,20 @@ public class GuideBookScreen extends Screen {
     private BookState bookState = BookState.COVER;
 
     public GuideBookScreen(ItemStack previewStack) {
-        super(Component.translatable("item.simukraft.guide_book"));
-        this.previewStack = previewStack;
+        super(nn(Component.translatable("item.simukraft.guide_book")));
+        this.previewStack = nn(previewStack);
     }
 
     @Override
     protected void init() {
         int buttonX = this.width / 2 + BOOK_WIDTH / 2 - CLOSE_BUTTON_WIDTH - 10;
         int buttonY = this.height / 2 + BOOK_HEIGHT / 2 - CLOSE_BUTTON_HEIGHT - 8;
-        this.closeButton = this.addRenderableWidget(Button.builder(Component.translatable("gui.guide_book.close"), button -> this.onClose())
+        this.closeButton = this.addRenderableWidget(nn(Button.builder(
+                        nn(Component.translatable("gui.guide_book.close")),
+                        button -> this.onClose())
                 .pos(buttonX, buttonY)
                 .size(CLOSE_BUTTON_WIDTH, CLOSE_BUTTON_HEIGHT)
-                .build());
+                .build()));
         updateCloseButtonState();
     }
 
@@ -96,7 +97,7 @@ public class GuideBookScreen extends Screen {
     }
 
     private void renderClosedCover(GuiGraphics guiGraphics) {
-        var font = Objects.requireNonNull(this.font);
+        var font = nn(this.font);
         int bookX = this.width / 2 - CLOSED_BOOK_WIDTH / 2;
         int bookY = this.height / 2 - CLOSED_BOOK_HEIGHT / 2;
         int bookRight = bookX + CLOSED_BOOK_WIDTH;
@@ -115,9 +116,9 @@ public class GuideBookScreen extends Screen {
         renderCoverPreview(guiGraphics, bookX + 22, bookY + 10, CLOSED_BOOK_WIDTH - 34, CLOSED_BOOK_HEIGHT - 20, this.alpha);
 
         int hintColor = withAlpha(0xD9E9FF, 0.92F * this.alpha);
-        guiGraphics.drawCenteredString(font, Component.translatable("gui.guide_book.cover_subtitle"),
+        guiGraphics.drawCenteredString(font, nn(Component.translatable("gui.guide_book.cover_subtitle")),
                 this.width / 2, bookBottom + 10, hintColor);
-        guiGraphics.drawCenteredString(font, Component.translatable("gui.guide_book.open_hint"),
+        guiGraphics.drawCenteredString(font, nn(Component.translatable("gui.guide_book.open_hint")),
                 this.width / 2, bookBottom + 24, hintColor);
     }
 
@@ -183,7 +184,7 @@ public class GuideBookScreen extends Screen {
     }
 
     private void renderCoverPreview(GuiGraphics guiGraphics, int x, int y, int width, int height, float progress) {
-        var font = Objects.requireNonNull(this.font);
+        var font = nn(this.font);
         int centerX = x + width / 2;
         int titleColor = withAlpha(0xF3F8FF, progress);
         int subtitleColor = withAlpha(0xD7E6FB, progress);
@@ -194,12 +195,12 @@ public class GuideBookScreen extends Screen {
 
         guiGraphics.fill(x + 10, y + 66, x + width - 10, y + 67, accentColor);
         guiGraphics.fill(x + 10, y + height - 22, x + width - 10, y + height - 21, accentColor);
-        guiGraphics.blit(COVER_ICON_TEXTURE, iconX, iconY, 0, 0, iconSize, iconSize, iconSize, iconSize);
-        guiGraphics.drawCenteredString(font, Component.translatable("gui.guide_book.cover_title"), centerX, y + 74, titleColor);
-        guiGraphics.drawCenteredString(font, Component.translatable("gui.guide_book.cover_title_en"), centerX, y + 90, subtitleColor);
+        guiGraphics.blit(nn(COVER_ICON_TEXTURE), iconX, iconY, 0, 0, iconSize, iconSize, iconSize, iconSize);
+        guiGraphics.drawCenteredString(font, nn(Component.translatable("gui.guide_book.cover_title")), centerX, y + 74, titleColor);
+        guiGraphics.drawCenteredString(font, nn(Component.translatable("gui.guide_book.cover_title_en")), centerX, y + 90, subtitleColor);
 
         if (!this.previewStack.isEmpty()) {
-            guiGraphics.renderItem(this.previewStack, x + 10, y + height - 20);
+            guiGraphics.renderItem(nn(this.previewStack), x + 10, y + height - 20);
         }
     }
 
@@ -208,7 +209,7 @@ public class GuideBookScreen extends Screen {
             return;
         }
 
-        var font = Objects.requireNonNull(this.font);
+        var font = nn(this.font);
         float textProgress = Mth.clamp((progress - 0.45F) / 0.55F, 0.0F, 1.0F);
         int centerX = this.width / 2;
         int bookX = centerX - BOOK_WIDTH / 2;
@@ -222,30 +223,35 @@ public class GuideBookScreen extends Screen {
         int bodyColor = withAlpha(0x3E3427, textProgress);
         int hintColor = withAlpha(0x5A7298, textProgress);
 
-        guiGraphics.drawString(font, Component.translatable("gui.guide_book.left_title"), leftPageX, pageY, titleColor, false);
-        guiGraphics.drawString(font, Component.translatable("gui.guide_book.right_title"), rightPageX, pageY, titleColor, false);
+        guiGraphics.drawString(font, nn(Component.translatable("gui.guide_book.left_title")), leftPageX, pageY, titleColor, false);
+        guiGraphics.drawString(font, nn(Component.translatable("gui.guide_book.right_title")), rightPageX, pageY, titleColor, false);
 
         int leftTextY = pageY + 20;
-        leftTextY = drawWrappedText(guiGraphics, Component.translatable("gui.guide_book.left_1"), leftPageX, leftTextY, textWidth, bodyColor, 4);
-        leftTextY = drawWrappedText(guiGraphics, Component.translatable("gui.guide_book.left_2"), leftPageX, leftTextY, textWidth, bodyColor, 4);
-        drawWrappedText(guiGraphics, Component.translatable("gui.guide_book.left_3"), leftPageX, leftTextY, textWidth, bodyColor, 0);
+        leftTextY = drawWrappedText(guiGraphics, nn(Component.translatable("gui.guide_book.left_1")), leftPageX, leftTextY, textWidth, bodyColor, 4);
+        leftTextY = drawWrappedText(guiGraphics, nn(Component.translatable("gui.guide_book.left_2")), leftPageX, leftTextY, textWidth, bodyColor, 4);
+        drawWrappedText(guiGraphics, nn(Component.translatable("gui.guide_book.left_3")), leftPageX, leftTextY, textWidth, bodyColor, 0);
 
         int rightTextY = pageY + 20;
-        rightTextY = drawWrappedText(guiGraphics, Component.translatable("gui.guide_book.right_1"), rightPageX, rightTextY, textWidth, bodyColor, 4);
-        rightTextY = drawWrappedText(guiGraphics, Component.translatable("gui.guide_book.right_2"), rightPageX, rightTextY, textWidth, bodyColor, 4);
-        rightTextY = drawWrappedText(guiGraphics, Component.translatable("gui.guide_book.right_3"), rightPageX, rightTextY, textWidth, bodyColor, 10);
-        drawWrappedText(guiGraphics, Component.translatable("gui.guide_book.hint"), rightPageX, rightTextY, textWidth, hintColor, 0);
+        rightTextY = drawWrappedText(guiGraphics, nn(Component.translatable("gui.guide_book.right_1")), rightPageX, rightTextY, textWidth, bodyColor, 4);
+        rightTextY = drawWrappedText(guiGraphics, nn(Component.translatable("gui.guide_book.right_2")), rightPageX, rightTextY, textWidth, bodyColor, 4);
+        rightTextY = drawWrappedText(guiGraphics, nn(Component.translatable("gui.guide_book.right_3")), rightPageX, rightTextY, textWidth, bodyColor, 10);
+        drawWrappedText(guiGraphics, nn(Component.translatable("gui.guide_book.hint")), rightPageX, rightTextY, textWidth, hintColor, 0);
     }
 
     private int drawWrappedText(GuiGraphics guiGraphics, Component component, int x, int y, int width, int color, int bottomPadding) {
-        var font = Objects.requireNonNull(this.font);
-        List<FormattedCharSequence> lines = font.split(component, width);
+        var font = nn(this.font);
+        List<FormattedCharSequence> lines = nn(font.split(nn(component), width));
         int currentY = y;
         for (FormattedCharSequence line : lines) {
-            guiGraphics.drawString(font, line, x, currentY, color, false);
+            guiGraphics.drawString(font, nn(line), x, currentY, color, false);
             currentY += 12;
         }
         return currentY + bottomPadding;
+    }
+
+    @Nonnull
+    private static <T> T nn(@Nullable T value) {
+        return Objects.requireNonNull(value);
     }
 
     private void drawPanel(GuiGraphics guiGraphics, int x, int y, int width, int height, int borderColor, int fillColor) {
