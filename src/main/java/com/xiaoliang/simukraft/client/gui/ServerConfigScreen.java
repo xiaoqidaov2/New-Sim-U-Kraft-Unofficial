@@ -163,6 +163,8 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
         private DraggableScrollableWidgetGroup contentGroup; //: 改为可滚动容器
         private final Map<String, ConfigValue<?>> configValues = new HashMap<>();
         private final List<ButtonWidget> tabButtons = new ArrayList<>(); //: 存储标签按钮引用
+        // simukraft: 存储所有数字输入框，用于保存时读取最新值
+        private final Map<String, TextFieldWidget> intInputFields = new HashMap<>();
 
         public void setScreen(ServerConfigScreen screen) {
             this.screen = screen;
@@ -361,6 +363,8 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
 
             contentGroup.clearAllWidgets();
             configValues.clear();
+            // simukraft: 清空输入框映射，防止旧引用干扰
+            intInputFields.clear();
 
             int page = screen.getCurrentPage();
             int contentWidth = WINDOW_WIDTH - CONTENT_PADDING * 2 - 16;
@@ -683,11 +687,14 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
             textField.setBordered(false);
             textField.setMaxStringLength(10);
             textField.setNumbersOnly(min, max);
+            // simukraft: 存储输入框引用，用于保存时读取最新值
+            intInputFields.put(key, textField);
             textField.setTextResponder(newText -> {
                 try {
                     int value = Integer.parseInt(newText);
                     onChange.accept(value);
                 } catch (NumberFormatException ignored) {
+                    // 输入无效时不更新值
                 }
             });
             inputContainer.addWidget(textField);
@@ -770,6 +777,19 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
         // ==================== 操作按钮回调 ====================
 
         private void saveConfig() {
+            // simukraft: 先从输入框中读取最新的数字值
+            for (Map.Entry<String, TextFieldWidget> entry : intInputFields.entrySet()) {
+                String key = entry.getKey();
+                TextFieldWidget textField = entry.getValue();
+                try {
+                    int value = Integer.parseInt(textField.getCurrentString());
+                    // 更新configValues中的值
+                    configValues.put(key, new IntConfigValue(value));
+                } catch (NumberFormatException ignored) {
+                    // 输入无效时保持原值
+                }
+            }
+
             // 应用所有配置值并同步到服务器
             for (Map.Entry<String, ConfigValue<?>> entry : configValues.entrySet()) {
                 String key = entry.getKey();

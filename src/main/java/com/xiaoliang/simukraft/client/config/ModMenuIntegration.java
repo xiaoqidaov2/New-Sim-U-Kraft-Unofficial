@@ -14,7 +14,6 @@ import com.lowdragmc.lowdraglib.gui.widget.WidgetGroup;
 import com.lowdragmc.lowdraglib.utils.Size;
 import com.xiaoliang.simukraft.client.gui.GuiScaleManager;
 import com.xiaoliang.simukraft.client.gui.ModConfigScreenLDLib;
-import com.xiaoliang.simukraft.client.gui.ModScreenWrapper;
 import com.xiaoliang.simukraft.client.gui.ServerConfigScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -183,10 +182,7 @@ public class ModMenuIntegration {
             }
 
             private void openClientConfig() {
-                // simukraft: 使用包装器绕过Inventory Tweaks冲突
-                Minecraft.getInstance().setScreen(
-                    new ModScreenWrapper(parent, new ModConfigScreenLDLib(parent))
-                );
+                Minecraft.getInstance().setScreen(new ModConfigScreenLDLib(parent));
             }
 
             private void openServerConfig() {
@@ -194,13 +190,10 @@ public class ModMenuIntegration {
             }
 
             private void openUpdateScreen() {
-                // simukraft: 使用包装器绕过Inventory Tweaks冲突
                 Minecraft mc = Minecraft.getInstance();
-                mc.setScreen(new ModScreenWrapper(parent,
-                    new com.xiaoliang.simukraft.client.gui.UpdateScreenLDLib(
-                        parent,
-                        com.xiaoliang.simukraft.client.update.UpdateHandler.getInstance().getUpdateChecker()
-                    )
+                mc.setScreen(new com.xiaoliang.simukraft.client.gui.UpdateScreenLDLib(
+                    parent,
+                    com.xiaoliang.simukraft.client.update.UpdateHandler.getInstance().getUpdateChecker()
                 ));
             }
 

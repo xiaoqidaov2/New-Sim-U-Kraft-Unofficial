@@ -62,14 +62,14 @@ public class IndustrialControlBoxLDLibScreen extends ModularUIGuiContainer {
     private static final int COLOR_TEXT_GRAY = 0xFFAAAAAA;
     private static final int COLOR_TEXT_HIGHLIGHT = 0xFF88CCFF;
 
-    // 布局常量（4x缩放基准尺寸）
-    private static final int BASE_WINDOW_WIDTH = 300;
-    private static final int BASE_WINDOW_HEIGHT = 320;
-    private static final int BASE_HEADER_HEIGHT = 40;
-    private static final int BASE_FOOTER_HEIGHT = 50;
-    private static final int BASE_CARD_WIDTH = 80;
-    private static final int BASE_CARD_HEIGHT = 90;
-    private static final int BASE_CARD_SPACING = 10;
+    // 布局常量（4x缩放基准尺寸）- 增大尺寸使界面更大
+    private static final int BASE_WINDOW_WIDTH = 380;
+    private static final int BASE_WINDOW_HEIGHT = 400;
+    private static final int BASE_HEADER_HEIGHT = 50;
+    private static final int BASE_FOOTER_HEIGHT = 60;
+    private static final int BASE_CARD_WIDTH = 100;
+    private static final int BASE_CARD_HEIGHT = 110;
+    private static final int BASE_CARD_SPACING = 12;
 
     private final ControlBoxUIHolder holder;
 
@@ -88,6 +88,9 @@ public class IndustrialControlBoxLDLibScreen extends ModularUIGuiContainer {
         this.holder = ((ModularUI) this.modularUI).holder instanceof ControlBoxUIHolder
                 ? (ControlBoxUIHolder) ((ModularUI) this.modularUI).holder
                 : null;
+
+        // simukraft: 应用自适应缩放
+        GuiScaleManager.applyBestFitScale(BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT);
 
         // 播放打开音效
         Minecraft.getInstance().getSoundManager().play(
@@ -137,6 +140,8 @@ public class IndustrialControlBoxLDLibScreen extends ModularUIGuiContainer {
 
     @Override
     public void render(@Nonnull GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
+        // simukraft: 保持自适应缩放
+        GuiScaleManager.applyBestFitScale(BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT);
         super.render(graphics, mouseX, mouseY, partialTicks);
 
         // 在裁剪完成后绘制tooltip
@@ -145,30 +150,25 @@ public class IndustrialControlBoxLDLibScreen extends ModularUIGuiContainer {
         }
     }
 
+    @Override
+    public void onClose() {
+        // simukraft: 恢复原始缩放
+        GuiScaleManager.restore();
+        super.onClose();
+    }
+
     // ==================== UI 创建 ====================
 
     private static ModularUI createUI(ControlBoxUIHolder holder) {
         Minecraft mc = Minecraft.getInstance();
 
-        // 获取当前GUI缩放比例
-        int guiScale = mc.options.guiScale().get();
-        if (guiScale == 0) {
-            // 自动缩放，估算当前缩放
-            guiScale = Math.max(1, (int)(mc.getWindow().getWidth() / 640.0));
-        }
+        // simukraft: 使用GuiScaleManager计算最佳缩放
+        int guiScale = GuiScaleManager.calculateBestScale(BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT);
+        float scaleFactor = guiScale / 4.0f; // 以4x为基准计算缩放因子
 
-        // 以4x为基准，计算缩放因子
-        // 4x时显示原始大小，5x/6x时缩小
-        float scaleFactor;
-        if (guiScale <= 3) {
-            scaleFactor = 1.0f; // 1x-3x 保持原始大小
-        } else if (guiScale == 4) {
-            scaleFactor = 1.0f; // 4x 基准大小
-        } else if (guiScale == 5) {
-            scaleFactor = 0.85f; // 5x 缩小到85%
-        } else {
-            scaleFactor = 0.75f; // 6x+ 缩小到75%
-        }
+        // 确保缩放因子在合理范围内
+        if (scaleFactor > 1.0f) scaleFactor = 1.0f;
+        if (scaleFactor < 0.5f) scaleFactor = 0.5f;
 
         // 应用缩放后的尺寸
         int windowWidth = (int)(BASE_WINDOW_WIDTH * scaleFactor);
@@ -218,7 +218,8 @@ public class IndustrialControlBoxLDLibScreen extends ModularUIGuiContainer {
         holder.setStatusWidget(statusWidget);
 
         // 配方网格区域（仅多配方建筑显示）
-        int gridStartY = headerHeight + (int)(10 * scaleFactor);
+        // simukraft: 增加顶部间距，使卡片区域位置更合理
+        int gridStartY = headerHeight + (int)(20 * scaleFactor);
         int gridBottomY = gridStartY;
         if (holder.isMultiRecipe()) {
             gridBottomY = createRecipeGrid(windowGroup, holder, gridStartY, contentWidth, scaleFactor);
@@ -296,6 +297,8 @@ public class IndustrialControlBoxLDLibScreen extends ModularUIGuiContainer {
         int cardHeight = (int)(BASE_CARD_HEIGHT * scaleFactor);
         int cardWidth = (int)(BASE_CARD_WIDTH * scaleFactor);
         int cardSpacing = (int)(BASE_CARD_SPACING * scaleFactor);
+        // simukraft: 计算水平边距，与createUI保持一致
+        int sideMargin = (int)(20 * scaleFactor);
 
         int gridAreaHeight = titleHeight + cardHeight + padding * 2;
 
@@ -310,7 +313,8 @@ public class IndustrialControlBoxLDLibScreen extends ModularUIGuiContainer {
                 graphics.disableScissor();
             }
         };
-        gridGroup.setSelfPosition((BASE_WINDOW_WIDTH - contentWidth) / 2, startY);
+        // simukraft: 使用sideMargin计算水平居中，与内容区域对齐
+        gridGroup.setSelfPosition(sideMargin, startY);
         gridGroup.setSize(contentWidth, gridAreaHeight);
         parent.addWidget(gridGroup);
         // 标题
@@ -352,6 +356,9 @@ public class IndustrialControlBoxLDLibScreen extends ModularUIGuiContainer {
         }
 
         holder.setRecipeCards(recipeCards);
+
+        // simukraft: 存储实际卡片尺寸和间距，用于滚动位置计算
+        holder.setActualCardDimensions(cardWidth, cardHeight, cardSpacing);
 
         // 设置最大滚动值（不显示滚动条，只保留鼠标滚轮滚动）
         if (needScroll) {
@@ -725,6 +732,11 @@ public class IndustrialControlBoxLDLibScreen extends ModularUIGuiContainer {
         private int maxScroll = 0;
         private boolean needScroll = false;
 
+        // 卡片尺寸（根据缩放因子计算后的实际尺寸）
+        private int actualCardWidth = BASE_CARD_WIDTH;
+        private int actualCardHeight = BASE_CARD_HEIGHT;
+        private int actualCardSpacing = BASE_CARD_SPACING;
+
         // Tooltip信息
         private List<TooltipInfo> tooltips = new ArrayList<>();
 
@@ -825,6 +837,10 @@ public class IndustrialControlBoxLDLibScreen extends ModularUIGuiContainer {
             } else if (isMultiRecipe && !recipes.isEmpty()) {
                 // 服务器没有保存配方，默认选择第一个
                 this.currentRecipeId = recipes.get(0).getRecipeId();
+
+                // simukraft: 将默认选择同步到服务器，否则建筑不会工作
+                NetworkManager.INSTANCE.sendToServer(
+                        new SelectRecipePacket(controlBoxPos, currentRecipeId, buildingFileName));
             }
 
             updateRecipeCardSelection();
@@ -855,7 +871,10 @@ public class IndustrialControlBoxLDLibScreen extends ModularUIGuiContainer {
             // 播放确认音效
             Minecraft.getInstance().getSoundManager().play(
                     nn(SimpleSoundInstance.forUI(nn(ModSoundEvents.BUILD_BOX_OPEN.get()), 1.0F)));
-            
+
+            // simukraft: 恢复原始缩放（setScreen(null)不会触发onClose）
+            GuiScaleManager.restore();
+
             // 关闭界面
             Minecraft.getInstance().setScreen(null);
         }
@@ -958,6 +977,13 @@ public class IndustrialControlBoxLDLibScreen extends ModularUIGuiContainer {
             this.recipeCards = cards;
         }
 
+        // simukraft: 存储实际卡片尺寸和间距
+        public void setActualCardDimensions(int width, int height, int spacing) {
+            this.actualCardWidth = width;
+            this.actualCardHeight = height;
+            this.actualCardSpacing = spacing;
+        }
+
         // ==================== 滚动控制 ====================
 
         public void setScrollOffset(double offset) {
@@ -976,9 +1002,10 @@ public class IndustrialControlBoxLDLibScreen extends ModularUIGuiContainer {
             int startX = 5 - (int) scrollOffset;
             int startY = 0;
 
+            // simukraft: 使用实际卡片尺寸和间距（考虑缩放因子）
             for (int i = 0; i < recipeCards.size(); i++) {
                 RecipeCardWidget card = recipeCards.get(i);
-                int x = startX + i * (BASE_CARD_WIDTH + BASE_CARD_SPACING);
+                int x = startX + i * (actualCardWidth + actualCardSpacing);
                 card.setSelfPosition(x, startY);
             }
         }

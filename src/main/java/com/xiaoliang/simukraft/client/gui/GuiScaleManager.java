@@ -112,7 +112,7 @@ public class GuiScaleManager {
         int requiredWidth = Math.max(1, contentWidth + margin * 2);
         int requiredHeight = Math.max(1, contentHeight + margin * 2);
 
-        // 从期望缩放开始向下尝试，保留“能完整放下界面”的最大缩放级别。
+        // 从期望缩放开始向下尝试，保留"能完整放下界面"的最大缩放级别。
         for (int scale = Math.max(1, preferredScale); scale >= 1; scale--) {
             int scaledWidth = Math.max(1, windowWidth / scale);
             int scaledHeight = Math.max(1, windowHeight / scale);
@@ -121,6 +121,14 @@ public class GuiScaleManager {
             }
         }
         return 1;
+    }
+
+    /**
+     * 计算最佳缩放值（不应用）
+     * 用于需要在静态方法中获取缩放值的场景
+     */
+    public static int calculateBestScale(int contentWidth, int contentHeight) {
+        return chooseBestScale(3, contentWidth, contentHeight, DEFAULT_SCREEN_MARGIN);
     }
 
     /**

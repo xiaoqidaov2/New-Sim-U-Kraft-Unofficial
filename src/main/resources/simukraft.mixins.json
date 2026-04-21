@@ -16,6 +16,7 @@
         "MixinBlockRenderDispatcher",
         "MixinAbstractContainerScreen",
         "MixinForgeHooksClient",
+        "MixinScreen",
         "xaero.MixinWorldMapSession",
         "ldlib.MixinModularUIGuiContainer"
     ],

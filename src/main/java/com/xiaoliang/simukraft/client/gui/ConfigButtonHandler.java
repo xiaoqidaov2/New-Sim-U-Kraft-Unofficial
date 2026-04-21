@@ -76,12 +76,11 @@ public class ConfigButtonHandler {
         Button statsButton = findStatsButton(pauseScreen);
         if (statsButton == null) return;
 
-        // 在统计信息按钮右侧添加配置按钮（使用包装器绕过Inventory Tweaks冲突）
+        // 在统计信息按钮右侧添加配置按钮
         addAnimatedButtonRightOf(event, statsButton,
             button -> {
                 Minecraft.getInstance().setScreen(
-                    new ModScreenWrapper(event.getScreen(),
-                        new ModMenuIntegration.ConfigSelectionScreenLDLib(event.getScreen()))
+                    new ModMenuIntegration.ConfigSelectionScreenLDLib(event.getScreen())
                 );
             },
             Component.translatable("gui.config_button.title"));
@@ -112,16 +111,14 @@ public class ConfigButtonHandler {
             btn -> {
                 // 点击按钮打开配置界面或更新界面
                 if (UpdateHandler.getInstance().isUpdateAvailable()) {
-                    // 如果有更新，打开更新界面（使用包装器绕过Inventory Tweaks冲突）
+                    // 如果有更新，打开更新界面
                     Minecraft.getInstance().setScreen(
-                        new ModScreenWrapper(event.getScreen(),
-                            new UpdateScreenLDLib(event.getScreen(), UpdateHandler.getInstance().getUpdateChecker()))
+                        new UpdateScreenLDLib(event.getScreen(), UpdateHandler.getInstance().getUpdateChecker())
                     );
                 } else {
-                    // 否则打开配置选择界面（使用包装器绕过Inventory Tweaks冲突）
+                    // 否则打开配置选择界面
                     Minecraft.getInstance().setScreen(
-                        new ModScreenWrapper(event.getScreen(),
-                            new ModMenuIntegration.ConfigSelectionScreenLDLib(event.getScreen()))
+                        new ModMenuIntegration.ConfigSelectionScreenLDLib(event.getScreen())
                     );
                 }
             }

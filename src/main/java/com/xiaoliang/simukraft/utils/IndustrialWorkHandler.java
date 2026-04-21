@@ -228,6 +228,12 @@ public class IndustrialWorkHandler {
             return;
         }
 
+        // simukraft: 先检查是否有足够的空间存放所有产物
+        if (!hasEnoughSpaceForProducts(level, buildingPos, itemsToProduce)) {
+            // 空间不足，不执行工作
+            return;
+        }
+
         // 现在拿取材料（因为确定要生产了）
         if (!consumeMaterials(level, buildingPos, config, selectedRecipeId)) {
             // 拿取材料失败（可能刚好被其他东西消耗了），不执行生产
@@ -238,6 +244,44 @@ public class IndustrialWorkHandler {
         for (Map.Entry<Item, Integer> entry : itemsToProduce.entrySet()) {
             placeItemInNearbyChest(level, buildingPos, entry.getKey(), entry.getValue());
         }
+    }
+
+    /**
+     * 检查周围箱子是否有足够空间存放所有产物
+     */
+    private static boolean hasEnoughSpaceForProducts(ServerLevel level, BlockPos buildingPos, Map<Item, Integer> itemsToProduce) {
+        for (Map.Entry<Item, Integer> entry : itemsToProduce.entrySet()) {
+            Item item = entry.getKey();
+            int amount = entry.getValue();
+            ItemStack itemStack = new ItemStack(item, amount);
+
+            if (!hasSpaceInNearbyChests(level, buildingPos, itemStack)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 检查周围箱子是否有空间放置指定物品
+     */
+    private static boolean hasSpaceInNearbyChests(ServerLevel level, BlockPos buildingPos, ItemStack itemStack) {
+        if (buildingPos == null || level == null || itemStack.isEmpty()) return false;
+
+        int range = 3;
+        for (int x = -range; x <= range; x++) {
+            for (int y = -range; y <= range; y++) {
+                for (int z = -range; z <= range; z++) {
+                    BlockPos checkPos = Objects.requireNonNull(buildingPos.offset(x, y, z));
+                    if (!level.isLoaded(Objects.requireNonNull(checkPos))) continue;
+                    if (!ContainerUtils.isContainer(level, checkPos)) continue;
+                    if (ContainerUtils.canInsertItem(level, checkPos, itemStack)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     /**

@@ -29,8 +29,8 @@ public class IndustrialBuildingConfig {
     private boolean multiRecipe = false; // 是否启用多配方模式
     
     // 工作时间配置（tick）
-    private int workStartTime = 12000;   // 默认12000tick（傍晚）
-    private int workEndTime = 13000;     // 默认13000tick
+    private int workStartTime = 0;       // 默认0tick（早上6:00）
+    private int workEndTime = 12000;     // 默认12000tick（傍晚18:00），共12小时工作时间
     
     // 生物生成配置（附加项）
     private boolean spawnEntity = false; // 是否生成生物
