@@ -3,12 +3,10 @@ package com.xiaoliang.simukraft.client.gui.ldlib;
 import com.lowdragmc.lowdraglib.gui.modular.ModularUI;
 import com.lowdragmc.lowdraglib.gui.modular.ModularUIGuiContainer;
 import com.lowdragmc.lowdraglib.gui.texture.IGuiTexture;
-import com.lowdragmc.lowdraglib.gui.widget.Widget;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Tuple;
-import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.inventory.tooltip.TooltipComponent;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.api.distmarker.Dist;
@@ -17,7 +15,7 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.List;
-import java.util.Set;
+import java.util.Objects;
 
 /**
  * simukraft: 假的ModularUIGuiContainer
@@ -27,34 +25,16 @@ import java.util.Set;
 @OnlyIn(Dist.CLIENT)
 public class FakeModularUIGuiContainer extends ModularUIGuiContainer {
 
-    public final ModularUI modularUI;
-    public Widget lastFocus;
-    public boolean focused;
-    public int dragSplittingLimit;
-    public int dragSplittingButton;
-    @Nullable
-    public List<Component> tooltipTexts;
-    @Nullable
-    public TooltipComponent tooltipComponent;
-    @Nullable
-    public Font tooltipFont;
-    @Nullable
-    public ItemStack tooltipStack = ItemStack.EMPTY;
-    protected Tuple<Object, IGuiTexture> draggingElement;
-    protected int pressedButton = -1;
-
-    public FakeModularUIGuiContainer(ModularUI modularUI) {
+    public FakeModularUIGuiContainer(@Nonnull ModularUI modularUI) {
         // 调用父类构造函数，但传入一个假的container
-        super(modularUI, 0);
-        this.modularUI = modularUI;
-        // 重新设置modularUIGui，因为父类构造函数已经设置过了
-        // 但我们不需要这样做，因为父类已经设置了
+        super(Objects.requireNonNull(modularUI), 0);
     }
 
     @Override
+    @SuppressWarnings("null")
     public void setHoverTooltip(List<Component> tooltipTexts, ItemStack tooltipStack, @Nullable Font tooltipFont, @Nullable TooltipComponent tooltipComponent) {
-        this.tooltipTexts = tooltipTexts;
-        this.tooltipStack = tooltipStack;
+        this.tooltipTexts = nn(tooltipTexts);
+        this.tooltipStack = nn(tooltipStack);
         this.tooltipFont = tooltipFont;
         this.tooltipComponent = tooltipComponent;
     }
@@ -62,7 +42,7 @@ public class FakeModularUIGuiContainer extends ModularUIGuiContainer {
     @Override
     public boolean setDraggingElement(Object element, IGuiTexture renderer) {
         if (draggingElement != null) return false;
-        draggingElement = new Tuple<>(element, renderer);
+        draggingElement = new Tuple<Object, IGuiTexture>(nn(element), nn(renderer));
         return true;
     }
 
@@ -70,19 +50,20 @@ public class FakeModularUIGuiContainer extends ModularUIGuiContainer {
     @Nullable
     public Object getDraggingElement() {
         if (draggingElement == null) return null;
-        return draggingElement.getA();
+        return nn(draggingElement.getA());
     }
 
     @Override
     public void init() {
         // 不调用父类的init，避免创建实际的GUI
-        this.imageWidth = modularUI.getWidth();
-        this.imageHeight = modularUI.getHeight();
-        this.modularUI.updateScreenSize(width, height);
+        ModularUI ui = nn(this.modularUI);
+        this.imageWidth = ui.getWidth();
+        this.imageHeight = ui.getHeight();
+        ui.updateScreenSize(width, height);
     }
 
     @Override
-    protected void renderBg(@Nonnull GuiGraphics graphics, float delta, int mouseX, int mouseY) {
+    protected void renderBg(GuiGraphics graphics, float delta, int mouseX, int mouseY) {
         // 空实现，不渲染背景
     }
 
@@ -151,31 +132,8 @@ public class FakeModularUIGuiContainer extends ModularUIGuiContainer {
         // 空实现，不关闭
     }
 
-    public boolean isButtonPressed(int button) {
-        return pressedButton == button;
-    }
-
-    public void setPressedButton(int button) {
-        this.pressedButton = button;
-    }
-
-    public boolean getQuickCrafting() {
-        return false;
-    }
-
-    public Set<Slot> getQuickCraftSlots() {
-        return Set.of();
-    }
-
-    public void superMouseClicked(double mouseX, double mouseY, int button) {
-        // 空实现
-    }
-
-    public void superMouseReleased(double mouseX, double mouseY, int button) {
-        // 空实现
-    }
-
-    public void superMouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        // 空实现
+    @Nonnull
+    private static <T> T nn(@Nullable T value) {
+        return Objects.requireNonNull(value);
     }
 }

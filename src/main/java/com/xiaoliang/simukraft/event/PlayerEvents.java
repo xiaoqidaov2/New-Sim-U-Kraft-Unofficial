@@ -39,9 +39,11 @@ public class PlayerEvents {
             ResourceLocation.fromNamespaceAndPath(Simukraft.MOD_ID, "story/first_dream");
     private static final String FIRST_DREAM_CRITERION = "first_join";
     private static final String FIRST_DREAM_PLAYED_TAG = "simukraft_first_dream_played";
+    // 玩家刚进世界时客户端尚未完全稳定，先延迟一小段时间再播音效更可靠
+    private static final int FIRST_DREAM_START_DELAY_TICKS = 40;
     // first_dream.ogg 当前时长约 11 秒，换算为 220 tick
     private static final int FIRST_DREAM_SOUND_DURATION_TICKS = 220;
-    private static final Map<UUID, Integer> PENDING_FIRST_DREAM = new ConcurrentHashMap<>();
+    private static final Map<UUID, FirstDreamPendingState> PENDING_FIRST_DREAM = new ConcurrentHashMap<>();
 
     @SubscribeEvent
     public static void onPlayerFirstJoin(PlayerEvent.PlayerLoggedInEvent event) {
@@ -93,7 +95,7 @@ public class PlayerEvents {
                     NetworkManager.broadcastAllCityChunks(server);
                     // 同步所有城市核心位置（供地图标记显示）
                     NetworkManager.broadcastAllCityCores(server);
-                    scheduleFirstDreamAdvancement(player);
+                    scheduleFirstDreamSequence(player);
                 } catch (Exception e) {
                     LOGGER.error("Player join error", e);
                     player.sendSystemMessage(Component.translatable("message.simukraft.error.generic", e.getMessage()));
@@ -118,15 +120,25 @@ public class PlayerEvents {
         }
 
         MinecraftServer server = event.getServer();
-        for (Map.Entry<UUID, Integer> entry : PENDING_FIRST_DREAM.entrySet()) {
-            int remainingTicks = entry.getValue() - 1;
+        for (Map.Entry<UUID, FirstDreamPendingState> entry : PENDING_FIRST_DREAM.entrySet()) {
+            FirstDreamPendingState state = entry.getValue();
+            int remainingTicks = state.remainingTicks() - 1;
             if (remainingTicks > 0) {
-                PENDING_FIRST_DREAM.put(entry.getKey(), remainingTicks);
+                PENDING_FIRST_DREAM.put(entry.getKey(), state.withRemainingTicks(remainingTicks));
                 continue;
             }
 
             ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
             if (player == null) {
+                PENDING_FIRST_DREAM.remove(entry.getKey());
+                continue;
+            }
+
+            if (state.stage() == FirstDreamStage.WAITING_TO_PLAY_SOUND) {
+                playFirstDreamSound(player);
+                PENDING_FIRST_DREAM.put(entry.getKey(),
+                        new FirstDreamPendingState(FirstDreamStage.WAITING_TO_GRANT_ADVANCEMENT,
+                                FIRST_DREAM_SOUND_DURATION_TICKS));
                 continue;
             }
 
@@ -135,26 +147,25 @@ public class PlayerEvents {
         }
     }
 
-    private static void scheduleFirstDreamAdvancement(ServerPlayer player) {
+    private static void scheduleFirstDreamSequence(ServerPlayer player) {
         if (hasPlayedFirstDream(player) || PENDING_FIRST_DREAM.containsKey(player.getUUID())) {
             return;
         }
 
         Advancement advancement = player.server.getAdvancements().getAdvancement(FIRST_DREAM_ADVANCEMENT_ID);
-        if (advancement == null) {
-            LOGGER.warn("Missing advancement: {}", FIRST_DREAM_ADVANCEMENT_ID);
-            return;
-        }
-
-        AdvancementProgress progress = player.getAdvancements().getOrStartProgress(advancement);
-        if (progress.isDone()) {
+        if (advancement != null && player.getAdvancements().getOrStartProgress(advancement).isDone()) {
             markFirstDreamPlayed(player);
             return;
         }
 
+        PENDING_FIRST_DREAM.put(player.getUUID(),
+                new FirstDreamPendingState(FirstDreamStage.WAITING_TO_PLAY_SOUND, FIRST_DREAM_START_DELAY_TICKS));
+    }
+
+    private static void playFirstDreamSound(ServerPlayer player) {
         SoundEvent sound = ModSoundEvents.FIRST_DREAM.get();
-        player.playNotifySound(sound, SoundSource.MUSIC, 1.0F, 1.0F);
-        PENDING_FIRST_DREAM.put(player.getUUID(), FIRST_DREAM_SOUND_DURATION_TICKS);
+        // 改到音乐盒分类，避免玩家关闭背景音乐后完全听不见
+        player.playNotifySound(sound, SoundSource.RECORDS, 1.0F, 1.0F);
     }
 
     private static void grantFirstDreamAdvancement(ServerPlayer player) {
@@ -188,5 +199,16 @@ public class PlayerEvents {
         CompoundTag persistedData = player.getPersistentData().getCompound(Player.PERSISTED_NBT_TAG);
         persistedData.putBoolean(FIRST_DREAM_PLAYED_TAG, true);
         player.getPersistentData().put(Player.PERSISTED_NBT_TAG, persistedData);
+    }
+
+    private enum FirstDreamStage {
+        WAITING_TO_PLAY_SOUND,
+        WAITING_TO_GRANT_ADVANCEMENT
+    }
+
+    private record FirstDreamPendingState(FirstDreamStage stage, int remainingTicks) {
+        private FirstDreamPendingState withRemainingTicks(int updatedTicks) {
+            return new FirstDreamPendingState(stage, updatedTicks);
+        }
     }
 }

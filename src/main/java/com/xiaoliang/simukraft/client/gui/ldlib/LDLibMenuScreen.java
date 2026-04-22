@@ -13,6 +13,7 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 
 import javax.annotation.Nonnull;
+import java.util.Objects;
 
 /**
  * simukraft: LDLib菜单屏幕基类
@@ -110,7 +111,7 @@ public abstract class LDLibMenuScreen extends Screen {
             // 创建一个假的ModularUIGuiContainer来满足LDLib的要求
             // 这不会实际显示，只是为了让Widget可以调用getModularUIGui()而不返回null
             if (this.modularUI.getModularUIGui() == null) {
-                new FakeModularUIGuiContainer(this.modularUI);
+                new FakeModularUIGuiContainer(Objects.requireNonNull(this.modularUI));
             }
             this.modularUI.initWidgets();
         }

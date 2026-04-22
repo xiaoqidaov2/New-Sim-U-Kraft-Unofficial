@@ -7,6 +7,11 @@ import mezz.jei.api.gui.handlers.IGhostIngredientHandler;
 import mezz.jei.api.ingredients.ITypedIngredient;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.world.item.ItemStack;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,10 +20,11 @@ import java.util.List;
  * simukraft: JEI 幽灵物品处理器
  * 处理从 JEI 拖拽物品到模组配置界面的逻辑
  */
+@OnlyIn(Dist.CLIENT)
 public class SimukraftGhostIngredientHandler<T extends ModularUIGuiContainer> implements IGhostIngredientHandler<T> {
 
     @Override
-    public <I> List<Target<I>> getTargetsTyped(T gui, ITypedIngredient<I> ingredient, boolean doStart) {
+    public @Nonnull <I> List<Target<I>> getTargetsTyped(@Nonnull T gui, @Nonnull ITypedIngredient<I> ingredient, boolean doStart) {
         List<Target<I>> targets = new ArrayList<>();
 
         // simukraft: 检查当前界面类型
@@ -69,11 +75,11 @@ public class SimukraftGhostIngredientHandler<T extends ModularUIGuiContainer> im
      * 获取 GUI 窗口在屏幕上的偏移量
      * LDLib 的界面居中显示，需要计算偏移来转换坐标
      */
-    private int getGuiLeft(ModularUIGuiContainer gui) {
+    private static int getGuiLeft(ModularUIGuiContainer gui) {
         return (gui.width - gui.modularUI.getWidth()) / 2;
     }
 
-    private int getGuiTop(ModularUIGuiContainer gui) {
+    private static int getGuiTop(ModularUIGuiContainer gui) {
         return (gui.height - gui.modularUI.getHeight()) / 2;
     }
 
@@ -166,7 +172,8 @@ public class SimukraftGhostIngredientHandler<T extends ModularUIGuiContainer> im
     /**
      * 从物品堆栈获取物品ID
      */
-    private String getItemIdFromStack(ItemStack itemStack) {
+    @Nullable
+    private static String getItemIdFromStack(ItemStack itemStack) {
         if (itemStack.isEmpty()) {
             return null;
         }

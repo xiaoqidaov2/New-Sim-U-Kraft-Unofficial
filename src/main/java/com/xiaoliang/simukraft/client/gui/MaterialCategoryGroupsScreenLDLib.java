@@ -31,10 +31,10 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 通类匹配组配置界面 - LDLib版本
@@ -79,8 +79,8 @@ public class MaterialCategoryGroupsScreenLDLib extends ModularUIGuiContainer {
     private final Consumer<List<String>> onSave;
     private List<String> groupNames;
     private String selectedGroup = null;
-    private Map<String, List<String>> groupHeaders = new HashMap<>();
-    private Map<String, List<String>> groupMembers = new HashMap<>();
+    private final Map<String, List<String>> groupHeaders = new ConcurrentHashMap<>();
+    private final Map<String, List<String>> groupMembers = new ConcurrentHashMap<>();
 
     // UI引用
     private static MaterialCategoryGroupsScreenLDLib currentInstance;
@@ -704,9 +704,9 @@ public class MaterialCategoryGroupsScreenLDLib extends ModularUIGuiContainer {
         }
 
         var item = itemStack.getItem();
-        var key = item.builtInRegistryHolder().key();
+        var key = ForgeRegistries.ITEMS.getKey(item);
         if (key != null) {
-            return key.location().toString();
+            return key.toString();
         }
 
         return null;

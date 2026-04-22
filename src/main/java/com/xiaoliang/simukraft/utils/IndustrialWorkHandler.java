@@ -21,11 +21,12 @@ import net.minecraftforge.registries.ForgeRegistries;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.io.BufferedReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -42,9 +43,9 @@ public class IndustrialWorkHandler {
     private static final Logger LOGGER = LogManager.getLogger();
 
     // 存储每个工业建筑的上次处理时间，用于计算工作刻间隔
-    private static final Map<BlockPos, Long> lastWorkTick = new HashMap<>();
+    private static final Map<BlockPos, Long> lastWorkTick = new ConcurrentHashMap<>();
     // 存储每个工业建筑当天是否已经在工作结束时间处理过
-    private static final Map<BlockPos, Long> processedEndOfDay = new HashMap<>();
+    private static final Map<BlockPos, Long> processedEndOfDay = new ConcurrentHashMap<>();
     private static final Map<Path, String> BUILDING_FILE_NAME_CACHE = new ConcurrentHashMap<>();
     private static boolean dataInitialized = false;
 
@@ -208,7 +209,7 @@ public class IndustrialWorkHandler {
         List<IndustrialBuildingConfig.ProductOutput> products = config.getEffectiveProducts(selectedRecipeId);
 
         // 先计算所有产物的产出数量
-        Map<Item, Integer> itemsToProduce = new HashMap<>();
+        Map<Item, Integer> itemsToProduce = new ConcurrentHashMap<>();
         for (IndustrialBuildingConfig.ProductOutput product : products) {
             int amount = product.calculateAmount(level.random, multiplier);
             if (amount <= 0) {
@@ -253,7 +254,7 @@ public class IndustrialWorkHandler {
         for (Map.Entry<Item, Integer> entry : itemsToProduce.entrySet()) {
             Item item = entry.getKey();
             int amount = entry.getValue();
-            ItemStack itemStack = new ItemStack(item, amount);
+            ItemStack itemStack = new ItemStack(nn(item), amount);
 
             if (!hasSpaceInNearbyChests(level, buildingPos, itemStack)) {
                 return false;
@@ -272,8 +273,8 @@ public class IndustrialWorkHandler {
         for (int x = -range; x <= range; x++) {
             for (int y = -range; y <= range; y++) {
                 for (int z = -range; z <= range; z++) {
-                    BlockPos checkPos = Objects.requireNonNull(buildingPos.offset(x, y, z));
-                    if (!level.isLoaded(Objects.requireNonNull(checkPos))) continue;
+                    BlockPos checkPos = buildingPos.offset(x, y, z);
+                    if (!level.isLoaded(nn(checkPos))) continue;
                     if (!ContainerUtils.isContainer(level, checkPos)) continue;
                     if (ContainerUtils.canInsertItem(level, checkPos, itemStack)) {
                         return true;
@@ -318,12 +319,12 @@ public class IndustrialWorkHandler {
         int range = 3;
         int totalCount = 0;
 
-        for (int x = -range; x <= range && totalCount >= 0; x++) {
-            for (int y = -range; y <= range && totalCount >= 0; y++) {
-                for (int z = -range; z <= range && totalCount >= 0; z++) {
-                    BlockPos checkPos = Objects.requireNonNull(buildingPos.offset(x, y, z));
+        for (int x = -range; x <= range; x++) {
+            for (int y = -range; y <= range; y++) {
+                for (int z = -range; z <= range; z++) {
+                    BlockPos checkPos = buildingPos.offset(x, y, z);
 
-                    if (!level.isLoaded(Objects.requireNonNull(checkPos))) {
+                    if (!level.isLoaded(nn(checkPos))) {
                         continue;
                     }
 
@@ -399,9 +400,9 @@ public class IndustrialWorkHandler {
         for (int x = -range; x <= range && remaining > 0; x++) {
             for (int y = -range; y <= range && remaining > 0; y++) {
                 for (int z = -range; z <= range && remaining > 0; z++) {
-                    BlockPos checkPos = Objects.requireNonNull(buildingPos.offset(x, y, z));
+                    BlockPos checkPos = buildingPos.offset(x, y, z);
                     
-                    if (!level.isLoaded(Objects.requireNonNull(checkPos))) {
+                    if (!level.isLoaded(nn(checkPos))) {
                         continue;
                     }
                     
@@ -641,6 +642,11 @@ public class IndustrialWorkHandler {
         }
     }
 
+    @Nonnull
+    private static <T> T nn(@Nullable T value) {
+        return Objects.requireNonNull(value);
+    }
+
     /**
      * 获取等级对应的产量加成倍数
      * 从配置读取或默认
@@ -702,10 +708,10 @@ public class IndustrialWorkHandler {
         for (int x = -range; x <= range; x++) {
             for (int y = -range; y <= range; y++) {
                 for (int z = -range; z <= range; z++) {
-                    BlockPos checkPos = Objects.requireNonNull(buildingPos.offset(x, y, z));
+                    BlockPos checkPos = buildingPos.offset(x, y, z);
                     
                     // 检查区块是否已加载
-                    if (!level.isLoaded(Objects.requireNonNull(checkPos))) {
+                    if (!level.isLoaded(nn(checkPos))) {
                         continue;
                     }
                     

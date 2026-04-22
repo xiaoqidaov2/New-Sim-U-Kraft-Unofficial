@@ -18,6 +18,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import java.util.Objects;
+
 /**
  * simukraft: 配置选择界面 - 菜单版本
  * 使用LDLibMenuScreen基类，被其他模组识别为普通菜单而非容器
@@ -181,14 +185,14 @@ public class ConfigSelectionMenuScreen extends LDLibMenuScreen {
 
     private void openUrl(String url) {
         try {
-            net.minecraft.Util.getPlatform().openUri(url);
+            net.minecraft.Util.getPlatform().openUri(nn(url));
         } catch (Exception e) {
             com.xiaoliang.simukraft.Simukraft.LOGGER.error("Failed to open URL: " + url, e);
         }
     }
 
-    @Override
-    public void onClose() {
-        super.onClose();
+    @Nonnull
+    private static <T> T nn(@Nullable T value) {
+        return Objects.requireNonNull(value);
     }
 }
