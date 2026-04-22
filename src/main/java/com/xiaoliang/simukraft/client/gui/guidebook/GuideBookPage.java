@@ -165,7 +165,7 @@ public class GuideBookPage {
                 String type = GsonHelper.getAsString(obj, "type", "text");
                 String content = GsonHelper.getAsString(obj, "content", "");
                 int spacing = GsonHelper.getAsInt(obj, "spacing", 4);
-                String itemId = obj.has("item") ? GsonHelper.getAsString(obj, "item") : null;
+                String itemId = obj.has("item_id") ? GsonHelper.getAsString(obj, "item_id") : null;
                 String itemNbt = obj.has("item_nbt") ? GsonHelper.getAsString(obj, "item_nbt") : null;
                 String target = obj.has("target") ? GsonHelper.getAsString(obj, "target") : null;
 
