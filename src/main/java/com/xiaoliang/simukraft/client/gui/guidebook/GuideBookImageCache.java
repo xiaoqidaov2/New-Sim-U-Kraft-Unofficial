@@ -248,7 +248,7 @@ public class GuideBookImageCache {
      */
     public static void clear() {
         for (ImageEntry entry : CACHE.values()) {
-            if (entry.isRemote && entry.texture != null) {
+            if (entry.texture != null) {
                 Minecraft.getInstance().execute(() ->
                         Minecraft.getInstance().getTextureManager().release(entry.texture)
                 );
@@ -256,6 +256,33 @@ public class GuideBookImageCache {
         }
         CACHE.clear();
         LOADING.clear();
+        textureIdCounter = 0;
+        Simukraft.LOGGER.info("GuideBook: Image cache cleared");
+    }
+
+    /**
+     * 移除单个图片缓存（用于重新加载失败的图片）
+     * @param imageUrl 图片地址
+     */
+    public static void removeFromCache(@Nonnull String imageUrl) {
+        ImageEntry entry = CACHE.remove(imageUrl);
+        if (entry != null && entry.texture != null) {
+            Minecraft.getInstance().execute(() ->
+                    Minecraft.getInstance().getTextureManager().release(entry.texture)
+            );
+            Simukraft.LOGGER.info("GuideBook: Removed image from cache: {}", imageUrl);
+        }
+        LOADING.remove(imageUrl);
+    }
+
+    /**
+     * 强制重新加载图片（清除缓存后重新加载）
+     * @param imageUrl 图片地址
+     */
+    public static void reloadImage(@Nonnull String imageUrl) {
+        removeFromCache(imageUrl);
+        getOrLoad(imageUrl);
+        Simukraft.LOGGER.info("GuideBook: Reloading image: {}", imageUrl);
     }
 
     /**

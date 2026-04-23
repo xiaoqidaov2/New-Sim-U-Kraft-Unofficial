@@ -3,6 +3,7 @@
   "pages": [
     "directory.json",
     "prologue.json",
-    "items.json"
+    "items.json",
+    "start.json"
   ]
 }

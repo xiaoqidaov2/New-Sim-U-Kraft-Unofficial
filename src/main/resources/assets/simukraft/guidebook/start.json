@@ -1,0 +1,110 @@
+{
+  "parent": "directory",
+  "tab_icon": "tab_city",
+  "tab_index": 2,
+  "pages": [
+    {
+      "left_title": "start.left_title",
+      "right_title": "start.right_title",
+      "left_content": [
+        {
+          "type": "text",
+          "content": "start.intro",
+          "spacing": 8
+        },
+        {
+          "type": "item",
+          "spacing": 4,
+          "item_id": "simukraft:city_core"
+        },
+        {
+          "type": "text",
+          "spacing": 4,
+          "content": "guidebook.chapter.start.page0_left_el2"
+        },
+        {
+          "type": "text",
+          "spacing": 4,
+          "content": "guidebook.chapter.start.page0_left_el3"
+        }
+      ],
+      "right_content": [
+        {
+          "type": "text",
+          "spacing": 4,
+          "content": "guidebook.chapter.start.page0_right_el0"
+        },
+        {
+          "type": "hint",
+          "spacing": 4,
+          "content": "guidebook.chapter.start.page0_right_el1"
+        },
+        {
+          "type": "text",
+          "spacing": 4,
+          "content": "guidebook.chapter.start.page0_right_el2"
+        },
+        {
+          "type": "hint",
+          "spacing": 4,
+          "content": "guidebook.chapter.start.page0_right_el3"
+        }
+      ]
+    },
+    {
+      "left_title": "guidebook.chapter.items.page3_left_title",
+      "right_title": "guidebook.chapter.items.guidebook",
+      "left_content": [
+        {
+          "type": "text",
+          "spacing": 4,
+          "content": "guidebook.chapter.start.page1_left_el0"
+        },
+        {
+          "type": "item",
+          "spacing": 4,
+          "item_id": "simukraft:build_box"
+        },
+        {
+          "type": "hint",
+          "spacing": 4,
+          "content": "guidebook.chapter.start.page1_left_el2"
+        },
+        {
+          "type": "text",
+          "spacing": 4,
+          "content": "guidebook.chapter.start.page0_left_el4"
+        },
+        {
+          "type": "text",
+          "spacing": 4,
+          "content": "guidebook.chapter.start.page1_left_el4"
+        }
+      ],
+      "right_content": [
+        {
+          "type": "text",
+          "spacing": 4,
+          "content": "guidebook.chapter.start.page1_right_el0"
+        },
+        {
+          "type": "text",
+          "spacing": 4,
+          "content": "guidebook.chapter.start.page1_right_el1"
+        }
+      ]
+    },
+    {
+      "left_title": "guidebook.chapter.start.page2_left_title",
+      "right_title": "guidebook.chapter.start.page2_right_title",
+      "left_content": [
+        {
+          "type": "text",
+          "spacing": 4,
+          "content": "guidebook.chapter.start.page2_left_el0"
+        }
+      ],
+      "right_content": []
+    }
+  ]
+}
