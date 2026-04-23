@@ -42,7 +42,7 @@
         {
           "type": "text",
           "content": "guidebook.chapter.items.residential_box",
-          "spacing": 0
+          "spacing": 4
         },
         {
           "type": "item",
@@ -88,7 +88,7 @@
         {
           "type": "text",
           "content": "guidebook.chapter.items.logistics_client",
-          "spacing": 0
+          "spacing": 4
         }
       ],
       "left_title": "guidebook.chapter.items.page1.right_title",
@@ -128,9 +128,69 @@
         {
           "type": "hint",
           "content": "guidebook.chapter.items.hint",
-          "spacing": 0
+          "spacing": 4
         }
       ]
+    },
+    {
+      "left_title": "guidebook.chapter.start.page3_left_title",
+      "right_title": "guidebook.chapter.start.page3_right_title",
+      "left_content": [
+        {
+          "type": "text",
+          "spacing": 4,
+          "content": "guidebook.chapter.items.page1_right_el0"
+        },
+        {
+          "type": "item",
+          "spacing": 4,
+          "item_id": "simukraft:cheese_chunk"
+        },
+        {
+          "type": "text",
+          "spacing": 4,
+          "content": "guidebook.chapter.items.page3_left_el2"
+        }
+      ],
+      "right_content": [
+        {
+          "type": "item",
+          "spacing": 4,
+          "item_id": "simukraft:hamburger"
+        },
+        {
+          "type": "text",
+          "spacing": 4,
+          "content": "guidebook.chapter.items.page3_right_el1"
+        },
+        {
+          "type": "item",
+          "spacing": 4,
+          "item_id": "simukraft:cheese_hamburger"
+        },
+        {
+          "type": "text",
+          "spacing": 4,
+          "content": "guidebook.chapter.items.page3_right_el3"
+        }
+      ]
+    },
+    {
+      "left_title": "guidebook.chapter.items.page4_left_title",
+      "right_title": "guidebook.chapter.items.page4_right_title",
+      "left_content": [
+        {
+          "type": "item",
+          "spacing": 4,
+          "item_id": "simukraft:french_fries"
+        },
+        {
+          "type": "text",
+          "spacing": 4,
+          "content": "guidebook.chapter.items.page4_left_el1"
+        }
+      ],
+      "right_content": []
     }
   ]
 }
