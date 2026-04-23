@@ -429,7 +429,7 @@
   "message.simukraft.building_material_merchant.fired": "已解雇建材商人：%s",
   "message.simukraft.build_direction_instruction": "建造建筑时请把身子以及脸看朝需建造的方向选择建筑！建造为从右往左建设！请您将需建造的区域内清理好（包括杂草和其他方块）！在建设时请不要干扰建设区域！",
   "message.simukraft.no_idle_npcs": "没有找到空闲的NPC",
-  "message.simukraft.welcome": "感谢您下载并游玩 新:模拟大都市(New:SimuKraft) v1.0.5a9！本模组由 NSUK新模拟大都市开发组 重置开发。",
+  "message.simukraft.welcome": "感谢您下载并游玩 新:模拟大都市(New:SimuKraft) v1.0.5a10！本模组由 NSUK新模拟大都市开发组 重置开发。",
   "message.simukraft.welcome.divider": "------------------------------",
   "message.simukraft.welcome.refactor_edition": "官方问题反馈讨论QQ群：1046985079 | 638462178 | 1084921979。\n【如果您是付费购买的该内容，恭喜您，您被骗了！】",
   "message.simukraft.current_mode": "当前模拟城市游戏模式：%s",
