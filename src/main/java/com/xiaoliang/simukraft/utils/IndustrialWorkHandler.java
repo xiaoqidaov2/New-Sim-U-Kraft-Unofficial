@@ -120,6 +120,8 @@ public class IndustrialWorkHandler {
                 boolean isWorkTime = config.isWorkTimeForRecipe(selectedRecipeId, gameTime);
 
                 if (isWorkTime) {
+                    ensureNpcReadyForWork(npc, level, buildingPos, buildingFileName);
+
                     // 计算工作刻间隔（基于NPC等级）
                     int npcLevel = NPCDataManager.getNPCLevel(level.getServer(), npc.getUUID());
                     long workTickInterval = getWorkTickInterval(npcLevel);
@@ -183,6 +185,13 @@ public class IndustrialWorkHandler {
             lastWorkTick.clear();
             processedEndOfDay.clear();
         }
+    }
+
+    private static void ensureNpcReadyForWork(CustomEntity npc, ServerLevel level, BlockPos buildingPos, String buildingFileName) {
+        if (npc == null || level == null || buildingPos == null || buildingFileName == null) {
+            return;
+        }
+        NPCWorkResumeCoordinator.resumeIndustrialWork(npc, level, buildingPos, buildingFileName);
     }
 
     /**

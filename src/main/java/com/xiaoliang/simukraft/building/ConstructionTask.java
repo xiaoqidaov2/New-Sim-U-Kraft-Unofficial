@@ -51,7 +51,7 @@ public class ConstructionTask {
     private static final Property<DoubleBlockHalf> DOOR_HALF_PROPERTY = requireProperty(DoorBlock.HALF);
 
     @Nullable
-    private final CustomEntity builder;
+    private CustomEntity builder;
     @Nonnull
     private final String buildingName;
     @Nonnull
@@ -75,6 +75,8 @@ public class ConstructionTask {
     private final List<BlockPos> controlBoxPositions;
     @Nullable
     private ChunkPos loadedChunkPos = null;
+    @Nullable
+    private ServerLevel runtimeLevel = null;
     // 修复：添加建筑盒周围区块的强制加载，确保箱子能被找到
     private final List<ChunkPos> forcedChunks = new ArrayList<>();
     // 修复：添加区块加载等待计数器，解决退出重进后箱子找不到的问题
@@ -84,6 +86,7 @@ public class ConstructionTask {
     public ConstructionTask(@Nonnull CustomEntity builder, @Nonnull String buildingName, @Nonnull String category, @Nonnull BlockPos startPos,
                            @Nonnull BlockPos buildBoxPos, @Nonnull Direction facing, @Nonnull String displayName, double cost) {
         this.builder = builder;
+        this.runtimeLevel = builder.level() instanceof ServerLevel serverLevel ? serverLevel : null;
         this.buildingName = Objects.requireNonNull(buildingName);
         this.category = Objects.requireNonNull(category);
         this.startPos = Objects.requireNonNull(startPos);
@@ -136,6 +139,7 @@ public class ConstructionTask {
                            @Nonnull BlockPos buildBoxPos, @Nonnull String facingStr, @Nonnull String displayName, double cost,
                            @Nullable ServerLevel level) {
         this.builder = null;  // 恢复时不关联NPC
+        this.runtimeLevel = level;
         this.buildingName = Objects.requireNonNull(buildingName);
         this.category = Objects.requireNonNull(category);
         this.startPos = Objects.requireNonNull(startPos);
@@ -483,6 +487,25 @@ public class ConstructionTask {
         return currentBlockIndex < blocksToPlace.size();
     }
 
+    /**
+     * 恢复持久化任务后重新绑定运行时建筑师。
+     */
+    public void attachBuilder(@Nullable CustomEntity builder) {
+        this.builder = builder;
+        if (builder != null && builder.level() instanceof ServerLevel serverLevel) {
+            this.runtimeLevel = serverLevel;
+        }
+    }
+
+    @Nullable
+    private ServerLevel getRuntimeLevel() {
+        if (builder != null && builder.level() instanceof ServerLevel serverLevel) {
+            runtimeLevel = serverLevel;
+            return serverLevel;
+        }
+        return runtimeLevel;
+    }
+
     private long lastWarningTime = 0;
     
     // 性能优化：缓存附近容器的位置，避免每 tick 重复搜索
@@ -492,7 +515,8 @@ public class ConstructionTask {
 
     @SuppressWarnings("null")
     private boolean consumeFromNearbyChests(BlockState state) {
-        if (builder == null || !(builder.level() instanceof ServerLevel serverLevel)) return false;
+        ServerLevel serverLevel = getRuntimeLevel();
+        if (serverLevel == null) return false;
 
         // 使用新的材料管理器检查是否需要材料
         if (!com.xiaoliang.simukraft.utils.MaterialManager.requiresMaterial(state)) {
@@ -799,22 +823,24 @@ public class ConstructionTask {
      * 修复：释放所有强制加载的区块
      */
     private void releaseForcedChunks() {
-        if (builder != null && builder.level() instanceof ServerLevel serverLevel) {
-            // 释放主区块
-            if (loadedChunkPos != null) {
-                ChunkPos mainChunk = loadedChunkPos;
-                serverLevel.setChunkForced(mainChunk.x, mainChunk.z, false);
-                Simukraft.LOGGER.info("[ConstructionTask] 释放主区块加载: " + mainChunk);
-            }
-            // 释放建筑盒周围的区块
-            for (ChunkPos chunkPos : forcedChunks) {
-                serverLevel.setChunkForced(chunkPos.x, chunkPos.z, false);
-            }
-            if (!forcedChunks.isEmpty()) {
-                Simukraft.LOGGER.info("[ConstructionTask] 释放 " + forcedChunks.size() + " 个周围区块加载");
-            }
-            forcedChunks.clear();
+        ServerLevel serverLevel = getRuntimeLevel();
+        if (serverLevel == null) {
+            return;
         }
+        // 释放主区块
+        if (loadedChunkPos != null) {
+            ChunkPos mainChunk = loadedChunkPos;
+            serverLevel.setChunkForced(mainChunk.x, mainChunk.z, false);
+            Simukraft.LOGGER.info("[ConstructionTask] 释放主区块加载: " + mainChunk);
+        }
+        // 释放建筑盒周围的区块
+        for (ChunkPos chunkPos : forcedChunks) {
+            serverLevel.setChunkForced(chunkPos.x, chunkPos.z, false);
+        }
+        if (!forcedChunks.isEmpty()) {
+            Simukraft.LOGGER.info("[ConstructionTask] 释放 " + forcedChunks.size() + " 个周围区块加载");
+        }
+        forcedChunks.clear();
     }
 
     /**
@@ -872,7 +898,8 @@ public class ConstructionTask {
      * @return 是否成功消耗材料
      */
     private boolean tryConsumeFromContainer(BlockPos containerPos, BlockState state) {
-        if (builder == null || !(builder.level() instanceof ServerLevel serverLevel)) return false;
+        ServerLevel serverLevel = getRuntimeLevel();
+        if (serverLevel == null) return false;
 
         // 获取容器中的所有物品
         List<ItemStack> items = ContainerUtils.getAllItems(serverLevel, containerPos);

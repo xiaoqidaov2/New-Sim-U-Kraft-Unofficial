@@ -46,6 +46,10 @@ public class BuilderDailyWorkHandler {
             return;
         }
 
+        // 先一次性读取JSON任务，避免每个建筑师都重复解析同一个文件。
+        Map<UUID, ConstructionTaskData.TaskInfo> persistedTasks =
+                ConstructionTaskData.loadTasks(server, hiredBuilders.values());
+
         // 获取v2系统的雇佣服务
         var employmentService = com.xiaoliang.simukraft.employment.service.EmploymentServices.get(server);
         String dimensionId = level.dimension().location().toString();
@@ -90,7 +94,7 @@ public class BuilderDailyWorkHandler {
                 }
 
                 // 检查是否有持久化的建造任务需要恢复
-                restoreConstructionTaskIfNeeded(server, npc, buildBoxPos);
+                restoreConstructionTaskIfNeeded(server, npc, buildBoxPos, hiredBuilders, persistedTasks.get(npcUuid));
 
                 if (!"builder".equals(npc.getJob())) {
                     npc.setJob("builder");
@@ -102,20 +106,7 @@ public class BuilderDailyWorkHandler {
 
                 // 建筑师雇佣后保持工作中状态，等待玩家手动解雇
                 // 有建造任务时传送到建筑盒，无任务时保持工作中状态但不强制传送
-                if (npc.getWorkStatus() != WorkStatus.WORKING) {
-                    npc.setWorkStatus(WorkStatus.WORKING);
-                    npc.setWorking(true);
-                }
-                if (hasActiveTask) {
-                    double distance = npc.position().distanceTo(new net.minecraft.world.phys.Vec3(
-                            buildBoxPos.getX() + 0.5,
-                            buildBoxPos.getY(),
-                            buildBoxPos.getZ() + 0.5
-                    ));
-                    if (distance > 3.0) {
-                        npc.scheduleHireArrivalTeleport(buildBoxPos);
-                    }
-                }
+                NPCWorkResumeCoordinator.resumeBuilderWork(npc, buildBoxPos, hasActiveTask);
             }
         }
     }
@@ -124,14 +115,14 @@ public class BuilderDailyWorkHandler {
      * 如果需要，从持久化存储中恢复建造任务
      * 解决局域网开放模式下NPC休息后建造任务丢失的问题
      */
-    private static void restoreConstructionTaskIfNeeded(MinecraftServer server, CustomEntity npc, BlockPos buildBoxPos) {
+    private static void restoreConstructionTaskIfNeeded(MinecraftServer server, CustomEntity npc, BlockPos buildBoxPos,
+                                                        Map<BlockPos, UUID> hiredBuilders,
+                                                        ConstructionTaskData.TaskInfo taskInfo) {
         // 如果NPC已经有建造任务，不需要恢复
         if (npc.getConstructionTask() != null) {
             return;
         }
 
-        // 从持久化存储中加载建造任务
-        ConstructionTaskData.TaskInfo taskInfo = ConstructionTaskData.loadTask(server, npc.getUUID());
         if (taskInfo == null) {
             return;
         }
@@ -139,7 +130,6 @@ public class BuilderDailyWorkHandler {
         try {
             // 验证NPC是否仍然被雇佣为建筑师
             // 检查BuildBoxHiredData中是否仍有该NPC的雇佣记录
-            Map<BlockPos, UUID> hiredBuilders = BuildBoxHiredData.loadHiredBuilders(server);
             boolean isStillHired = hiredBuilders.values().stream()
                     .anyMatch(uuid -> uuid.equals(npc.getUUID()));
             

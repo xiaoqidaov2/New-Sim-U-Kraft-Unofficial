@@ -133,19 +133,15 @@ public class ServerTickHandler {
             }
         }
 
-        // 为每个世界提交一个休息状态更新任务
+        // 休息状态涉及导航、传送、实体状态写入，统一在主线程推进。
         for (Map.Entry<ServerLevel, List<CustomEntity>> entry : npcsByLevel.entrySet()) {
             ServerLevel level = entry.getKey();
             List<CustomEntity> npcs = entry.getValue();
-
-            NPCTaskScheduler.submitTask(() -> {
-                try {
-                    // 在异步线程中预处理NPC数据
-                    NPCRestHandler.updateRestStatusAsync(level, npcs);
-                } catch (Exception e) {
-                    LOGGER.error("更新NPC休息状态时发生错误", e);
-                }
-            }, "NPCRestUpdate-" + level.dimension().location());
+            try {
+                NPCRestHandler.updateRestStatusAsync(level, npcs);
+            } catch (Exception e) {
+                LOGGER.error("更新NPC休息状态时发生错误", e);
+            }
         }
     }
 
@@ -215,8 +211,8 @@ public class ServerTickHandler {
                 noonSpawnTriggered = true;
                 LOGGER.info("中午12:00到了，检查是否需要生成新NPC");
 
-                // 提交任务到多线程调度器
-                NPCTaskScheduler.submitTask(() -> {
+                // 生成实体和写入城市/住宅数据都必须在服务端主线程执行。
+                NPCTaskScheduler.runOnMainThread(server, () -> {
                     try {
                         com.xiaoliang.simukraft.utils.ResidentManager.spawnNPCAtNoon(server);
                     } catch (Exception e) {
@@ -285,10 +281,6 @@ public class ServerTickHandler {
                 .forEach((pos, npcUuid) -> restoreNpc(server, npcUuid, "builder", WorkStatus.WORKING, pos));
         com.xiaoliang.simukraft.world.BuildBoxHiredData.loadHiredPlanners(server)
                 .forEach((pos, npcUuid) -> restoreNpc(server, npcUuid, "planner", WorkStatus.WORKING, pos));
-        com.xiaoliang.simukraft.world.CommercialHiredData.loadHiredEmployees(server)
-                .forEach((pos, hireInfo) -> restoreNpc(server, hireInfo.getNpcUuid(), hireInfo.getJobType(), WorkStatus.WORKING, pos));
-        com.xiaoliang.simukraft.world.IndustrialHiredData.loadHiredEmployees(server)
-                .forEach((pos, hireInfo) -> restoreNpc(server, hireInfo.getNpcUuid(), hireInfo.getJobType(), WorkStatus.WORKING, pos));
         com.xiaoliang.simukraft.world.LogisticsHiredData.getServerBoxHiredNpcs(server)
                 .forEach((pos, npcUuid) -> restoreNpc(server, npcUuid, "warehouse_manager", WorkStatus.WORKING, pos));
     }
@@ -303,13 +295,26 @@ public class ServerTickHandler {
             return;
         }
 
+        if (NPCRestHandler.isNpcInRestWorkflow(npcUuid)) {
+            return;
+        }
+
+        if ("builder".equals(job)) {
+            NPCWorkResumeCoordinator.resumeBuilderWork(npc, workplacePos, npc.getConstructionTask() != null);
+            return;
+        }
+
         npc.setJob(job);
         npc.setWorkStatus(workStatus);
         npc.setWorkSubState(WorkSubState.WORKING);
         npc.setWorking(workStatus != WorkStatus.IDLE);
         npc.setStatusLabel(null);
 
-        if (workStatus != WorkStatus.IDLE && workplacePos != null) {
+        if (workStatus != WorkStatus.IDLE && workplacePos != null && npc.distanceToSqr(
+                workplacePos.getX() + 0.5D,
+                workplacePos.getY() + 1.0D,
+                workplacePos.getZ() + 0.5D
+        ) > 9.0D) {
             npc.scheduleHireArrivalTeleport(workplacePos);
         }
     }

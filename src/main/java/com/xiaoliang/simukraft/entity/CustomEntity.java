@@ -1290,9 +1290,12 @@ public class CustomEntity extends Animal {
     public void setConstructionTask(com.xiaoliang.simukraft.building.ConstructionTask task) {
         com.xiaoliang.simukraft.building.ConstructionTask previousTask = this.constructionTask;
         this.constructionTask = task;
+        if (task != null) {
+            task.attachBuilder(this);
+        }
         if (task != null && !task.isCompleted() && task.hasNextBlock()) {
             this.currentBuildingName = task.getBuildingName();
-            this.constructionProgress = 0;
+            this.constructionProgress = task.getProgress();
             this.buildCooldownTicks = 0;
             if (this.level() instanceof ServerLevel serverLevel) {
                 com.xiaoliang.simukraft.utils.BuildBoxFloatingEntityManager.ensureSpawned(

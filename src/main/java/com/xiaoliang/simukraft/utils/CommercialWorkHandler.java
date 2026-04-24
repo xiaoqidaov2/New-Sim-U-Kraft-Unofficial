@@ -3,7 +3,6 @@ package com.xiaoliang.simukraft.utils;
 import com.xiaoliang.simukraft.building.CommercialBuildingConfig;
 import com.xiaoliang.simukraft.building.CommercialBuildingManager;
 import com.xiaoliang.simukraft.entity.CustomEntity;
-import com.xiaoliang.simukraft.entity.WorkStatus;
 import com.xiaoliang.simukraft.notification.MessageCategory;
 import com.xiaoliang.simukraft.notification.MessageNotification;
 import com.xiaoliang.simukraft.notification.NotificationServiceManager;
@@ -39,13 +38,13 @@ public class CommercialWorkHandler {
     private static final Logger LOGGER = LogManager.getLogger();
 
     // 存储每个商业建筑的上次补货时间
-    private static final Map<BlockPos, Long> lastRestockTime = new HashMap<>();
+    private static final Map<BlockPos, Long> lastRestockTime = new ConcurrentHashMap<>();
     // 记录每天是否已处理开工逻辑（到岗 + 取料）
-    private static final Map<BlockPos, Long> lastShiftStartDay = new HashMap<>();
+    private static final Map<BlockPos, Long> lastShiftStartDay = new ConcurrentHashMap<>();
     // 记录每天是否已处理下班逻辑，避免夜间重复切换状态
-    private static final Map<BlockPos, Long> lastShiftEndDay = new HashMap<>();
+    private static final Map<BlockPos, Long> lastShiftEndDay = new ConcurrentHashMap<>();
     // 记录当天是否已满足开售原料前置条件
-    private static final Map<BlockPos, Long> preparedMaterialsDay = new HashMap<>();
+    private static final Map<BlockPos, Long> preparedMaterialsDay = new ConcurrentHashMap<>();
     private static final Map<Path, String> BUILDING_FILE_NAME_CACHE = new ConcurrentHashMap<>();
     private static boolean dataInitialized = false;
 
@@ -313,13 +312,11 @@ public class CommercialWorkHandler {
     public static void handleMixedMode(CustomEntity npc, BlockPos pos, ServerLevel level, CommercialBuildingConfig config) {
         if (npc == null || level == null || config == null) return;
 
-        // 先执行补货逻辑
-        processRestock(pos, level, config);
-
         // 检查并重置每日收购数量
         checkAndResetDailyBuyAmount(pos, level);
 
-        // 再处理NPC出售物品
+        // `handleNPCSellMode` 内部已经包含补货逻辑，这里直接复用即可，
+        // 避免混合模式在同一 tick 内重复跑两次补货与持久化。
         handleNPCSellMode(npc, pos, level, config);
     }
 
@@ -440,14 +437,19 @@ public class CommercialWorkHandler {
             return;
         }
 
-        lastShiftStartDay.put(buildingPos, dayIndex);
-        lastShiftEndDay.remove(buildingPos);
-
-        // 下班逻辑会把商业NPC切回 IDLE，这里在实际开工窗口内恢复为工作中。
-        if (npc.getWorkStatus() != WorkStatus.WORKING) {
-            npc.setWorkStatus(WorkStatus.WORKING);
+        if (NPCRestHandler.isNpcInRestWorkflow(npc.getUUID())) {
+            return;
         }
-        npc.setWorking(true);
+
+        markShiftStarted(buildingPos, dayIndex);
+
+        // 下班逻辑会把商业NPC切回 IDLE，这里统一通过协调器恢复为工作中，
+        // 避免休息链路尚未结束时被提前标记为“工作中”。
+        if (!NPCWorkResumeCoordinator.activateCommercialShift(npc, buildingPos)) {
+            lastShiftStartDay.remove(buildingPos);
+            return;
+        }
+
         moveNpcToWorkplace(npc, buildingPos);
         prepareMaterialsForToday(buildingPos, level, config, dayIndex);
     }
@@ -731,10 +733,13 @@ public class CommercialWorkHandler {
         // 发送雇佣消息
         sendHireMessage(npc, level.getServer(), config);
 
-        // 设置手持物品
-        setHeldItemFromConfig(npc, config);
+        applyCommercialWorksiteState(npc, level, pos, config);
+    }
 
-        // 初始化商店库存（统一使用 CommercialHiredData）
+    /**
+     * 统一确保商业库存已初始化，避免界面展示与服务端交易判断不一致。
+     */
+    public static void ensureStockInitialized(BlockPos pos, ServerLevel level, CommercialBuildingConfig config) {
         initializeStock(pos, level, config);
     }
 
@@ -969,11 +974,7 @@ public class CommercialWorkHandler {
             return;
         }
 
-        // 初始化商店库存（统一使用 CommercialHiredData）
-        initializeStock(pos, level, config);
-
-        // 设置手持物品
-        setHeldItemFromConfig(npc, config);
+        applyCommercialWorksiteState(npc, level, pos, config);
     }
 
     /**
@@ -989,12 +990,9 @@ public class CommercialWorkHandler {
             return;
         }
 
-        initializeStock(pos, level, config);
-        setHeldItemFromConfig(npc, config);
-
         long dayIndex = level.getDayTime() / 24000L;
-        lastShiftStartDay.put(pos, dayIndex);
-        lastShiftEndDay.remove(pos);
+        applyCommercialWorksiteState(npc, level, pos, config);
+        markShiftStarted(pos, dayIndex);
         prepareMaterialsForToday(pos, level, config, dayIndex);
     }
 
@@ -1004,5 +1002,24 @@ public class CommercialWorkHandler {
     public static void setNpcHeldItem(CustomEntity npc, CommercialBuildingConfig config) {
         if (npc == null || config == null) return;
         setHeldItemFromConfig(npc, config);
+    }
+
+    private static void applyCommercialWorksiteState(CustomEntity npc,
+                                                     ServerLevel level,
+                                                     BlockPos pos,
+                                                     CommercialBuildingConfig config) {
+        if (npc == null || level == null || pos == null || config == null) {
+            return;
+        }
+        initializeStock(pos, level, config);
+        setHeldItemFromConfig(npc, config);
+    }
+
+    private static void markShiftStarted(BlockPos pos, long dayIndex) {
+        if (pos == null) {
+            return;
+        }
+        lastShiftStartDay.put(pos, dayIndex);
+        lastShiftEndDay.remove(pos);
     }
 }

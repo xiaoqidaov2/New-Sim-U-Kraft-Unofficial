@@ -10,6 +10,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
  * 商业建筑传送处理器
@@ -18,6 +20,7 @@ import net.minecraftforge.fml.common.Mod;
  */
 @Mod.EventBusSubscriber(modid = "simukraft", bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class CommercialTeleportHandler {
+    private static final Logger LOGGER = LogManager.getLogger();
 
     @SubscribeEvent
     public static void onNPCTeleportComplete(NPCTeleportCompleteEvent event) {
@@ -52,12 +55,9 @@ public class CommercialTeleportHandler {
         // 再次确认配置中的职业类型匹配
         if (!npcJob.equals(config.getJobType())) return;
 
-        // 使用统一的商业工作处理器处理传送后的逻辑
-        System.out.println("[CommercialTeleportHandler] 处理NPC传送：" + npc.getFullName() + "，职业：" + npcJob + "，建筑：" + buildingFileName);
+        // 统一交给商业工作处理器恢复工作现场，避免多个入口重复初始化。
+        LOGGER.debug("[CommercialTeleportHandler] 处理NPC传送: {}, 职业: {}, 建筑: {}",
+                npc.getFullName(), npcJob, buildingFileName);
         CommercialWorkHandler.onCommercialNpcTeleported(npc, (ServerLevel) event.getLevel(), targetPos, buildingFileName);
-
-        // 设置手持物品（重进游戏后恢复）
-        System.out.println("[CommercialTeleportHandler] 设置手持物品：" + config.getHeldItem());
-        CommercialWorkHandler.setNpcHeldItem(npc, config);
     }
 }

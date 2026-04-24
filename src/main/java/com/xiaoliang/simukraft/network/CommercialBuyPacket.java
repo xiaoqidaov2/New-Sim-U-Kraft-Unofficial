@@ -2,24 +2,25 @@ package com.xiaoliang.simukraft.network;
 
 import com.xiaoliang.simukraft.building.CommercialBuildingConfig;
 import com.xiaoliang.simukraft.building.CommercialBuildingManager;
+import com.xiaoliang.simukraft.utils.CommercialStorageHelper;
 import com.xiaoliang.simukraft.utils.CommercialWorkHandler;
 import com.xiaoliang.simukraft.utils.ContainerUtils;
 import com.xiaoliang.simukraft.utils.FileUtils;
 import com.xiaoliang.simukraft.world.CityData;
 import com.xiaoliang.simukraft.world.CommercialHiredData;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.network.NetworkDirection;
 import net.minecraftforge.network.NetworkEvent;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -112,9 +113,12 @@ public class CommercialBuyPacket {
 
             // 加载库存数据
             CommercialHiredData.loadStockData(server);
+            CommercialWorkHandler.ensureStockInitialized(packet.controlBoxPos, level, config);
 
             // 获取当前游戏天数
             long currentDay = level.getDayTime() / 24000L;
+            boolean deliverToStoreChest = CommercialStorageHelper.isBuildingMaterialStore(config);
+            List<ItemStack> deliveryStacks = new ArrayList<>();
 
             // 验证库存是否足够
             for (Map.Entry<String, BuyItemInfo> entry : packet.materials.entrySet()) {
@@ -163,6 +167,15 @@ public class CommercialBuyPacket {
                         return;
                     }
                 }
+
+                if (deliverToStoreChest) {
+                    ItemStack template = parseItemStack(itemId);
+                    if (template.isEmpty()) {
+                        player.sendSystemMessage(Component.translatable("message.simukraft.commercial.item_not_found", itemId));
+                        return;
+                    }
+                    deliveryStacks.addAll(createDeliveryStacks(template, requestedAmount));
+                }
             }
 
             // 获取城市数据并检查资金
@@ -174,6 +187,12 @@ public class CommercialBuyPacket {
                 player.sendSystemMessage(Component.translatable("message.simukraft.building_material.insufficient_funds",
                     String.format(Locale.US, "%.2f", currentFunds),
                     String.format(Locale.US, "%.2f", packet.totalPrice)));
+                return;
+            }
+
+            if (deliverToStoreChest &&
+                !CommercialStorageHelper.canStoreItemsInNearbyContainers(level, packet.controlBoxPos, deliveryStacks)) {
+                player.sendSystemMessage(Component.translatable("message.simukraft.commercial.no_delivery_space"));
                 return;
             }
 
@@ -208,18 +227,22 @@ public class CommercialBuyPacket {
                     continue;
                 }
 
-                // NPC将物品丢在玩家脚下
-                Item item = server.registryAccess().registry(Registries.ITEM)
-                    .flatMap(reg -> reg.getOptional(net.minecraft.resources.ResourceLocation.tryParse(itemId)))
-                    .orElse(null);
-                if (item == null) continue;
+                ItemStack template = parseItemStack(itemId);
+                if (template.isEmpty()) {
+                    player.sendSystemMessage(Component.translatable("message.simukraft.commercial.purchase_failed_refund", itemId));
+                    continue;
+                }
 
-                int remaining = totalItems;
-                while (remaining > 0) {
-                    int stackSize = Math.min(64, remaining);
-                    ItemStack stack = new ItemStack(item, stackSize);
-                    spawnItemAtPlayer(player, stack);
-                    remaining -= stackSize;
+                List<ItemStack> purchasedStacks = createDeliveryStacks(template, totalItems);
+                if (deliverToStoreChest) {
+                    if (!CommercialStorageHelper.storeItemsInNearbyContainers(level, packet.controlBoxPos, purchasedStacks)) {
+                        player.sendSystemMessage(Component.translatable("message.simukraft.commercial.purchase_failed_refund", itemId));
+                        continue;
+                    }
+                } else {
+                    for (ItemStack stack : purchasedStacks) {
+                        spawnItemAtPlayer(player, stack);
+                    }
                 }
             }
 
@@ -391,6 +414,23 @@ public class CommercialBuyPacket {
         } catch (Exception e) {
             return ItemStack.EMPTY;
         }
+    }
+
+    private static List<ItemStack> createDeliveryStacks(ItemStack template, int totalItems) {
+        List<ItemStack> stacks = new ArrayList<>();
+        if (template.isEmpty() || totalItems <= 0) {
+            return stacks;
+        }
+
+        int remaining = totalItems;
+        while (remaining > 0) {
+            int stackSize = Math.min(template.getMaxStackSize(), remaining);
+            ItemStack stack = template.copy();
+            stack.setCount(stackSize);
+            stacks.add(stack);
+            remaining -= stackSize;
+        }
+        return stacks;
     }
 
     /**

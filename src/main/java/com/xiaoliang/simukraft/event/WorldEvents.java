@@ -7,6 +7,7 @@ import com.xiaoliang.simukraft.network.NetworkManager;
 import com.xiaoliang.simukraft.notification.NotificationServiceManager;
 import com.xiaoliang.simukraft.utils.*;
 import com.xiaoliang.simukraft.world.*;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -32,6 +33,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 @Mod.EventBusSubscriber(modid = Simukraft.MOD_ID)
@@ -41,13 +43,13 @@ public class WorldEvents {
     private static long lastRecordedTimeOfDay = -1;
 
     // 存储需要延迟播放收钱音效的玩家和时间戳
-    private static final Map<UUID, Long> pendingMoneySounds = new HashMap<>();
+    private static final Map<UUID, Long> pendingMoneySounds = new ConcurrentHashMap<>();
 
     // 新增：记录今天是否已经收过租，避免重复收租
     private static long lastRentCollectionDay = -1;
     // 按城市记录当天已结算收入，避免“同城多官员重复入账”
     private static long lastCityIncomeCollectionDay = -1;
-    private static final Map<UUID, CityIncome> collectedIncomeByCity = new HashMap<>();
+    private static final Map<UUID, CityIncome> collectedIncomeByCity = new ConcurrentHashMap<>();
 
     // 新增：NPC年龄增长计数器，每7个游戏日增长1岁
     private static int ageIncreaseCounter = 0;
@@ -521,6 +523,8 @@ public class WorldEvents {
     private static boolean commercialIndustrialRestoreScheduled = false;
     private static Map<UUID, RestorationInfo> pendingCommercialRestorations = new HashMap<>();
     private static Map<UUID, RestorationInfo> pendingIndustrialRestorations = new HashMap<>();
+    private static boolean commercialIndustrialRestorePlanLoading = false;
+    private static boolean commercialIndustrialRestorePlanReady = false;
 
     /**
      * 恢复信息内部类，保存NPC恢复所需的信息
@@ -528,11 +532,26 @@ public class WorldEvents {
     private static class RestorationInfo {
         final String jobType;
         final String buildingFileName;
+        final BlockPos workplacePos;
 
-        RestorationInfo(String jobType, String buildingFileName) {
+        RestorationInfo(String jobType, String buildingFileName, BlockPos workplacePos) {
             this.jobType = jobType;
             this.buildingFileName = buildingFileName;
+            this.workplacePos = workplacePos;
         }
+    }
+
+    /**
+     * 工商业恢复计划快照。
+     * 后台线程只负责组装纯数据，主线程再整体替换引用，避免跨线程共享可变 Map。
+     */
+    private record RestorationPlan(Map<UUID, RestorationInfo> commercial,
+                                   Map<UUID, RestorationInfo> industrial) {
+    }
+
+    @FunctionalInterface
+    private interface RestorationExecutor {
+        boolean resume(CustomEntity npc, ServerLevel level, RestorationInfo info);
     }
 
     /**
@@ -543,6 +562,8 @@ public class WorldEvents {
         commercialIndustrialRestoreScheduled = true;
         pendingCommercialRestorations.clear();
         pendingIndustrialRestorations.clear();
+        commercialIndustrialRestorePlanLoading = false;
+        commercialIndustrialRestorePlanReady = false;
         Simukraft.LOGGER.debug("[WorldEvents] 已计划延迟恢复工商业雇佣状态");
     }
 
@@ -555,76 +576,35 @@ public class WorldEvents {
 
         commercialIndustrialRestoreTickCounter++;
 
-        // 首次执行时加载所有需要恢复的雇佣数据
-        if (commercialIndustrialRestoreTickCounter == 1) {
-            try {
-                // 加载商业建筑雇佣数据
-                var commercialEmployees = com.xiaoliang.simukraft.world.CommercialHiredData.loadHiredEmployees(server);
-                for (var entry : commercialEmployees.entrySet()) {
-                    var hireInfo = entry.getValue();
-                    if (hireInfo != null && hireInfo.getNpcUuid() != null) {
-                        pendingCommercialRestorations.put(hireInfo.getNpcUuid(), 
-                            new RestorationInfo(hireInfo.getJobType(), hireInfo.getBuildingFileName()));
-                    }
-                }
-                Simukraft.LOGGER.info("[WorldEvents] 计划恢复 {} 个商业建筑雇佣状态", pendingCommercialRestorations.size());
+        // 首次执行时异步加载恢复计划，把纯数据读取从主线程剥离出来。
+        if (commercialIndustrialRestoreTickCounter == 1 && !commercialIndustrialRestorePlanLoading && !commercialIndustrialRestorePlanReady) {
+            commercialIndustrialRestorePlanLoading = true;
+            NPCTaskScheduler.submitCallableWithMainThreadCallback(
+                    () -> loadCommercialIndustrialRestorePlan(server),
+                    plan -> {
+                        applyCommercialIndustrialRestorePlan(plan);
+                        commercialIndustrialRestorePlanLoading = false;
+                        commercialIndustrialRestorePlanReady = true;
+                        Simukraft.LOGGER.info("[WorldEvents] 已装载工商业恢复计划，商业 {} 个，工业 {} 个",
+                                pendingCommercialRestorations.size(), pendingIndustrialRestorations.size());
+                    },
+                    "LoadCommercialIndustrialRestorePlan"
+            );
+        }
 
-                // 加载工业建筑雇佣数据
-                var industrialEmployees = com.xiaoliang.simukraft.world.IndustrialHiredData.loadHiredEmployees(server);
-                for (var entry : industrialEmployees.entrySet()) {
-                    var hireInfo = entry.getValue();
-                    if (hireInfo != null && hireInfo.getNpcUuid() != null) {
-                        pendingIndustrialRestorations.put(hireInfo.getNpcUuid(), 
-                            new RestorationInfo(hireInfo.getJobType(), hireInfo.getBuildingFileName()));
-                    }
-                }
-                Simukraft.LOGGER.info("[WorldEvents] 计划恢复 {} 个工业建筑雇佣状态", pendingIndustrialRestorations.size());
-            } catch (Exception e) {
-                Simukraft.LOGGER.error("[WorldEvents] 加载工商业雇佣数据时发生错误", e);
+        if (!commercialIndustrialRestorePlanReady) {
+            if (commercialIndustrialRestoreTickCounter >= 600) {
                 commercialIndustrialRestoreScheduled = false;
-                return;
+                commercialIndustrialRestorePlanLoading = false;
+                Simukraft.LOGGER.warn("[WorldEvents] 工商业雇佣状态恢复超时，恢复计划尚未准备完成");
             }
+            return;
         }
 
-        // 尝试恢复商业建筑雇佣状态
-        int commercialRestored = 0;
-        Iterator<Map.Entry<UUID, RestorationInfo>> commercialIterator = pendingCommercialRestorations.entrySet().iterator();
-        while (commercialIterator.hasNext()) {
-            Map.Entry<UUID, RestorationInfo> entry = commercialIterator.next();
-            UUID npcUuid = entry.getKey();
-            RestorationInfo info = entry.getValue();
-
-            CustomEntity npc = findNPCByUuid(server, npcUuid);
-            if (npc != null) {
-                npc.setJob(info.jobType);
-                npc.setWorkStatus(com.xiaoliang.simukraft.entity.WorkStatus.WORKING);
-                // 从配置文件设置手持物品
-                setupHeldItemFromConfig(npc, info.buildingFileName, true);
-                Simukraft.LOGGER.debug("[WorldEvents] 恢复商业建筑雇佣状态: NPC={}, job={}", npc.getFullName(), info.jobType);
-                commercialIterator.remove();
-                commercialRestored++;
-            }
-        }
-
-        // 尝试恢复工业建筑雇佣状态
-        int industrialRestored = 0;
-        Iterator<Map.Entry<UUID, RestorationInfo>> industrialIterator = pendingIndustrialRestorations.entrySet().iterator();
-        while (industrialIterator.hasNext()) {
-            Map.Entry<UUID, RestorationInfo> entry = industrialIterator.next();
-            UUID npcUuid = entry.getKey();
-            RestorationInfo info = entry.getValue();
-
-            CustomEntity npc = findNPCByUuid(server, npcUuid);
-            if (npc != null) {
-                npc.setJob(info.jobType);
-                npc.setWorkStatus(com.xiaoliang.simukraft.entity.WorkStatus.WORKING);
-                // 从配置文件设置手持物品
-                setupHeldItemFromConfig(npc, info.buildingFileName, false);
-                Simukraft.LOGGER.debug("[WorldEvents] 恢复工业建筑雇佣状态: NPC={}, job={}", npc.getFullName(), info.jobType);
-                industrialIterator.remove();
-                industrialRestored++;
-            }
-        }
+        int commercialRestored = restorePendingAssignments(server, pendingCommercialRestorations, "商业",
+                (npc, npcLevel, info) -> NPCWorkResumeCoordinator.resumeCommercialWork(npc, npcLevel, info.workplacePos, info.buildingFileName));
+        int industrialRestored = restorePendingAssignments(server, pendingIndustrialRestorations, "工业",
+                (npc, npcLevel, info) -> NPCWorkResumeCoordinator.resumeIndustrialWork(npc, npcLevel, info.workplacePos, info.buildingFileName));
 
         // 如果所有雇佣状态都已恢复，或者超过最大尝试次数，停止恢复
         if (pendingCommercialRestorations.isEmpty() && pendingIndustrialRestorations.isEmpty()) {
@@ -635,6 +615,64 @@ public class WorldEvents {
             Simukraft.LOGGER.warn("[WorldEvents] 工商业雇佣状态恢复超时，仍有 {} 个商业建筑、{} 个工业建筑未恢复",
                 pendingCommercialRestorations.size(), pendingIndustrialRestorations.size());
         }
+    }
+
+    private static RestorationPlan loadCommercialIndustrialRestorePlan(MinecraftServer server) {
+        Map<UUID, RestorationInfo> loadedCommercialRestorations = new HashMap<>();
+        Map<UUID, RestorationInfo> loadedIndustrialRestorations = new HashMap<>();
+
+        var commercialEmployees = com.xiaoliang.simukraft.world.CommercialHiredData.loadHiredEmployees(server);
+        for (var entry : commercialEmployees.entrySet()) {
+            var hireInfo = entry.getValue();
+            if (hireInfo != null && hireInfo.getNpcUuid() != null) {
+                loadedCommercialRestorations.put(hireInfo.getNpcUuid(),
+                        new RestorationInfo(hireInfo.getJobType(), hireInfo.getBuildingFileName(), entry.getKey()));
+            }
+        }
+
+        var industrialEmployees = com.xiaoliang.simukraft.world.IndustrialHiredData.loadHiredEmployees(server);
+        for (var entry : industrialEmployees.entrySet()) {
+            var hireInfo = entry.getValue();
+            if (hireInfo != null && hireInfo.getNpcUuid() != null) {
+                loadedIndustrialRestorations.put(hireInfo.getNpcUuid(),
+                        new RestorationInfo(hireInfo.getJobType(), hireInfo.getBuildingFileName(), entry.getKey()));
+            }
+        }
+
+        return new RestorationPlan(loadedCommercialRestorations, loadedIndustrialRestorations);
+    }
+
+    private static void applyCommercialIndustrialRestorePlan(RestorationPlan plan) {
+        pendingCommercialRestorations = new HashMap<>(plan.commercial());
+        pendingIndustrialRestorations = new HashMap<>(plan.industrial());
+    }
+
+    private static int restorePendingAssignments(MinecraftServer server,
+                                                 Map<UUID, RestorationInfo> pendingRestorations,
+                                                 String categoryName,
+                                                 RestorationExecutor executor) {
+        int restoredCount = 0;
+        Iterator<Map.Entry<UUID, RestorationInfo>> iterator = pendingRestorations.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<UUID, RestorationInfo> entry = iterator.next();
+            UUID npcUuid = entry.getKey();
+            RestorationInfo info = entry.getValue();
+
+            CustomEntity npc = BaseBuildingHiredData.findNPCByUuid(server, npcUuid);
+            if (npc == null || !(npc.level() instanceof ServerLevel npcLevel)) {
+                continue;
+            }
+
+            npc.setJob(info.jobType);
+            if (!executor.resume(npc, npcLevel, info)) {
+                continue;
+            }
+
+            Simukraft.LOGGER.debug("[WorldEvents] 恢复{}建筑雇佣状态: NPC={}, job={}", categoryName, npc.getFullName(), info.jobType);
+            iterator.remove();
+            restoredCount++;
+        }
+        return restoredCount;
     }
 
     /**
@@ -680,20 +718,6 @@ public class WorldEvents {
         } catch (Exception e) {
             Simukraft.LOGGER.error("[WorldEvents] 从配置文件设置手持物品时发生错误: {}", buildingFileName, e);
         }
-    }
-
-    /**
-     * 根据UUID查找NPC实体
-     */
-    private static CustomEntity findNPCByUuid(MinecraftServer server, UUID uuid) {
-        for (var level : server.getAllLevels()) {
-            for (var entity : level.getAllEntities()) {
-                if (entity instanceof CustomEntity && entity.getUUID().equals(uuid)) {
-                    return (CustomEntity) entity;
-                }
-            }
-        }
-        return null;
     }
 
     // 修复：用于延迟恢复建造盒雇佣状态的计数器

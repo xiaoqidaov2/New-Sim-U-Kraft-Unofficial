@@ -977,6 +977,7 @@
   "message.simukraft.commercial.shop_not_ready": "§c商店尚未准备好，请稍后再试",
   "message.simukraft.commercial.insufficient_stock": "§c商店 %s 库存不足 (剩余 %d)",
   "message.simukraft.commercial.purchase_failed_refund": "§c购买失败，已退款。物品: %s",
+  "message.simukraft.commercial.no_delivery_space": "§c店内箱子空间不足，无法存放本次购买的建材",
 
   "message.simukraft.construction.chunk_loading": "(建造%s) 建筑师正在等待区块加载完成，请稍候...",
   "message.simukraft.construction.container_removed": "(建造%s) 容器被移除，无法获取%s，请确保容器存在！",

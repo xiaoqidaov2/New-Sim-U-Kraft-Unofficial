@@ -247,6 +247,17 @@ public class NPCRestHandler {
     }
 
     /**
+     * 判断NPC是否仍在休息工作流中。
+     * 只要仍在回家、在家休息或去工作途中，就不允许其他链路直接改成工作中。
+     */
+    public static boolean isNpcInRestWorkflow(UUID npcUuid) {
+        if (npcUuid == null) {
+            return false;
+        }
+        return restingNPCs.containsKey(npcUuid) || goingToWorkNPCs.containsKey(npcUuid);
+    }
+
+    /**
      * 开始NPC休息流程
      * 所有NPC（工作中的和空闲的）都会进入休息状态
      */
@@ -840,11 +851,8 @@ public class NPCRestHandler {
         if (level == null || npcs == null || npcs.isEmpty()) return;
 
         if (!level.getServer().isSameThread()) {
-            NPCTaskScheduler.submitTaskWithMainThreadCallback(
-                () -> {},
-                () -> updateRestStatusInternal(level, npcs),
-                "RestStatusMainThread-" + level.dimension().location()
-            );
+            enqueueMainThreadLevelTask(level, () -> updateRestStatusInternal(level, npcs),
+                    "RestStatusMainThread-" + level.dimension().location());
             return;
         }
 
@@ -869,12 +877,7 @@ public class NPCRestHandler {
                     // 正在去工作的路上，但到休息时间了，取消去工作，改为回家休息
                     LOGGER.info("[NPCRestHandler] NPC {} 正在去工作，但到休息时间了，优先回家休息", npc.getFullName());
                     goingToWorkNPCs.remove(npcUuid);
-                    // 使用主线程执行导航停止
-                    NPCTaskScheduler.submitTaskWithMainThreadCallback(
-                        () -> {},
-                        () -> npc.getNavigation().stop(),
-                        "StopNavigation-" + npcUuid
-                    );
+                    enqueueMainThreadLevelTask(level, () -> npc.getNavigation().stop(), "StopNavigation-" + npcUuid);
                 }
 
                 if (restData == null && npc.getWorkStatus() == WorkStatus.WORKING) {
@@ -894,28 +897,19 @@ public class NPCRestHandler {
 
                     // 在主线程中执行NPC状态修改
                     final UUID finalNpcUuid = npcUuid;
-                    NPCTaskScheduler.submitTaskWithMainThreadCallback(
-                        () -> {},
-                        () -> {
-                            CustomEntity targetNpc = npc;
-                            if (targetNpc != null && targetNpc.isAlive()) {
-                                targetNpc.setWorking(false);
-                                targetNpc.setConstructionTask(null);
-                            }
-                        },
-                        "StopWork-" + finalNpcUuid
-                    );
+                    enqueueMainThreadLevelTask(level, () -> {
+                        CustomEntity targetNpc = npc;
+                        if (targetNpc != null && targetNpc.isAlive()) {
+                            targetNpc.setWorking(false);
+                            targetNpc.setConstructionTask(null);
+                        }
+                    }, "StopWork-" + finalNpcUuid);
                 }
 
                 if (restData == null) {
                     // NPC还没有开始休息，开始休息流程
                     LOGGER.info("[NPCRestHandler] 尝试让NPC {} 开始休息", npc.getFullName());
-                    // 在主线程中执行开始休息（涉及实体操作）
-                    NPCTaskScheduler.submitTaskWithMainThreadCallback(
-                        () -> {},
-                        () -> startResting(npc, level),
-                        "StartResting-" + npcUuid
-                    );
+                    enqueueMainThreadLevelTask(level, () -> startResting(npc, level), "StartResting-" + npcUuid);
                 } else {
                     // NPC已经在休息中，更新休息状态
                     updateRestingNPC(npc, restData, level);
@@ -923,12 +917,7 @@ public class NPCRestHandler {
             } else if (shouldStopResting(level, npc)) {
                 // 应该结束休息（工作开始时间）
                 if (restData != null) {
-                    // 在主线程中执行结束休息
-                    NPCTaskScheduler.submitTaskWithMainThreadCallback(
-                        () -> {},
-                        () -> stopResting(npc, level),
-                        "StopResting-" + npcUuid
-                    );
+                    enqueueMainThreadLevelTask(level, () -> stopResting(npc, level), "StopResting-" + npcUuid);
                 }
 
                 // 更新正在去工作的NPC（检查是否超时需要传送）
@@ -941,11 +930,8 @@ public class NPCRestHandler {
                 if (restData != null && restData.restStage == REST_STAGE_AT_HOME) {
                     // NPC已经在家休息，准备出发去工作
                     final RestData finalRestData = restData;
-                    NPCTaskScheduler.submitTaskWithMainThreadCallback(
-                        () -> {},
-                        () -> prepareNPCForWork(npc, level, finalRestData),
-                        "PrepareForWork-" + npcUuid
-                    );
+                    enqueueMainThreadLevelTask(level, () -> prepareNPCForWork(npc, level, finalRestData),
+                            "PrepareForWork-" + npcUuid);
                 }
 
                 // 更新正在去工作的NPC
@@ -955,6 +941,14 @@ public class NPCRestHandler {
                 }
             }
         }
+    }
+
+    private static void enqueueMainThreadLevelTask(ServerLevel level, Runnable task, String taskName) {
+        if (level != null && level.getServer() != null && level.getServer().isSameThread()) {
+            task.run();
+            return;
+        }
+        NPCTaskScheduler.enqueueMainThreadTask(task, taskName);
     }
 
     /**

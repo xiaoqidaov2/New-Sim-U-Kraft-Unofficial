@@ -2,6 +2,7 @@ package com.xiaoliang.simukraft.network;
 
 import com.xiaoliang.simukraft.building.CommercialBuildingConfig;
 import com.xiaoliang.simukraft.building.CommercialBuildingManager;
+import com.xiaoliang.simukraft.utils.CommercialWorkHandler;
 import com.xiaoliang.simukraft.utils.ContainerUtils;
 import com.xiaoliang.simukraft.world.CommercialHiredData;
 import net.minecraft.core.BlockPos;
@@ -68,21 +69,9 @@ public class RequestStockSyncPacket {
 
         // 获取建筑配置
         CommercialBuildingConfig config = CommercialBuildingManager.getConfig(buildingFileName);
+        CommercialWorkHandler.ensureStockInitialized(pos, level, config);
 
         Map<String, CommercialHiredData.StockInfo> stockMap = CommercialHiredData.getAllStockAtPos(pos);
-
-        // 如果没有数据，尝试初始化
-        if ((stockMap == null || stockMap.isEmpty()) && config != null) {
-            for (CommercialBuildingConfig.TradeItem trade : config.getTrades()) {
-                int initialStock = trade.getMaxStock() / 2;
-                int maxStock = trade.getMaxStock();
-                // 使用 updateStockFull 确保所有字段都被正确初始化
-                CommercialHiredData.updateStockFull(pos, trade.getItemId(), initialStock, maxStock,
-                        level.getDayTime(), 0, maxStock / 64);
-            }
-            // 重新获取库存数据
-            stockMap = CommercialHiredData.getAllStockAtPos(pos);
-        }
 
         Map<String, SyncBuildingMaterialStockPacket.StockData> syncMap = new HashMap<>();
 
@@ -117,9 +106,11 @@ public class RequestStockSyncPacket {
                     int currentStock = 0;
                     if (trade.requiresMaterial()) {
                         currentStock = calculateStockFromMaterials(level, pos, trade);
-                    } else {
-                        // 不需要原料的商品，使用默认初始库存
-                        currentStock = trade.getMaxStock() / 2;
+                    } else if (stockMap != null) {
+                        CommercialHiredData.StockInfo stockInfo = stockMap.get(trade.getItemId());
+                        if (stockInfo != null) {
+                            currentStock = stockInfo.getCurrentStock();
+                        }
                     }
                     syncMap.put(trade.getItemId(), new SyncBuildingMaterialStockPacket.StockData(
                         trade.getItemId(),

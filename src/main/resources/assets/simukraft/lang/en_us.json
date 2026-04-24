@@ -934,6 +934,7 @@
 
   "message.block_replacement_chest.no_chest": "§cNo chest found within 5x5 range of build box!",
   "message.block_replacement_chest.place_chest_hint": "§7Please place a chest near the build box and try again",
+  "message.simukraft.commercial.no_delivery_space": "§cThe shop chests do not have enough room for this material purchase",
 
   "message.simukraft.planning.task_created": "§aCreated %s task, %d blocks total, deducted ¥%.2f",
 

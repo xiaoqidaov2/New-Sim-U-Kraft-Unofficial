@@ -386,10 +386,9 @@ public class FarmerDailyWorkHandler {
             final boolean finalNeedGrowth = needGrowth;
             final boolean finalNeedHarvest = needHarvest;
 
-            NPCTaskScheduler.submitTaskWithMainThreadCallback(
-                () -> {},
-                () -> executeFarmWork(npc, farmlandBoxPos, finalNeedMoisture, finalNeedGrowth, finalNeedHarvest),
-                "ExecuteFarmWork-" + farmlandBoxPos
+            NPCTaskScheduler.enqueueMainThreadTask(
+                    () -> executeFarmWork(npc, farmlandBoxPos, finalNeedMoisture, finalNeedGrowth, finalNeedHarvest),
+                    "ExecuteFarmWork-" + farmlandBoxPos
             );
         }
     }

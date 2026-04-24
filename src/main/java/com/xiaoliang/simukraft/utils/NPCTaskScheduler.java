@@ -12,7 +12,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.WeakHashMap;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -25,6 +24,7 @@ import java.util.function.Consumer;
 public class NPCTaskScheduler {
     private static final long SHUTDOWN_WAIT_MILLIS = 500L;
     private static final Logger LOGGER = LogManager.getLogger();
+    private static final int MAX_MAIN_THREAD_TASKS_PER_TICK = 100;
 
     // 线程池配置
     private static final int CORE_POOL_SIZE = Math.max(2, Runtime.getRuntime().availableProcessors() / 2);
@@ -35,10 +35,8 @@ public class NPCTaskScheduler {
 
     // 线程池
     private static ExecutorService taskExecutor;
-    private static ScheduledExecutorService scheduledExecutor;
 
-    // 任务队列和统计
-    private static final BlockingQueue<Runnable> taskQueue = new LinkedBlockingQueue<>();
+    // 任务统计
     private static final AtomicInteger pendingTaskCount = new AtomicInteger(0);
     private static final AtomicInteger completedTaskCount = new AtomicInteger(0);
     private static final AtomicInteger rejectedTaskCount = new AtomicInteger(0);
@@ -55,8 +53,8 @@ public class NPCTaskScheduler {
     private static final long STATS_INTERVAL_MS = 30000; // 30秒输出一次统计
 
     // NPC缓存
-    private static final Map<ServerLevel, List<CustomEntity>> NPC_CACHE = new WeakHashMap<>();
-    private static long lastCacheUpdate = 0;
+    private static final Map<ServerLevel, CopyOnWriteArrayList<CustomEntity>> NPC_CACHE = new ConcurrentHashMap<>();
+    private static volatile long lastCacheUpdate = 0;
     private static final long CACHE_UPDATE_INTERVAL = 100; // 每5秒更新一次缓存（100 ticks）
 
     /**
@@ -69,32 +67,18 @@ public class NPCTaskScheduler {
             if (initialized) return;
 
             try {
-                // 创建有界队列的线程池
                 ThreadPoolExecutor executor = new ThreadPoolExecutor(
-                    CORE_POOL_SIZE,
-                    MAX_POOL_SIZE,
-                    KEEP_ALIVE_TIME,
-                    TimeUnit.SECONDS,
-                    new LinkedBlockingQueue<>(MAX_PENDING_TASKS),
-                    new ThreadFactory() {
-                        private final AtomicInteger counter = new AtomicInteger(0);
-                        @Override
-                        public Thread newThread(Runnable r) {
-                            Thread t = new Thread(r, "NPCTask-Worker-" + counter.incrementAndGet());
-                            t.setDaemon(true);
-                            return t;
-                        }
-                    },
-                    new ThreadPoolExecutor.CallerRunsPolicy() // 当队列满时，由调用线程执行任务
+                        CORE_POOL_SIZE,
+                        MAX_POOL_SIZE,
+                        KEEP_ALIVE_TIME,
+                        TimeUnit.SECONDS,
+                        new LinkedBlockingQueue<>(MAX_PENDING_TASKS),
+                        createNamedThreadFactory("NPCTask-Worker-"),
+                        new ThreadPoolExecutor.CallerRunsPolicy()
                 );
+                executor.allowCoreThreadTimeOut(true);
 
                 taskExecutor = executor;
-                scheduledExecutor = Executors.newScheduledThreadPool(1, r -> {
-                    Thread t = new Thread(r, "NPCTask-Scheduler");
-                    t.setDaemon(true);
-                    return t;
-                });
-
                 initialized = true;
                 LOGGER.info("NPC任务调度器已初始化，核心线程数: {}, 最大线程数: {}", CORE_POOL_SIZE, MAX_POOL_SIZE);
             } catch (Exception e) {
@@ -125,20 +109,7 @@ public class NPCTaskScheduler {
                 }
             }
 
-            if (scheduledExecutor != null) {
-                scheduledExecutor.shutdown();
-                try {
-                    if (!scheduledExecutor.awaitTermination(SHUTDOWN_WAIT_MILLIS, TimeUnit.MILLISECONDS)) {
-                        scheduledExecutor.shutdownNow();
-                    }
-                } catch (InterruptedException e) {
-                    scheduledExecutor.shutdownNow();
-                    Thread.currentThread().interrupt();
-                }
-            }
-
             // 清空队列
-            taskQueue.clear();
             mainThreadTasks.clear();
             pendingTaskCount.set(0);
 
@@ -151,6 +122,9 @@ public class NPCTaskScheduler {
      * 提交任务到线程池
      */
     public static void submitTask(Runnable task, String taskName) {
+        if (task == null) {
+            return;
+        }
         if (!initialized) {
             initialize();
         }
@@ -165,9 +139,9 @@ public class NPCTaskScheduler {
             pendingTaskCount.incrementAndGet();
             taskExecutor.submit(() -> {
                 try {
-                    long startTime = System.currentTimeMillis();
+                    long startTime = System.nanoTime();
                     task.run();
-                    long duration = System.currentTimeMillis() - startTime;
+                    long duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime);
 
                     if (duration > 100) {
                         LOGGER.warn("任务 {} 执行时间过长: {}ms", taskName, duration);
@@ -190,10 +164,75 @@ public class NPCTaskScheduler {
      * 提交需要在主线程执行结果的任务
      */
     public static void submitTaskWithMainThreadCallback(Runnable asyncTask, Runnable mainThreadCallback, String taskName) {
-        submitTask(() -> {
-            asyncTask.run();
-            mainThreadTasks.offer(mainThreadCallback);
+        submitCallableWithMainThreadCallback(() -> {
+            if (asyncTask != null) {
+                asyncTask.run();
+            }
+            return null;
+        }, ignored -> {
+            if (mainThreadCallback != null) {
+                mainThreadCallback.run();
+            }
         }, taskName);
+    }
+
+    /**
+     * 提交后台计算，并在主线程消费结果。
+     * 适用于“异步准备数据 + 主线程应用结果”的两阶段流水线。
+     */
+    public static <T> void submitCallableWithMainThreadCallback(Callable<T> asyncTask,
+                                                                Consumer<T> mainThreadCallback,
+                                                                String taskName) {
+        submitTask(() -> {
+            T result;
+            try {
+                result = asyncTask.call();
+            } catch (Exception e) {
+                LOGGER.error("执行异步计算任务 {} 时发生错误", taskName, e);
+                return;
+            }
+
+            if (mainThreadCallback != null) {
+                final T finalResult = result;
+                enqueueMainThreadTask(() -> mainThreadCallback.accept(finalResult), taskName + "-Callback");
+            }
+        }, taskName);
+    }
+
+    /**
+     * 直接排队一个主线程任务，避免为纯主线程操作额外占用工作线程。
+     */
+    public static void enqueueMainThreadTask(Runnable mainThreadTask, String taskName) {
+        if (mainThreadTask == null) {
+            return;
+        }
+        if (!initialized) {
+            initialize();
+        }
+        if (taskExecutor == null || taskExecutor.isShutdown()) {
+            LOGGER.warn("主线程任务队列不可用，任务 {} 将立即执行", taskName);
+            mainThreadTask.run();
+            return;
+        }
+        mainThreadTasks.offer(mainThreadTask);
+    }
+
+    /**
+     * 在需要时切换到主线程执行世界操作；如果当前已经位于主线程则立即执行。
+     */
+    public static void runOnMainThread(MinecraftServer server, Runnable mainThreadTask, String taskName) {
+        if (mainThreadTask == null) {
+            return;
+        }
+        if (server != null && server.isSameThread()) {
+            try {
+                mainThreadTask.run();
+            } catch (Exception e) {
+                LOGGER.error("执行主线程任务 {} 时发生错误", taskName, e);
+            }
+            return;
+        }
+        enqueueMainThreadTask(mainThreadTask, taskName);
     }
 
     /**
@@ -248,11 +287,26 @@ public class NPCTaskScheduler {
         }
 
         // 执行主线程任务（限制每tick执行数量，避免阻塞）
-        int processedCount = 0;
-        final int MAX_TASKS_PER_TICK = 100;
+        int processedCount = drainMainThreadTasks(MAX_MAIN_THREAD_TASKS_PER_TICK);
 
+        // 如果还有剩余任务，记录日志
+        int remainingTasks = mainThreadTasks.size();
+        if (remainingTasks > MAX_MAIN_THREAD_TASKS_PER_TICK) {
+            LOGGER.debug("主线程任务队列积压: {} 个任务", remainingTasks);
+        }
+
+        // 定期输出统计信息
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastStatsTime > STATS_INTERVAL_MS) {
+            outputStats(processedCount);
+            lastStatsTime = currentTime;
+        }
+    }
+
+    private static int drainMainThreadTasks(int maxTasks) {
+        int processedCount = 0;
         Runnable task;
-        while ((task = mainThreadTasks.poll()) != null && processedCount < MAX_TASKS_PER_TICK) {
+        while (processedCount < maxTasks && (task = mainThreadTasks.poll()) != null) {
             try {
                 task.run();
                 processedCount++;
@@ -260,31 +314,21 @@ public class NPCTaskScheduler {
                 LOGGER.error("执行主线程任务时发生错误", e);
             }
         }
-
-        // 如果还有剩余任务，记录日志
-        int remainingTasks = mainThreadTasks.size();
-        if (remainingTasks > MAX_TASKS_PER_TICK) {
-            LOGGER.debug("主线程任务队列积压: {} 个任务", remainingTasks);
-        }
-
-        // 定期输出统计信息
-        long currentTime = System.currentTimeMillis();
-        if (currentTime - lastStatsTime > STATS_INTERVAL_MS) {
-            outputStats();
-            lastStatsTime = currentTime;
-        }
+        return processedCount;
     }
 
     /**
      * 输出统计信息
      */
-    private static void outputStats() {
+    private static void outputStats(int processedMainThreadTasks) {
         int pending = pendingTaskCount.get();
         int completed = completedTaskCount.getAndSet(0); // 重置计数器
         int rejected = rejectedTaskCount.getAndSet(0);
+        int queuedMainThreadTasks = mainThreadTasks.size();
 
-        if (pending > 0 || completed > 0 || rejected > 0) {
-            LOGGER.info("NPC任务调度器统计 - 待处理: {}, 已完成: {}, 被拒绝: {}", pending, completed, rejected);
+        if (pending > 0 || completed > 0 || rejected > 0 || queuedMainThreadTasks > 0 || processedMainThreadTasks > 0) {
+            LOGGER.info("NPC任务调度器统计 - 待处理: {}, 已完成: {}, 被拒绝: {}, 主线程已执行: {}, 主线程排队: {}",
+                    pending, completed, rejected, processedMainThreadTasks, queuedMainThreadTasks);
         }
     }
 
@@ -310,13 +354,13 @@ public class NPCTaskScheduler {
                         levelNPCs.add(npc);
                     }
                 });
-                NPC_CACHE.put(level, levelNPCs);
+                NPC_CACHE.put(level, new CopyOnWriteArrayList<>(levelNPCs));
             }
             lastCacheUpdate = currentTime;
         }
 
         // 从缓存中获取NPC列表
-        for (List<CustomEntity> levelNPCs : NPC_CACHE.values()) {
+        for (CopyOnWriteArrayList<CustomEntity> levelNPCs : NPC_CACHE.values()) {
             // 过滤掉已死亡的NPC
             levelNPCs.removeIf(npc -> !npc.isAlive());
             allNPCs.addAll(levelNPCs);
@@ -333,7 +377,7 @@ public class NPCTaskScheduler {
 
         // 检查缓存是否有效
         long currentTime = System.currentTimeMillis();
-        List<CustomEntity> cachedNPCs = NPC_CACHE.get(level);
+        CopyOnWriteArrayList<CustomEntity> cachedNPCs = NPC_CACHE.get(level);
 
         if (cachedNPCs == null || (currentTime - lastCacheUpdate > CACHE_UPDATE_INTERVAL * 50)) {
             // 重新构建缓存
@@ -343,7 +387,7 @@ public class NPCTaskScheduler {
                     newNPCs.add(npc);
                 }
             });
-            NPC_CACHE.put(level, newNPCs);
+            NPC_CACHE.put(level, new CopyOnWriteArrayList<>(newNPCs));
             lastCacheUpdate = currentTime;
             return new ArrayList<>(newNPCs);
         } else {
@@ -373,5 +417,14 @@ public class NPCTaskScheduler {
      */
     public static int getPendingTaskCount() {
         return pendingTaskCount.get();
+    }
+
+    private static ThreadFactory createNamedThreadFactory(String prefix) {
+        AtomicInteger counter = new AtomicInteger(0);
+        return r -> {
+            Thread thread = new Thread(r, prefix + counter.incrementAndGet());
+            thread.setDaemon(true);
+            return thread;
+        };
     }
 }

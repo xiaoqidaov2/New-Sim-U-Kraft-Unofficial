@@ -11,6 +11,7 @@ import net.minecraft.world.level.storage.LevelResource;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -89,6 +90,33 @@ public class ConstructionTaskData {
             Simukraft.LOGGER.error("[ConstructionTaskData] 加载建造任务失败", e);
             return null;
         }
+    }
+
+    /**
+     * 批量加载建造任务，避免对同一个JSON文件重复解析。
+     */
+    public static Map<UUID, TaskInfo> loadTasks(MinecraftServer server, Collection<UUID> npcUuids) {
+        Map<UUID, TaskInfo> result = new HashMap<>();
+        if (server == null || npcUuids == null || npcUuids.isEmpty()) {
+            return result;
+        }
+
+        try {
+            Map<UUID, TaskInfo> allTasks = loadAllTasks(server);
+            for (UUID npcUuid : npcUuids) {
+                if (npcUuid == null) {
+                    continue;
+                }
+                TaskInfo taskInfo = allTasks.get(npcUuid);
+                if (taskInfo != null) {
+                    result.put(npcUuid, taskInfo);
+                }
+            }
+        } catch (Exception e) {
+            Simukraft.LOGGER.error("[ConstructionTaskData] 批量加载建造任务失败", e);
+        }
+
+        return result;
     }
 
     /**
