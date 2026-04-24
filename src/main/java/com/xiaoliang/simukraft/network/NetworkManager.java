@@ -774,6 +774,13 @@ public class NetworkManager {
                 FeedNPCPacket::encode,
                 FeedNPCPacket::decode,
                 FeedNPCPacket::handle);
+
+        // 指南书热重载数据包（服务器->客户端）
+        INSTANCE.registerMessage(id++,
+                ReloadGuideBookPacket.class,
+                ReloadGuideBookPacket::encode,
+                buf -> new ReloadGuideBookPacket(),
+                ReloadGuideBookPacket::handle);
     }
 
     public static void sendToPlayer(SyncDayPacket packet, ServerPlayer player) {

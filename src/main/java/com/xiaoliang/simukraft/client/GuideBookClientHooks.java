@@ -1,6 +1,6 @@
 package com.xiaoliang.simukraft.client;
 
-import com.xiaoliang.simukraft.client.gui.GuideBookScreen;
+import com.xiaoliang.simukraft.client.gui.guidebook.GuideBookScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.item.ItemStack;
 

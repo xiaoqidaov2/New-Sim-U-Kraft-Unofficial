@@ -476,6 +476,9 @@ public class CommercialWorkHandler {
         npc.setWorkStatus(com.xiaoliang.simukraft.entity.WorkStatus.IDLE);
         npc.setWorking(false);
 
+        // 触发NPC休息流程，让商业建筑员工回家休息
+        NPCRestHandler.startResting(npc, level);
+
         level.getServer().getPlayerList().getPlayers().forEach(player ->
                 com.xiaoliang.simukraft.network.NetworkManager.sendToPlayer(
                         new com.xiaoliang.simukraft.network.NPCWorkStatusPacket(

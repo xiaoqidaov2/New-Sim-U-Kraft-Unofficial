@@ -60,7 +60,16 @@ public class CommandSimukraft {
                             // 5. 预加载建筑数据到缓存
                             com.xiaoliang.simukraft.utils.BuildingDataManager.reloadCache();
 
-                            source.sendSuccess(() -> Component.literal("§aSimuKraft 配置文件已重新加载！"), true);
+                            // 6. 发送指南书重载数据包到所有在线玩家（在客户端执行重载）
+                            final int playerCount = server.getPlayerList().getPlayers().size();
+                            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                                com.xiaoliang.simukraft.network.NetworkManager.sendTo(
+                                    new com.xiaoliang.simukraft.network.ReloadGuideBookPacket(), player);
+                            }
+
+                            final int finalPlayerCount = playerCount;
+                            source.sendSuccess(() -> Component.literal(
+                                "§aSimuKraft 配置文件已重新加载！§7(已向 " + finalPlayerCount + " 名玩家发送指南书重载指令)"), true);
                             return 1;
                         } catch (Exception e) {
                             source.sendFailure(Component.literal("§c重新加载配置时出错: " + e.getMessage()));

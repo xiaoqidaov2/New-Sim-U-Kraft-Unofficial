@@ -134,15 +134,16 @@ public class NPCRestHandler {
     }
 
     /**
-     * 检查是否应该开始休息（带NPC参数版本，仅工业类NPC使用JSON配置）
+     * 检查是否应该开始休息（带NPC参数版本，支持工业类和商业类NPC）
      * 对于工业类NPC，使用JSON配置的工作结束时间
+     * 对于商业类NPC，使用商业建筑配置的工作结束时间
      * 对于其他类NPC，使用默认的傍晚时间
      */
     public static boolean shouldStartResting(ServerLevel level, CustomEntity npc) {
         if (npc == null) {
             return shouldStartResting(level);
         }
-        
+
         // 检查是否是工业类NPC（通过检查是否能获取到工业建筑配置）
         String job = npc.getJob();
         if (job != null && !job.equals("unemployed")) {
@@ -151,7 +152,7 @@ public class NPCRestHandler {
                 // 尝试从工业建筑配置中获取工作时间
                 String buildingFileName = com.xiaoliang.simukraft.utils.IndustrialWorkHandler.getBuildingFileName(level, workPos);
                 if (buildingFileName != null) {
-                    com.xiaoliang.simukraft.building.IndustrialBuildingConfig config = 
+                    com.xiaoliang.simukraft.building.IndustrialBuildingConfig config =
                         com.xiaoliang.simukraft.building.IndustrialBuildingManager.getConfig(buildingFileName);
                     if (config != null) {
                         long dayTime = level.getDayTime() % 24000L;
@@ -161,23 +162,40 @@ public class NPCRestHandler {
                         return dayTime >= workEndTime || dayTime < workStartTime;
                     }
                 }
+
+                // 尝试从商业建筑配置中获取工作时间
+                if (com.xiaoliang.simukraft.building.CommercialBuildingManager.isCommercialJobType(job)) {
+                    String commercialBuildingFileName = com.xiaoliang.simukraft.utils.CommercialWorkHandler.getBuildingFileName(level, workPos);
+                    if (commercialBuildingFileName != null) {
+                        com.xiaoliang.simukraft.building.CommercialBuildingConfig config =
+                            com.xiaoliang.simukraft.building.CommercialBuildingManager.getConfig(commercialBuildingFileName);
+                        if (config != null) {
+                            long dayTime = level.getDayTime() % 24000L;
+                            int workEndTime = config.getWorkEndTime();
+                            int workStartTime = config.getWorkStartTime();
+                            // 工作结束时间后应该休息
+                            return dayTime >= workEndTime || dayTime < workStartTime;
+                        }
+                    }
+                }
             }
         }
-        
+
         // 其他类NPC使用默认时间
         return shouldStartResting(level);
     }
 
     /**
-     * 检查是否应该结束休息（带NPC参数版本，仅工业类NPC使用JSON配置）
+     * 检查是否应该结束休息（带NPC参数版本，支持工业类和商业类NPC）
      * 对于工业类NPC，使用JSON配置的工作开始时间
+     * 对于商业类NPC，使用商业建筑配置的工作开始时间
      * 对于其他类NPC，使用默认的早上时间
      */
     public static boolean shouldStopResting(ServerLevel level, CustomEntity npc) {
         if (npc == null) {
             return shouldStopResting(level);
         }
-        
+
         // 检查是否是工业类NPC
         String job = npc.getJob();
         if (job != null && !job.equals("unemployed")) {
@@ -186,7 +204,7 @@ public class NPCRestHandler {
                 // 尝试从工业建筑配置中获取工作时间
                 String buildingFileName = com.xiaoliang.simukraft.utils.IndustrialWorkHandler.getBuildingFileName(level, workPos);
                 if (buildingFileName != null) {
-                    com.xiaoliang.simukraft.building.IndustrialBuildingConfig config = 
+                    com.xiaoliang.simukraft.building.IndustrialBuildingConfig config =
                         com.xiaoliang.simukraft.building.IndustrialBuildingManager.getConfig(buildingFileName);
                     if (config != null) {
                         long dayTime = level.getDayTime() % 24000L;
@@ -196,23 +214,40 @@ public class NPCRestHandler {
                         return dayTime >= workStartTime && dayTime < workEndTime;
                     }
                 }
+
+                // 尝试从商业建筑配置中获取工作时间
+                if (com.xiaoliang.simukraft.building.CommercialBuildingManager.isCommercialJobType(job)) {
+                    String commercialBuildingFileName = com.xiaoliang.simukraft.utils.CommercialWorkHandler.getBuildingFileName(level, workPos);
+                    if (commercialBuildingFileName != null) {
+                        com.xiaoliang.simukraft.building.CommercialBuildingConfig config =
+                            com.xiaoliang.simukraft.building.CommercialBuildingManager.getConfig(commercialBuildingFileName);
+                        if (config != null) {
+                            long dayTime = level.getDayTime() % 24000L;
+                            int workStartTime = config.getWorkStartTime();
+                            int workEndTime = config.getWorkEndTime();
+                            // 在工作时间内应该工作
+                            return dayTime >= workStartTime && dayTime < workEndTime;
+                        }
+                    }
+                }
             }
         }
-        
+
         // 其他类NPC使用默认时间
         return shouldStopResting(level);
     }
 
     /**
-     * 检查是否应该准备出发去工作（带NPC参数版本，仅工业类NPC使用JSON配置）
+     * 检查是否应该准备出发去工作（带NPC参数版本，支持工业类和商业类NPC）
      * 对于工业类NPC，在工作开始时间前1000tick准备出发
+     * 对于商业类NPC，使用商业建筑配置的工作开始时间
      * 对于其他类NPC，使用默认的早上准备时间
      */
     public static boolean shouldPrepareForWork(ServerLevel level, CustomEntity npc) {
         if (npc == null) {
             return shouldPrepareForWork(level);
         }
-        
+
         // 检查是否是工业类NPC
         String job = npc.getJob();
         if (job != null && !job.equals("unemployed")) {
@@ -221,7 +256,7 @@ public class NPCRestHandler {
                 // 尝试从工业建筑配置中获取工作时间
                 String buildingFileName = com.xiaoliang.simukraft.utils.IndustrialWorkHandler.getBuildingFileName(level, workPos);
                 if (buildingFileName != null) {
-                    com.xiaoliang.simukraft.building.IndustrialBuildingConfig config = 
+                    com.xiaoliang.simukraft.building.IndustrialBuildingConfig config =
                         com.xiaoliang.simukraft.building.IndustrialBuildingManager.getConfig(buildingFileName);
                     if (config != null) {
                         long dayTime = level.getDayTime() % 24000L;
@@ -229,7 +264,7 @@ public class NPCRestHandler {
                         // 在工作开始时间前1000tick准备出发
                         int prepareTime = workStartTime - 1000;
                         if (prepareTime < 0) prepareTime += 24000;
-                        
+
                         if (workStartTime >= 1000) {
                             // 工作时间在1000tick之后
                             return dayTime >= prepareTime && dayTime < workStartTime;
@@ -239,9 +274,33 @@ public class NPCRestHandler {
                         }
                     }
                 }
+
+                // 尝试从商业建筑配置中获取工作时间
+                if (com.xiaoliang.simukraft.building.CommercialBuildingManager.isCommercialJobType(job)) {
+                    String commercialBuildingFileName = com.xiaoliang.simukraft.utils.CommercialWorkHandler.getBuildingFileName(level, workPos);
+                    if (commercialBuildingFileName != null) {
+                        com.xiaoliang.simukraft.building.CommercialBuildingConfig config =
+                            com.xiaoliang.simukraft.building.CommercialBuildingManager.getConfig(commercialBuildingFileName);
+                        if (config != null) {
+                            long dayTime = level.getDayTime() % 24000L;
+                            int workStartTime = config.getWorkStartTime();
+                            // 在工作开始时间前1000tick准备出发
+                            int prepareTime = workStartTime - 1000;
+                            if (prepareTime < 0) prepareTime += 24000;
+
+                            if (workStartTime >= 1000) {
+                                // 工作时间在1000tick之后
+                                return dayTime >= prepareTime && dayTime < workStartTime;
+                            } else {
+                                // 工作时间在1000tick之前（跨天）
+                                return dayTime >= prepareTime || dayTime < workStartTime;
+                            }
+                        }
+                    }
+                }
             }
         }
-        
+
         // 其他类NPC使用默认时间
         return shouldPrepareForWork(level);
     }

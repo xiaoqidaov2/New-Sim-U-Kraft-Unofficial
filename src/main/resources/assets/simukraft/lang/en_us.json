@@ -425,7 +425,7 @@
   "message.simukraft.building_material_merchant.fired": "Fired building material merchant: %s",
   "message.simukraft.build_direction_instruction": "When building, face the direction you want to build! Build from right to left! Please clear the area before building! Do not interfere with the construction area during building!",
   "message.simukraft.no_idle_npcs": "No idle NPCs found",
-  "message.simukraft.welcome": "Thank you for downloading and playing New:SimuKraft (NSUK) v1.0.5a9! This mod is redeveloped by NSUK New SimuKraft Development Team.",
+  "message.simukraft.welcome": "Thank you for downloading and playing New:SimuKraft (NSUK) v1.0.5a11! This mod is redeveloped by NSUK New SimuKraft Development Team.",
   "message.simukraft.welcome.divider": "------------------------------",
   "message.simukraft.welcome.refactor_edition": "Official QQ Groups: 1046985079 | 638462178 | 1084921979.\n[If you paid for this content, congratulations, you've been scammed!]",
   "message.simukraft.current_mode": "Current SimuKraft Game Mode: %s",
