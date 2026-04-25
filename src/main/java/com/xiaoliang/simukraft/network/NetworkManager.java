@@ -1,6 +1,7 @@
 package com.xiaoliang.simukraft.network;
 
 import com.xiaoliang.simukraft.Simukraft;
+import com.xiaoliang.simukraft.config.ServerConfig;
 import com.xiaoliang.simukraft.world.CityData;
 import com.xiaoliang.simukraft.world.CityPermissionManager;
 import com.xiaoliang.simukraft.world.PopulationData;
@@ -823,7 +824,10 @@ public class NetworkManager {
         CityPermissionManager permManager = CityPermissionManager.getInstance();
         CityPermissionManager.PermissionLevel level = permManager.getPlayerPermissionLevel(player.serverLevel(), player);
 
-        SyncHUDDataPacket packet = new SyncHUDDataPacket(currentDay, worldPopulation, cityName, cityFunds, cityPopulation, level.getLevel());
+        // 获取创造模式状态
+        boolean creativeMode = ServerConfig.isCreativeModeEnabled();
+
+        SyncHUDDataPacket packet = new SyncHUDDataPacket(currentDay, worldPopulation, cityName, cityFunds, cityPopulation, level.getLevel(), creativeMode);
         sendToPlayer(packet, player);
     }
 
@@ -833,10 +837,13 @@ public class NetworkManager {
     public static void sendHUDDataToAll(int currentDay, int worldPopulation, String cityName, double cityFunds, int cityPopulation, ServerLevel level) {
         CityPermissionManager permManager = CityPermissionManager.getInstance();
 
+        // 获取创造模式状态
+        boolean creativeMode = ServerConfig.isCreativeModeEnabled();
+
         for (ServerPlayer player : level.getServer().getPlayerList().getPlayers()) {
             // 为每个玩家单独计算权限（使用玩家名）
             CityPermissionManager.PermissionLevel permLevel = permManager.getPlayerPermissionLevel(player.serverLevel(), player);
-            SyncHUDDataPacket packet = new SyncHUDDataPacket(currentDay, worldPopulation, cityName, cityFunds, cityPopulation, permLevel.getLevel());
+            SyncHUDDataPacket packet = new SyncHUDDataPacket(currentDay, worldPopulation, cityName, cityFunds, cityPopulation, permLevel.getLevel(), creativeMode);
             sendToPlayer(packet, player);
         }
     }

@@ -26,8 +26,6 @@ public class ServerConfig {
     public static final ForgeConfigSpec.ConfigValue<List<String>> CONSTRUCTION_BLOCK_BLACKLIST;
 
     // ==================== 材料配置 ====================
-    // 专家模式
-    public static final ForgeConfigSpec.ConfigValue<Boolean> ENABLE_EXPERT_MODE;
     // 普通模式 - 启用材料通类匹配
     public static final ForgeConfigSpec.ConfigValue<Boolean> ENABLE_MATERIAL_CATEGORY_MATCHING;
     // 普通模式 - 基础材料列表（单个材料）
@@ -51,7 +49,6 @@ public class ServerConfig {
 
     // ==================== 建筑师工作配置 ====================
     public static final ForgeConfigSpec.ConfigValue<Integer> BUILDER_PLACE_SPEED_BASE;
-    public static final ForgeConfigSpec.ConfigValue<Boolean> BUILDER_REQUIRE_MATERIALS;
     public static final ForgeConfigSpec.ConfigValue<Integer> BUILDER_CHEST_SEARCH_RANGE;
     public static final ForgeConfigSpec.ConfigValue<Integer> BUILDER_WARNING_COOLDOWN;
     public static final ForgeConfigSpec.ConfigValue<Boolean> BUILDER_ENABLE_XP_GAIN;
@@ -75,6 +72,10 @@ public class ServerConfig {
     public static final ForgeConfigSpec.ConfigValue<Boolean> ENABLE_BLACKLIST_PROTECTION;
     public static final ForgeConfigSpec.ConfigValue<Boolean> LOG_BLACKLIST_SKIPPED_BLOCKS;
     public static final ForgeConfigSpec.ConfigValue<Boolean> ENABLE_DEBUG_LOG;
+    // 创造模式 - 不需要材料和金钱
+    public static final ForgeConfigSpec.ConfigValue<Boolean> ENABLE_CREATIVE_MODE;
+    // 专家模式 - 已移到通用配置
+    public static final ForgeConfigSpec.ConfigValue<Boolean> ENABLE_EXPERT_MODE;
 
     // 默认配置值（简化版本，详细配置在外部文件中）
     private static final List<String> DEFAULT_BLACKLIST = new ArrayList<>();
@@ -101,6 +102,18 @@ public class ServerConfig {
                 .comment("是否启用调试日志（会输出更多详细信息）")
                 .define("enableDebugLog", false);
 
+        ENABLE_CREATIVE_MODE = builder
+                .comment("是否启用创造模式",
+                        "开启后建筑师建造不需要材料和金钱",
+                        "与专家模式互斥，同时开启时创造模式优先")
+                .define("enableCreativeMode", false);
+
+        ENABLE_EXPERT_MODE = builder
+                .comment("是否启用专家模式",
+                        "专家模式下建筑师需要所有材料（除了跳过列表中的）",
+                        "普通模式下使用基础材料列表和通类匹配组")
+                .define("enableExpertMode", false);
+
         builder.pop();
 
         // ==================== NPC等级系统配置 ====================
@@ -122,12 +135,6 @@ public class ServerConfig {
 
         // ==================== 材料配置 ====================
         builder.push("materials");
-
-        ENABLE_EXPERT_MODE = builder
-                .comment("是否启用专家模式",
-                        "专家模式下建筑师需要所有材料（除了跳过列表中的）",
-                        "普通模式下使用基础材料列表和通类匹配组")
-                .define("enableExpertMode", false);
 
         ENABLE_MATERIAL_CATEGORY_MATCHING = builder
                 .comment("普通模式下是否启用材料通类匹配",
@@ -227,12 +234,6 @@ public class ServerConfig {
         BUILDER_PLACE_SPEED_BASE = builder
                 .comment("建筑师基础放置速度（tick/方块）")
                 .defineInRange("placeSpeedBase", 40, 1, 200);
-
-        // 材料配置
-        BUILDER_REQUIRE_MATERIALS = builder
-                .comment("建筑师是否需要从箱子中消耗材料",
-                        "如果关闭，建筑师将免费建造")
-                .define("requireMaterials", true);
 
         BUILDER_CHEST_SEARCH_RANGE = builder
                 .comment("建筑师搜索材料的箱子范围（格）")
@@ -547,8 +548,30 @@ public class ServerConfig {
         return Math.max(getCached("npcMinSpeedTicks", NPC_MIN_SPEED_TICKS), baseSpeed - bonus);
     }
 
+    /**
+     * 检查是否启用了创造模式（不需要材料和金钱）
+     * 创造模式优先于专家模式
+     */
+    public static boolean isCreativeModeEnabled() {
+        return getCached("enableCreativeMode", ENABLE_CREATIVE_MODE);
+    }
+
+    /**
+     * 检查建筑师是否需要材料
+     * 创造模式下不需要材料
+     */
     public static boolean isBuilderRequireMaterials() {
-        return getCached("builderRequireMaterials", BUILDER_REQUIRE_MATERIALS);
+        // 创造模式下不需要材料
+        return !isCreativeModeEnabled();
+    }
+
+    /**
+     * 检查建筑师是否需要金钱
+     * 创造模式下不需要金钱
+     */
+    public static boolean isBuilderRequireMoney() {
+        // 创造模式下不需要金钱
+        return !isCreativeModeEnabled();
     }
 
     public static int getBuilderChestSearchRange() {

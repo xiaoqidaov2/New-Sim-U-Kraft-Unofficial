@@ -16,6 +16,9 @@ public class ClientSimukraftData {
     private static CityPermissionManager.PermissionLevel playerPermissionLevel = CityPermissionManager.PermissionLevel.NONE;
     private static boolean canManageCity = false;
 
+    // 创造模式缓存
+    private static boolean creativeMode = false;
+
     public static void setCurrentDay(int day) {
         currentDay = day;
     }
@@ -96,5 +99,14 @@ public class ClientSimukraftData {
     
     public static boolean isMayorOrOfficial() {
         return playerPermissionLevel.isAtLeast(CityPermissionManager.PermissionLevel.OFFICIAL);
+    }
+
+    // 创造模式方法
+    public static void setCreativeMode(boolean enabled) {
+        creativeMode = enabled;
+    }
+
+    public static boolean isCreativeMode() {
+        return creativeMode;
     }
 }

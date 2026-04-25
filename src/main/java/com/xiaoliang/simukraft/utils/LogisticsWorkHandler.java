@@ -1,5 +1,6 @@
 package com.xiaoliang.simukraft.utils;
 
+import com.xiaoliang.simukraft.config.ServerConfig;
 import com.xiaoliang.simukraft.world.LogisticsData;
 import com.xiaoliang.simukraft.world.LogisticsData.*;
 import com.xiaoliang.simukraft.world.LogisticsHiredData;
@@ -187,15 +188,20 @@ public class LogisticsWorkHandler {
                             System.out.println("[Logistics] 传输失败: 找不到城市");
                             return;
                         }
-                        double cityFunds = city.getFunds();
-                        if (cityFunds < transferCost) {
-                            System.out.println("[Logistics] 传输失败: 城市资金不足，需要 " + transferCost + " 元");
-                            return; // 资金不足，不执行传输
+                        // 创造模式下跳过资金检查
+                        if (!ServerConfig.isCreativeModeEnabled()) {
+                            double cityFunds = city.getFunds();
+                            if (cityFunds < transferCost) {
+                                System.out.println("[Logistics] 传输失败: 城市资金不足，需要 " + transferCost + " 元");
+                                return; // 资金不足，不执行传输
+                            }
+                            // 扣除城市资金
+                            city.setFunds(cityFunds - transferCost);
+                            cityData.setDirty();
+                            System.out.println("[Logistics] 扣除传输费用: " + transferCost + " 元 (距离: " + String.format("%.1f", distance) + " 格)");
+                        } else {
+                            System.out.println("[Logistics] 创造模式：跳过传输费用 " + transferCost + " 元 (距离: " + String.format("%.1f", distance) + " 格)");
                         }
-                        // 扣除城市资金
-                        city.setFunds(cityFunds - transferCost);
-                        cityData.setDirty();
-                        System.out.println("[Logistics] 扣除传输费用: " + transferCost + " 元 (距离: " + String.format("%.1f", distance) + " 格)");
                     }
 
                     // 执行转移

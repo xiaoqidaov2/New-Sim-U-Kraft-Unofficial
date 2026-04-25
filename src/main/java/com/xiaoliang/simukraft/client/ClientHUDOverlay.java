@@ -40,12 +40,17 @@ public class ClientHUDOverlay implements IGuiOverlay {
             String weekDayKey = Objects.requireNonNull(WEEKDAYS[(currentDay - 1) % 7]);
             Component weekDay = Component.translatable(weekDayKey);
 
+            // 检查创造模式
+            boolean isCreativeMode = ClientSimukraftData.isCreativeMode();
+
             // 构建显示文本 - 只显示周几，不显示天数
             StringBuilder statusLine = new StringBuilder();
             if (!cityName.isEmpty()) {
                 // 有城市时显示完整信息
                 statusLine.append(Component.translatable("hud.simukraft.city", cityName).getString()).append(" | ");
-                statusLine.append(Component.translatable("hud.simukraft.funds", String.format("%.2f", funds)).getString()).append(" | ");
+                // 创造模式下显示∞符号，否则显示正常金额
+                String fundsDisplay = isCreativeMode ? "∞" : String.format("%.2f", funds);
+                statusLine.append(Component.translatable("hud.simukraft.funds", fundsDisplay).getString()).append(" | ");
                 statusLine.append(weekDay.getString()).append(" | ");
                 statusLine.append(Component.translatable("hud.simukraft.world_population", worldPopulation).getString()).append(" | ");
                 statusLine.append(Component.translatable("hud.simukraft.city_population", cityPopulation).getString());

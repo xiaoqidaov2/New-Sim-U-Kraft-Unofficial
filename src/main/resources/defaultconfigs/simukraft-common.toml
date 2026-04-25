@@ -7,6 +7,14 @@
 	logSkippedBlocks = true
 	#是否启用调试日志（会输出更多详细信息）
 	enableDebugLog = false
+	#是否启用创造模式
+	#开启后建筑师建造不需要材料和金钱
+	#与专家模式互斥，同时开启时创造模式优先
+	enableCreativeMode = false
+	#是否启用专家模式
+	#专家模式下建筑师需要所有材料（除了跳过列表中的）
+	#普通模式下使用基础材料列表和通类匹配组
+	enableExpertMode = false
 
 [npc_leveling]
 	#NPC最高等级
@@ -20,10 +28,6 @@
 	minSpeedTicks = 5
 
 [materials]
-	#是否启用专家模式
-	#专家模式下建筑师需要所有材料（除了跳过列表中的）
-	#普通模式下使用基础材料列表和通类匹配组
-	enableExpertMode = false
 	#普通模式下是否启用材料通类匹配
 	#启用后可以使用通类匹配组中的任意材料替代
 	enableMaterialCategoryMatching = true
@@ -39,7 +43,7 @@
 	#专家模式 - 跳过列表
 	#专家模式下不需要的材料（默认与黑名单相同）
 	#格式: modid:block_name
-	expertModeSkipList = ["minecraft:bedrock", "minecraft:command_block", "minecraft:chain_command_block", "minecraft:repeating_command_block", "minecraft:barrier", "minecraft:structure_block", "minecraft:structure_void", "minecraft:jigsaw", "simukraft:build_box", "simukraft:city_core", "simukraft:residential_control_box", "simukraft:commercial_control_box", "simukraft:industrial_control_box", "simukraft:other_control_box", "simukraft:wool_farm_control_box", "simukraft:building_material_store_control_box", "simukraft:beef_farm_control_box", "simukraft:nsuk_meat_shop_control_box", "simukraft:nsuk_farmland_box", "simukraft:fruit_shop_control_box", "simukraft:bakery_control_box", "minecraft:petrified_oak_slab"]
+	expertModeSkipList = ["minecraft:bedrock", "minecraft:command_block", "minecraft:chain_command_block", "minecraft:repeating_command_block", "minecraft:barrier", "minecraft:structure_block", "minecraft:structure_void", "minecraft:jigsaw", "simukraft:build_box", "simukraft:city_core", "simukraft:residential_control_box", "simukraft:commercial_control_box", "simukraft:industrial_control_box", "simukraft:other_control_box", "simukraft:wool_farm_control_box", "simukraft:building_material_store_control_box", "simukraft:beef_farm_control_box", "simukraft:nsuk_meat_shop_control_box", "simukraft:nsuk_farmland_box", "simukraft:fruit_shop_control_box", "simukraft:bakery_control_box", "minecraft:petrified_oak_slab", "simukraft:white_carpet"]
 
 [planning]
 	#规划师无法处理的方块黑名单（拆除/替换/填充）
@@ -83,9 +87,6 @@
 	#建筑师基础放置速度（tick/方块）
 	#Range: 1 ~ 200
 	placeSpeedBase = 40
-	#建筑师是否需要从箱子中消耗材料
-	#如果关闭，建筑师将免费建造
-	requireMaterials = true
 	#建筑师搜索材料的箱子范围（格）
 	#Range: 1 ~ 20
 	chestSearchRange = 3

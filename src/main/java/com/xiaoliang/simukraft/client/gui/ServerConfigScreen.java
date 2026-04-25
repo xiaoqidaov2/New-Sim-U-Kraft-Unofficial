@@ -407,6 +407,22 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
                     "作物加速生长", "农民是否启用作物加速生长",
                     ServerConfig.isFarmerCropGrowthBoostEnabled(),
                     value -> configValues.put("farmerEnableCropGrowthBoost", new BooleanConfigValue(value)));
+            startY += ITEM_HEIGHT + SECTION_SPACING;
+
+            // 创造模式和专家模式 - 移到通用设置
+            addSectionTitle(parent, width, startY, "建造模式");
+            startY += 24;
+
+            addBooleanOption(parent, width, startY, "enableCreativeMode",
+                    "创造模式", "建筑师不需要材料和金钱(优先于专家模式)",
+                    ServerConfig.ENABLE_CREATIVE_MODE.get(),
+                    value -> configValues.put("enableCreativeMode", new BooleanConfigValue(value)));
+            startY += ITEM_HEIGHT;
+
+            addBooleanOption(parent, width, startY, "enableExpertMode",
+                    "专家模式", "建筑师需要所有材料(除跳过列表)",
+                    ServerConfig.ENABLE_EXPERT_MODE.get(),
+                    value -> configValues.put("enableExpertMode", new BooleanConfigValue(value)));
         }
 
         private void buildNpcPage(WidgetGroup parent, int width, int startY) {
@@ -505,15 +521,6 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
                     value -> configValues.put("builderPlaceSpeedBase", new IntConfigValue(value)));
             startY += ITEM_HEIGHT + SECTION_SPACING;
 
-            addSectionTitle(parent, width, startY, "物品处理");
-            startY += 24;
-
-            addBooleanOption(parent, width, startY, "builderRequireMaterials",
-                    "需要材料", "建筑师是否需要从箱子消耗材料",
-                    ServerConfig.BUILDER_REQUIRE_MATERIALS.get(),
-                    value -> configValues.put("builderRequireMaterials", new BooleanConfigValue(value)));
-            startY += ITEM_HEIGHT;
-
             addIntOption(parent, width, startY, "builderChestSearchRange",
                     "搜索范围", "搜索材料的箱子范围(格)",
                     ServerConfig.BUILDER_CHEST_SEARCH_RANGE.get(), 1, 20,
@@ -565,12 +572,6 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
         private void buildMaterialsPage(WidgetGroup parent, int width, int startY) {
             addSectionTitle(parent, width, startY, "模式配置");
             startY += 24;
-
-            addBooleanOption(parent, width, startY, "enableExpertMode",
-                    "专家模式", "建筑师需要所有材料(除跳过列表)",
-                    ServerConfig.ENABLE_EXPERT_MODE.get(),
-                    value -> configValues.put("enableExpertMode", new BooleanConfigValue(value)));
-            startY += ITEM_HEIGHT;
 
             addBooleanOption(parent, width, startY, "enableMaterialCategoryMatching",
                     "通类匹配", "普通模式下启用材料通类匹配",
@@ -802,7 +803,8 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
             // 保存配置
             ServerConfig.SPEC.save();
 
-            closeScreen();
+            // simukraft: 保存后不关闭界面，自动重载以刷新显示
+            reloadConfig();
         }
 
         //n 同步单个配置到服务器
@@ -844,10 +846,10 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
                         case "plannerDropItemsOnRemove" -> ServerConfig.PLANNER_DROP_ITEMS_ON_REMOVE.set(boolValue);
                         case "plannerStoreItemsInChest" -> ServerConfig.PLANNER_STORE_ITEMS_IN_CHEST.set(boolValue);
                         case "plannerEnableXpGain" -> ServerConfig.PLANNER_ENABLE_XP_GAIN.set(boolValue);
-                        case "builderRequireMaterials" -> ServerConfig.BUILDER_REQUIRE_MATERIALS.set(boolValue);
                         case "builderForceLoadChunks" -> ServerConfig.BUILDER_FORCE_LOAD_CHUNKS.set(boolValue);
                         case "builderEnableXpGain" -> ServerConfig.BUILDER_ENABLE_XP_GAIN.set(boolValue);
                         case "enableExpertMode" -> ServerConfig.ENABLE_EXPERT_MODE.set(boolValue);
+                        case "enableCreativeMode" -> ServerConfig.ENABLE_CREATIVE_MODE.set(boolValue);
                         case "enableMaterialCategoryMatching" -> ServerConfig.ENABLE_MATERIAL_CATEGORY_MATCHING.set(boolValue);
                     }
                 } else if (value instanceof IntConfigValue) {

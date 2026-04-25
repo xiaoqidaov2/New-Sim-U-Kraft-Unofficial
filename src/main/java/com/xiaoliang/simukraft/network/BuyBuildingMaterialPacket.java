@@ -1,5 +1,6 @@
 package com.xiaoliang.simukraft.network;
 
+import com.xiaoliang.simukraft.config.ServerConfig;
 import com.xiaoliang.simukraft.world.CityData;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.FriendlyByteBuf;
@@ -98,10 +99,16 @@ public class BuyBuildingMaterialPacket {
                 return;
             }
 
-            // 扣除资金
-            double newFunds = currentFunds - totalPrice;
-            cityData.setPlayerCityFunds(playerName, newFunds);
-            cityData.setDirty();
+            // 创造模式下跳过资金扣除
+            if (!ServerConfig.isCreativeModeEnabled()) {
+                // 扣除资金
+                double newFunds = currentFunds - totalPrice;
+                cityData.setPlayerCityFunds(playerName, newFunds);
+                cityData.setDirty();
+                player.sendSystemMessage(Component.translatable("message.simukraft.building_material.purchase_success", String.format(Locale.US, "%.2f", totalPrice), String.format(Locale.US, "%.2f", newFunds)));
+            } else {
+                player.sendSystemMessage(Component.translatable("message.simukraft.building_material.purchase_success_creative"));
+            }
 
             // 添加物品到背包
             for (Map.Entry<String, Integer> entry : materials.entrySet()) {
@@ -119,8 +126,6 @@ public class BuyBuildingMaterialPacket {
                     remaining -= stackSize;
                 }
             }
-
-            player.sendSystemMessage(Component.translatable("message.simukraft.building_material.purchase_success", String.format(Locale.US, "%.2f", totalPrice), String.format(Locale.US, "%.2f", newFunds)));
         });
         context.get().setPacketHandled(true);
     }

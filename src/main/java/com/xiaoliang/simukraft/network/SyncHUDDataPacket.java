@@ -19,17 +19,19 @@ public class SyncHUDDataPacket {
     private final double cityFunds;
     private final int cityPopulation;
     private final int permissionLevel; // 权限级别
+    private final boolean creativeMode; // 创造模式
 
     /**
      * 构造函数
      */
-    public SyncHUDDataPacket(int currentDay, int worldPopulation, String cityName, double cityFunds, int cityPopulation, int permissionLevel) {
+    public SyncHUDDataPacket(int currentDay, int worldPopulation, String cityName, double cityFunds, int cityPopulation, int permissionLevel, boolean creativeMode) {
         this.currentDay = currentDay;
         this.worldPopulation = worldPopulation;
         this.cityName = cityName;
         this.cityFunds = cityFunds;
         this.cityPopulation = cityPopulation;
         this.permissionLevel = permissionLevel;
+        this.creativeMode = creativeMode;
     }
 
     /**
@@ -42,6 +44,7 @@ public class SyncHUDDataPacket {
         this.cityFunds = buf.readDouble();
         this.cityPopulation = buf.readInt();
         this.permissionLevel = buf.readInt();
+        this.creativeMode = buf.readBoolean();
     }
 
     /**
@@ -54,6 +57,7 @@ public class SyncHUDDataPacket {
         buf.writeDouble(cityFunds);
         buf.writeInt(cityPopulation);
         buf.writeInt(permissionLevel);
+        buf.writeBoolean(creativeMode);
     }
 
     /**
@@ -66,7 +70,8 @@ public class SyncHUDDataPacket {
             ClientSimukraftData.setCurrentDay(currentDay);
             ClientSimukraftData.setCurrentPopulation(worldPopulation);
             ClientSimukraftData.setCurrentCityData(cityName, cityFunds, cityPopulation);
-            
+            ClientSimukraftData.setCreativeMode(creativeMode);
+
             // 更新权限数据
             CityPermissionManager.PermissionLevel level = CityPermissionManager.PermissionLevel.values()[permissionLevel];
             ClientSimukraftData.setPlayerPermissionLevel(level);

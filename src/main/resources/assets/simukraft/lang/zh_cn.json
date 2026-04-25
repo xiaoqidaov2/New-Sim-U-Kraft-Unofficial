@@ -726,8 +726,8 @@
 
   "gui.server_config.builder_place_speed": "§d放置速度",
   "gui.server_config.builder_place_speed.tooltip": "§7基础放置速度（tick/方块）\n§e数值越小越快",
-  "gui.server_config.builder_require_materials": "§d需要材料",
-  "gui.server_config.builder_require_materials.tooltip": "§7是否需要从箱子中消耗材料\n§c关闭则免费建造",
+  "gui.server_config.creative_mode": "§d创造模式",
+  "gui.server_config.creative_mode.tooltip": "§7开启后建筑师不需要材料和金钱\n§7玩家拥有无限金钱\n§e与专家模式互斥，优先于专家模式",
   "gui.server_config.builder_chest_range": "§d材料搜索范围",
   "gui.server_config.builder_chest_range.tooltip": "§7搜索材料的箱子范围（格）",
   "gui.server_config.builder_warning_cooldown": "§d警告冷却时间",
@@ -962,6 +962,7 @@
   "message.simukraft.building_material_merchant.hired": "§a%s 已被雇佣为建材商人！",
   "message.simukraft.meat_shop_owner.hired": "§a%s 已被雇佣为肉铺老板！",
   "message.simukraft.building_material.purchase_success": "§a购买成功！花费§e%s§a元，剩余资金§e%s§a元",
+  "message.simukraft.building_material.purchase_success_creative": "§a购买成功！（创造模式不消耗资金）",
 
   "message.simukraft.construction.completed": "§a%s 已完成建设 %s",
   "message.simukraft.construction.started": "§a%s 开始建造 %s",
@@ -1499,6 +1500,7 @@
   "message.simukraft.sell_material.not_enough_items": "§c物品数量不足！",
   "message.simukraft.sell_material.cannot_sell": "§c该物品无法出售！",
   "message.simukraft.sell_material.success": "§a出售成功！获得 $%s，当前资金: $%s",
+  "message.simukraft.sell_material.success_creative": "§a出售成功！获得 $%s（创造模式资金不变）",
 
   "message.simukraft.config.no_permission_reload": "§c你没有权限重载配置！",
   "message.simukraft.config.no_permission_reset": "§c你没有权限重置配置！",

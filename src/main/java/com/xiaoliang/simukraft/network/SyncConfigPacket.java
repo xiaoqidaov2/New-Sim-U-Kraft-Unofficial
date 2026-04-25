@@ -105,7 +105,6 @@ public class SyncConfigPacket {
 
             // 建筑师配置
             case "builderPlaceSpeedBase" -> ServerConfig.BUILDER_PLACE_SPEED_BASE.set(intValue);
-            case "builderRequireMaterials" -> ServerConfig.BUILDER_REQUIRE_MATERIALS.set(boolValue);
             case "builderChestSearchRange" -> ServerConfig.BUILDER_CHEST_SEARCH_RANGE.set(intValue);
             case "builderWarningCooldown" -> ServerConfig.BUILDER_WARNING_COOLDOWN.set(intValue);
             case "builderEnableXpGain" -> ServerConfig.BUILDER_ENABLE_XP_GAIN.set(boolValue);
@@ -113,7 +112,8 @@ public class SyncConfigPacket {
             case "builderForceLoadChunks" -> ServerConfig.BUILDER_FORCE_LOAD_CHUNKS.set(boolValue);
             case "builderChunkLoadRadius" -> ServerConfig.BUILDER_CHUNK_LOAD_RADIUS.set(intValue);
 
-            // 材料配置
+            // 通用配置 - 建造模式
+            case "enableCreativeMode" -> ServerConfig.ENABLE_CREATIVE_MODE.set(boolValue);
             case "enableExpertMode" -> ServerConfig.ENABLE_EXPERT_MODE.set(boolValue);
             case "enableMaterialCategoryMatching" -> ServerConfig.ENABLE_MATERIAL_CATEGORY_MATCHING.set(boolValue);
         }

@@ -1,5 +1,6 @@
 package com.xiaoliang.simukraft.network;
 
+import com.xiaoliang.simukraft.config.ServerConfig;
 import com.xiaoliang.simukraft.world.CityData;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.FriendlyByteBuf;
@@ -72,12 +73,16 @@ public class SellBuildingMaterialPacket {
             // 扣除物品
             heldItem.shrink(quantity);
 
-            // 增加资金
-            double newFunds = currentFunds + totalPrice;
-            cityData.setPlayerCityFunds(playerName, newFunds);
-            cityData.setDirty();
-
-            player.sendSystemMessage(Component.translatable("message.simukraft.sell_material.success", String.format(Locale.US, "%.2f", totalPrice), String.format(Locale.US, "%.2f", newFunds)));
+            // 创造模式下不增加资金
+            if (!ServerConfig.isCreativeModeEnabled()) {
+                // 增加资金
+                double newFunds = currentFunds + totalPrice;
+                cityData.setPlayerCityFunds(playerName, newFunds);
+                cityData.setDirty();
+                player.sendSystemMessage(Component.translatable("message.simukraft.sell_material.success", String.format(Locale.US, "%.2f", totalPrice), String.format(Locale.US, "%.2f", newFunds)));
+            } else {
+                player.sendSystemMessage(Component.translatable("message.simukraft.sell_material.success_creative", String.format(Locale.US, "%.2f", totalPrice)));
+            }
         });
         context.get().setPacketHandled(true);
     }

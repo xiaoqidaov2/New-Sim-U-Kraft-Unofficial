@@ -1,5 +1,6 @@
 package com.xiaoliang.simukraft.utils;
 
+import com.xiaoliang.simukraft.config.ServerConfig;
 import com.xiaoliang.simukraft.world.CityData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -143,20 +144,23 @@ public class BlockReplacementHandler {
             return;
         }
 
-        double currentFunds = cityInfo.getFunds();
-        if (currentFunds < totalCost) {
-            player.sendSystemMessage(Objects.requireNonNull(
-                    Component.translatable(
-                            "message.simukraft.block_replacement.insufficient_funds",
-                            totalCost,
-                            currentFunds
-                    )));
-            return;
+        // 创造模式下跳过资金检查
+        boolean isCreativeMode = ServerConfig.isCreativeModeEnabled();
+        if (!isCreativeMode) {
+            double currentFunds = cityInfo.getFunds();
+            if (currentFunds < totalCost) {
+                player.sendSystemMessage(Objects.requireNonNull(
+                        Component.translatable(
+                                "message.simukraft.block_replacement.insufficient_funds",
+                                totalCost,
+                                currentFunds
+                        )));
+                return;
+            }
+            // 扣除费用
+            cityInfo.setFunds(currentFunds - totalCost);
+            cityData.setDirty();
         }
-
-        // 扣除费用
-        cityInfo.setFunds(currentFunds - totalCost);
-        cityData.setDirty();
 
         // 执行替换
         int replacedCount = 0;
@@ -200,9 +204,11 @@ public class BlockReplacementHandler {
             player.sendSystemMessage(Objects.requireNonNull(
                     Component.translatable("message.simukraft.block_replacement.success", replacedCount, actualCost)));
         } else {
-            // 如果没有方块被替换，退还费用
-            cityInfo.setFunds(cityInfo.getFunds() + totalCost);
-            cityData.setDirty();
+            // 如果没有方块被替换，退还费用（非创造模式）
+            if (!isCreativeMode) {
+                cityInfo.setFunds(cityInfo.getFunds() + totalCost);
+                cityData.setDirty();
+            }
             player.sendSystemMessage(Objects.requireNonNull(
                     Component.translatable("message.simukraft.block_replacement.refunded")));
         }

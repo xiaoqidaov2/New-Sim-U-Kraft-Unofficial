@@ -726,8 +726,8 @@
 
   "gui.server_config.builder_place_speed": "§dPlace Speed",
   "gui.server_config.builder_place_speed.tooltip": "§7Base place speed (ticks/block)\n§eLower is faster",
-  "gui.server_config.builder_require_materials": "§dRequire Materials",
-  "gui.server_config.builder_require_materials.tooltip": "§7Whether materials are consumed from chests\n§cDisabled means free building",
+  "gui.server_config.creative_mode": "§dCreative Mode",
+  "gui.server_config.creative_mode.tooltip": "§7Builders don't need materials\n§7Players have infinite money\n§eMutually exclusive with expert mode, takes priority",
   "gui.server_config.builder_chest_range": "§dMaterial Search Range",
   "gui.server_config.builder_chest_range.tooltip": "§7Range to search for material chests (blocks)",
   "gui.server_config.builder_warning_cooldown": "§dWarning Cooldown",
@@ -959,6 +959,7 @@
   "message.simukraft.building_material_merchant.hired": "§a%s has been hired as building material merchant!",
   "message.simukraft.meat_shop_owner.hired": "§a%s has been hired as meat shop owner!",
   "message.simukraft.building_material.purchase_success": "§aPurchase successful! Spent §e%s§a yuan, remaining funds: §e%s§a yuan",
+  "message.simukraft.building_material.purchase_success_creative": "§aPurchase successful! (Creative mode: no funds deducted)",
 
   "message.simukraft.construction.completed": "§a%s has completed building %s",
   "message.simukraft.construction.started": "§a%s started building %s",
@@ -1471,6 +1472,7 @@
   "message.simukraft.sell_material.not_enough_items": "§cNot enough items!",
   "message.simukraft.sell_material.cannot_sell": "§cThis item cannot be sold!",
   "message.simukraft.sell_material.success": "§aSold successfully! Earned $%s, current funds: $%s",
+  "message.simukraft.sell_material.success_creative": "§aSold successfully! Earned $%s (Creative mode: funds unchanged)",
 
   "message.simukraft.config.no_permission_reload": "§cYou do not have permission to reload config!",
   "message.simukraft.config.no_permission_reset": "§cYou do not have permission to reset config!",

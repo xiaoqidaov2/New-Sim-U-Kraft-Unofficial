@@ -1,5 +1,6 @@
 package com.xiaoliang.simukraft.utils;
 
+import com.xiaoliang.simukraft.config.ServerConfig;
 import com.xiaoliang.simukraft.network.NetworkManager;
 import com.xiaoliang.simukraft.world.CityData;
 import com.xiaoliang.simukraft.world.CityPermissionManager;
@@ -14,14 +15,28 @@ import java.util.UUID;
 
 public class MoneyManager {
 
+    // 创造模式下的无限金额
+    public static final double INFINITE_MONEY = Double.MAX_VALUE;
+
     /**
      * 将金额四舍五入到两位小数
      */
     private static double roundToTwoDecimals(double value) {
         return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).doubleValue();
     }
-    
+
+    /**
+     * 检查是否处于创造模式（无限金钱）
+     */
+    private static boolean isCreativeMode() {
+        return ServerConfig.isCreativeModeEnabled();
+    }
+
     public static double getMoney(ServerPlayer player) {
+        // 创造模式下返回无限金额
+        if (isCreativeMode()) {
+            return INFINITE_MONEY;
+        }
         System.out.println("[MoneyManager] 获取玩家资金，玩家: " + player.getName().getString());
         CityData cityData = CityData.get(player.serverLevel());
         String playerName = player.getName().getString();
@@ -29,15 +44,24 @@ public class MoneyManager {
         System.out.println("[MoneyManager] 玩家 " + player.getName().getString() + " 当前资金: " + money + " 元");
         return money;
     }
-    
+
     public static boolean hasEnoughMoney(ServerPlayer player, double amount) {
+        // 创造模式下永远有足够金钱
+        if (isCreativeMode()) {
+            return true;
+        }
         double money = getMoney(player);
         boolean hasEnough = money >= amount;
         System.out.println("[MoneyManager] 玩家 " + player.getName().getString() + " 是否有足够资金 (" + amount + " 元): " + hasEnough + " (当前: " + money + " 元)");
         return hasEnough;
     }
-    
+
     public static boolean deductMoney(ServerPlayer player, double amount) {
+        // 创造模式下不扣除金钱，直接返回成功
+        if (isCreativeMode()) {
+            System.out.println("[MoneyManager] 创造模式：跳过扣除 " + amount + " 元");
+            return true;
+        }
         // 修复：对金额进行四舍五入，保留两位小数
         amount = roundToTwoDecimals(amount);
         System.out.println("[MoneyManager] 尝试扣除玩家资金，玩家: " + player.getName().getString() + "，金额: " + amount + " 元");
@@ -64,6 +88,11 @@ public class MoneyManager {
     }
 
     public static void addMoney(ServerPlayer player, double amount) {
+        // 创造模式下不增加金钱，保持无限
+        if (isCreativeMode()) {
+            System.out.println("[MoneyManager] 创造模式：跳过增加 " + amount + " 元");
+            return;
+        }
         // 修复：对金额进行四舍五入，保留两位小数
         amount = roundToTwoDecimals(amount);
         System.out.println("[MoneyManager] 尝试增加玩家资金，玩家: " + player.getName().getString() + "，金额: " + amount + " 元");
