@@ -501,7 +501,7 @@ public class CustomEntity extends Animal {
                         cityData.removeCitizenFromCity(cityId, this.getUUID());
                     }
 
-                    // menglan: NPC死亡时自动解雇，释放工作方块
+                    // NPC死亡时自动解雇，释放工作方块
                     try {
                         com.xiaoliang.simukraft.employment.service.EmploymentService employmentService =
                             com.xiaoliang.simukraft.employment.service.EmploymentServices.get(serverLevel.getServer());

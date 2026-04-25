@@ -27,13 +27,13 @@ public class CustomEntityModel<T extends LivingEntity> extends PlayerModel<T> {
     }
 
     public static LayerDefinition createPlayerLikeLayer() {
-        // menglan: 创建Alex纤细手臂模型（slim=true）
+        // 创建Alex纤细手臂模型（slim=true）
         MeshDefinition mesh = nn(createMesh(nn(CubeDeformation.NONE), true));
         return LayerDefinition.create(mesh, 64, 64);
     }
 
     public static LayerDefinition createSteveLayer() {
-        // menglan: 创建Steve粗手臂模型（slim=false）
+        // 创建Steve粗手臂模型（slim=false）
         MeshDefinition mesh = nn(createMesh(nn(CubeDeformation.NONE), false));
         return LayerDefinition.create(mesh, 64, 64);
     }

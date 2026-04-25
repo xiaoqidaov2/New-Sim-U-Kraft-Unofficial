@@ -16,7 +16,7 @@ public class ModEntities {
     public static final RegistryObject<EntityType<CustomEntity>> CUSTOM_ENTITY =
             ENTITIES.register("custom_entity",
                     () -> EntityType.Builder.of(CustomEntity::new, MobCategory.CREATURE)
-                            // menglan: 碰撞箱尺寸与玩家一致（玩家也是0.6f x 1.8f）
+                            // 碰撞箱尺寸与玩家一致（玩家也是0.6f x 1.8f）
                             .sized(0.6f, 1.8f)
                             .build("custom_entity"));
     

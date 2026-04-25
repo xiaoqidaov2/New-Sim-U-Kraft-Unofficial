@@ -171,12 +171,12 @@ public class Simukraft {
 
         @SubscribeEvent
         public static void registerLayerDefinitions(EntityRenderersEvent.RegisterLayerDefinitions event) {
-            // menglan: 注册Alex纤细手臂模型
+            // 注册Alex纤细手臂模型
             event.registerLayerDefinition(
                     Objects.requireNonNull(ModModelLayers.CUSTOM_ENTITY),
                     CustomEntityModel::createPlayerLikeLayer
             );
-            // menglan: 注册Steve粗手臂模型（皮肤文件名以_f结尾时使用）
+            // 注册Steve粗手臂模型（皮肤文件名以_f结尾时使用）
             event.registerLayerDefinition(
                     Objects.requireNonNull(ModModelLayers.CUSTOM_ENTITY_STEVE),
                     CustomEntityModel::createSteveLayer

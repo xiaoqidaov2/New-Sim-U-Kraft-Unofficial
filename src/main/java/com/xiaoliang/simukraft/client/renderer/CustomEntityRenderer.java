@@ -22,12 +22,12 @@ import javax.annotation.Nonnull;
 @SuppressWarnings("null")
 public class CustomEntityRenderer extends MobRenderer<CustomEntity, CustomEntityModel<CustomEntity>> {
 
-    // menglan: 缓存两种模型，根据皮肤文件名动态切换
+    // : 缓存两种模型，根据皮肤文件名动态切换
     private final CustomEntityModel<CustomEntity> alexModel;
     private final CustomEntityModel<CustomEntity> steveModel;
 
     public CustomEntityRenderer(EntityRendererProvider.Context context) {
-        // menglan: 初始化时创建两种模型
+        // : 初始化时创建两种模型
         super(context, null, 0.5f);
         this.alexModel = new CustomEntityModel<>(context.bakeLayer(ModModelLayers.CUSTOM_ENTITY), true);
         this.steveModel = new CustomEntityModel<>(context.bakeLayer(ModModelLayers.CUSTOM_ENTITY_STEVE), false);
@@ -38,7 +38,7 @@ public class CustomEntityRenderer extends MobRenderer<CustomEntity, CustomEntity
     @Override
     public void render(@Nonnull CustomEntity entity, float entityYaw, float partialTicks, @Nonnull PoseStack poseStack,
                        @Nonnull MultiBufferSource buffer, int packedLight) {
-        // menglan: 根据皮肤文件名选择模型（_f结尾为Steve粗手臂）
+        // : 根据皮肤文件名选择模型（_f结尾为Steve粗手臂）
         String skinPath = entity.getSkinPath();
         if (skinPath != null && !skinPath.isEmpty()) {
             // 检查文件名是否以_f结尾（粗手臂）

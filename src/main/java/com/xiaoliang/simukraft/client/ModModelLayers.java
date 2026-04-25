@@ -6,11 +6,11 @@ import net.minecraft.resources.ResourceLocation;
 
 @SuppressWarnings("null")
 public class ModModelLayers {
-    // menglan: Alex纤细手臂模型
+    // Alex纤细手臂模型
     public static final ModelLayerLocation CUSTOM_ENTITY =
             new ModelLayerLocation(ResourceLocation.fromNamespaceAndPath(Simukraft.MOD_ID, "custom_entity"), "main");
 
-    // menglan: Steve粗手臂模型（皮肤文件名以_f结尾时使用）
+    // Steve粗手臂模型（皮肤文件名以_f结尾时使用）
     public static final ModelLayerLocation CUSTOM_ENTITY_STEVE =
             new ModelLayerLocation(ResourceLocation.fromNamespaceAndPath(Simukraft.MOD_ID, "custom_entity_steve"), "main");
 
