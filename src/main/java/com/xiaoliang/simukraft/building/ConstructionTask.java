@@ -3,7 +3,6 @@ package com.xiaoliang.simukraft.building;
 import com.xiaoliang.simukraft.client.preview.SchematicNBTLoader;
 import com.xiaoliang.simukraft.config.ServerConfig;
 import com.xiaoliang.simukraft.entity.CustomEntity;
-import com.xiaoliang.simukraft.utils.ContainerUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
@@ -38,6 +37,7 @@ import javax.annotation.Nullable;
 
 @SuppressWarnings("null")
 public class ConstructionTask {
+    private static final long MATERIAL_SLEEP_TICKS = 60L;
     private static final Property<Direction> FACING_PROPERTY = requireProperty(BlockStateProperties.FACING);
     private static final Property<Direction> HORIZONTAL_FACING_PROPERTY = requireProperty(BlockStateProperties.HORIZONTAL_FACING);
     private static final Property<Direction> HOPPER_FACING_PROPERTY = requireProperty(BlockStateProperties.FACING_HOPPER);
@@ -73,14 +73,18 @@ public class ConstructionTask {
     @Nonnull
     private final List<BlockPos> controlBoxPositions;
     @Nullable
-    private ChunkPos loadedChunkPos = null;
-    @Nullable
     private ServerLevel runtimeLevel = null;
-    // 修复：添加建筑盒周围区块的强制加载，确保箱子能被找到
-    private final List<ChunkPos> forcedChunks = new ArrayList<>();
+    @Nonnull
+    private final Set<ChunkPos> requiredWorkflowChunks;
+    @Nonnull
+    private final Set<ChunkPos> workflowForcedChunks = new LinkedHashSet<>();
     // 修复：添加区块加载等待计数器，解决退出重进后箱子找不到的问题
     private int chunkLoadWaitTicks = 0;
     private boolean hasNotifiedChunkLoading = false;
+    @Nonnull
+    private final BuilderMaterialCache materialCache;
+    private boolean waitingForMaterials = false;
+    private long nextMaterialCheckTick = Long.MIN_VALUE;
 
     public ConstructionTask(@Nonnull CustomEntity builder, @Nonnull String buildingName, @Nonnull String category, @Nonnull BlockPos startPos,
                            @Nonnull BlockPos buildBoxPos, @Nonnull Direction facing, @Nonnull String displayName, double cost) {
@@ -93,31 +97,14 @@ public class ConstructionTask {
         this.facing = Objects.requireNonNull(facing);
         this.displayName = Objects.requireNonNull(displayName);
         this.cost = cost;
-        this.blocksToPlace = Objects.requireNonNull(loadAndParseBlocks());
-        this.blockIndexLookup = buildBlockIndexLookup(this.blocksToPlace);
+        this.blocksToPlace = List.copyOf(Objects.requireNonNull(loadAndParseBlocks()));
+        this.blockIndexLookup = Map.copyOf(buildBlockIndexLookup(this.blocksToPlace));
         this.controlBoxPositions = collectControlBoxPositions(this.blocksToPlace);
+        this.materialCache = new BuilderMaterialCache(this.buildBoxPos);
+        this.requiredWorkflowChunks = collectRequiredWorkflowChunks();
 
-        // 加载建筑所在区块以及建筑盒周围区块（确保箱子能被找到）
         if (builder.level() instanceof ServerLevel serverLevel) {
-            // 加载建筑起始位置区块
-            ChunkPos primaryChunk = new ChunkPos(this.startPos);
-            this.loadedChunkPos = primaryChunk;
-            serverLevel.setChunkForced(primaryChunk.x, primaryChunk.z, true);
-
-            // 修复：加载建筑盒周围范围内的所有区块（箱子搜索范围）
-            if (ServerConfig.isBuilderForceLoadChunks()) {
-                int chunkRadius = ServerConfig.getBuilderChunkLoadRadius();
-                ChunkPos buildBoxChunk = new ChunkPos(this.buildBoxPos);
-                for (int x = -chunkRadius; x <= chunkRadius; x++) {
-                    for (int z = -chunkRadius; z <= chunkRadius; z++) {
-                        ChunkPos chunkPos = new ChunkPos(buildBoxChunk.x + x, buildBoxChunk.z + z);
-                        if (!chunkPos.equals(loadedChunkPos)) {
-                            serverLevel.setChunkForced(chunkPos.x, chunkPos.z, true);
-                            forcedChunks.add(chunkPos);
-                        }
-                    }
-                }
-            }
+            ensureWorkflowChunksForced(serverLevel);
         }
     }
 
@@ -138,29 +125,14 @@ public class ConstructionTask {
         this.facing = tempFacing != null ? tempFacing : Direction.NORTH;
         this.displayName = Objects.requireNonNull(displayName);
         this.cost = cost;
-        this.blocksToPlace = Objects.requireNonNull(loadAndParseBlocks());
-        this.blockIndexLookup = buildBlockIndexLookup(this.blocksToPlace);
+        this.blocksToPlace = List.copyOf(Objects.requireNonNull(loadAndParseBlocks()));
+        this.blockIndexLookup = Map.copyOf(buildBlockIndexLookup(this.blocksToPlace));
         this.controlBoxPositions = collectControlBoxPositions(this.blocksToPlace);
+        this.materialCache = new BuilderMaterialCache(this.buildBoxPos);
+        this.requiredWorkflowChunks = collectRequiredWorkflowChunks();
 
-        // 加载建筑所在区块以及建筑盒周围区块
         if (level != null) {
-            ChunkPos primaryChunk = new ChunkPos(this.startPos);
-            this.loadedChunkPos = primaryChunk;
-            level.setChunkForced(primaryChunk.x, primaryChunk.z, true);
-
-            if (ServerConfig.isBuilderForceLoadChunks()) {
-                int chunkRadius = ServerConfig.getBuilderChunkLoadRadius();
-                ChunkPos buildBoxChunk = new ChunkPos(this.buildBoxPos);
-                for (int x = -chunkRadius; x <= chunkRadius; x++) {
-                    for (int z = -chunkRadius; z <= chunkRadius; z++) {
-                        ChunkPos chunkPos = new ChunkPos(buildBoxChunk.x + x, buildBoxChunk.z + z);
-                        if (!chunkPos.equals(loadedChunkPos)) {
-                            level.setChunkForced(chunkPos.x, chunkPos.z, true);
-                            forcedChunks.add(chunkPos);
-                        }
-                    }
-                }
-            }
+            ensureWorkflowChunksForced(level);
         }
 
     }
@@ -371,7 +343,7 @@ public class ConstructionTask {
     }
 
     @Nonnull
-    @SuppressWarnings({"deprecation", "null"})
+    @SuppressWarnings("deprecation")
     private BlockState rotateBlockStateOnce(BlockState state) {
         if (state.hasProperty(FACING_PROPERTY)) {
             Direction facing = getRequiredValue(state, FACING_PROPERTY);
@@ -478,7 +450,13 @@ public class ConstructionTask {
         this.builder = builder;
         if (builder != null && builder.level() instanceof ServerLevel serverLevel) {
             this.runtimeLevel = serverLevel;
+            ensureWorkflowChunksForced(serverLevel);
         }
+    }
+
+    public void detachBuilder() {
+        releaseForcedChunks();
+        this.builder = null;
     }
 
     @Nullable
@@ -490,12 +468,36 @@ public class ConstructionTask {
         return runtimeLevel;
     }
 
+    @Nonnull
+    private Set<ChunkPos> collectRequiredWorkflowChunks() {
+        Set<ChunkPos> chunks = new LinkedHashSet<>();
+        chunks.add(new ChunkPos(startPos));
+        chunks.add(new ChunkPos(buildBoxPos));
+        for (BlockInfo blockInfo : blocksToPlace) {
+            chunks.add(new ChunkPos(blockInfo.pos()));
+        }
+        for (Direction direction : Direction.values()) {
+            chunks.add(new ChunkPos(buildBoxPos.relative(direction)));
+        }
+        return Set.copyOf(chunks);
+    }
+
+    private void ensureWorkflowChunksForced(@Nonnull ServerLevel serverLevel) {
+        for (ChunkPos chunkPos : requiredWorkflowChunks) {
+            ensureWorkflowChunkForced(serverLevel, chunkPos);
+        }
+    }
+
+    private void ensureWorkflowChunkForced(@Nonnull ServerLevel serverLevel, @Nonnull ChunkPos chunkPos) {
+        long chunkKey = ChunkPos.asLong(chunkPos.x, chunkPos.z);
+        if (!workflowForcedChunks.contains(chunkPos) && !serverLevel.getForcedChunks().contains(chunkKey)) {
+            serverLevel.setChunkForced(chunkPos.x, chunkPos.z, true);
+            workflowForcedChunks.add(chunkPos);
+        }
+        serverLevel.getChunk(chunkPos.x, chunkPos.z);
+    }
+
     private long lastWarningTime = 0;
-    
-    // 性能优化：缓存附近容器的位置，避免每 tick 重复搜索
-    private final List<BlockPos> cachedContainerPositions = new java.util.ArrayList<>();
-    private long lastContainerSearchTime = 0;
-    private static final long CONTAINER_CACHE_DURATION_MS = 30000; // 性能优化：缓存 30 秒（从5秒增加到30秒）
 
     @SuppressWarnings("null")
     private boolean consumeFromNearbyChests(BlockState state) {
@@ -512,48 +514,19 @@ public class ConstructionTask {
             return false; // 区块未就绪，等待下次tick
         }
 
-        long currentTime = System.currentTimeMillis();
-        // 如果缓存已过期，或者缓存为空，重新搜索容器
-        // 只搜索建筑盒六个面紧贴的容器
-        if (currentTime - lastContainerSearchTime > CONTAINER_CACHE_DURATION_MS || cachedContainerPositions.isEmpty()) {
-            cachedContainerPositions.clear();
-            // 六个方向：上、下、北、南、西、东
-            Direction[] containerDirections = new Direction[]{Direction.UP, Direction.DOWN, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST};
-            for (Direction dir : containerDirections) {
-                BlockPos checkPos = buildBoxPos.relative(dir);
-                if (serverLevel.isLoaded(checkPos) && ContainerUtils.isContainer(serverLevel, checkPos)) {
-                    cachedContainerPositions.add(checkPos);
-                    // 检查是否是大箱子，如果是，添加另一半位置
-                    BlockPos otherHalf = getOtherChestHalf(serverLevel, checkPos);
-                    if (otherHalf != null && !cachedContainerPositions.contains(otherHalf)) {
-                        cachedContainerPositions.add(otherHalf);
-                    }
-                }
-            }
-            lastContainerSearchTime = currentTime;
+        if (shouldDelayMaterialCheck(serverLevel)) {
+            return false;
         }
 
-        // 使用缓存的容器位置尝试消耗材料
-        for (java.util.Iterator<BlockPos> iterator = cachedContainerPositions.iterator(); iterator.hasNext(); ) {
-            BlockPos checkPos = iterator.next();
-
-            // 再次检查区块是否已加载
-            if (!serverLevel.isLoaded(checkPos)) {
-                continue; // 区块仍未加载，跳过
-            }
-
-            // 检查该位置是否仍然是容器方块
-            if (ContainerUtils.isContainer(serverLevel, checkPos)) {
-                if (tryConsumeFromContainer(checkPos, state)) {
-                    return true;
-                }
-            } else {
-                // 容器已不在该位置，移除缓存
-                iterator.remove();
-            }
+        if (materialCache.tryConsume(serverLevel, state)) {
+            clearMaterialSleep();
+            return true;
         }
+
+        enterMaterialSleep(serverLevel);
 
         // 没有找到材料，检查冷却时间后发送提示
+        long currentTime = System.currentTimeMillis();
         if (currentTime - lastWarningTime >= ServerConfig.getBuilderWarningCooldownMs()) {
             lastWarningTime = currentTime;
             // 使用材料管理器获取详细的材料需求信息（Component 版本，支持客户端翻译）
@@ -563,6 +536,66 @@ public class ConstructionTask {
             serverLevel.getServer().getPlayerList().broadcastSystemMessage(Objects.requireNonNull(message), false);
         }
         return false;
+    }
+
+    private boolean shouldDelayMaterialCheck(@Nonnull ServerLevel serverLevel) {
+        if (!waitingForMaterials) {
+            return false;
+        }
+
+        if (serverLevel.getGameTime() < nextMaterialCheckTick) {
+            return true;
+        }
+
+        clearMaterialSleep();
+        materialCache.markDirty();
+        return false;
+    }
+
+    private void enterMaterialSleep(@Nonnull ServerLevel serverLevel) {
+        waitingForMaterials = true;
+        long wakeTick = serverLevel.getGameTime() + MATERIAL_SLEEP_TICKS;
+        if (nextMaterialCheckTick == Long.MIN_VALUE) {
+            nextMaterialCheckTick = wakeTick;
+            return;
+        }
+        nextMaterialCheckTick = Math.min(nextMaterialCheckTick, wakeTick);
+    }
+
+    private void clearMaterialSleep() {
+        waitingForMaterials = false;
+        nextMaterialCheckTick = Long.MIN_VALUE;
+    }
+
+    public void requestMaterialRefresh(long delayTicks) {
+        ServerLevel serverLevel = getRuntimeLevel();
+        materialCache.markDirty();
+        if (serverLevel == null) {
+            clearMaterialSleep();
+            return;
+        }
+
+        long safeDelayTicks = Math.max(0L, delayTicks);
+        if (safeDelayTicks == 0L) {
+            clearMaterialSleep();
+            return;
+        }
+
+        waitingForMaterials = true;
+        long wakeTick = serverLevel.getGameTime() + safeDelayTicks;
+        if (nextMaterialCheckTick == Long.MIN_VALUE) {
+            nextMaterialCheckTick = wakeTick;
+            return;
+        }
+        nextMaterialCheckTick = Math.min(nextMaterialCheckTick, wakeTick);
+    }
+
+    public boolean isWaitingForMaterials() {
+        return waitingForMaterials;
+    }
+
+    public boolean handlesContainerInteraction(@Nonnull ServerLevel serverLevel, @Nonnull BlockPos containerPos) {
+        return materialCache.tracksContainer(serverLevel, containerPos);
     }
 
     public BlockInfo getNextBlock() {
@@ -659,7 +692,6 @@ public class ConstructionTask {
      * 获取双格方块的另一半位置
      */
     @Nullable
-    @SuppressWarnings("null")
     private BlockPos getOtherHalfPos(@Nonnull BlockState state, @Nonnull BlockPos pos) {
         Block block = state.getBlock();
 
@@ -756,34 +788,6 @@ public class ConstructionTask {
     }
 
     /**
-     * 获取大箱子的另一半位置
-     * @param level 世界
-     * @param pos 箱子位置
-     * @return 另一半位置，如果不是大箱子则返回null
-     */
-    @Nullable
-    private BlockPos getOtherChestHalf(ServerLevel level, BlockPos pos) {
-        BlockState state = level.getBlockState(pos);
-        if (!(state.getBlock() instanceof net.minecraft.world.level.block.ChestBlock)) {
-            return null;
-        }
-        
-        // 检查四个水平方向是否有相邻的箱子
-        for (Direction dir : new Direction[]{Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST}) {
-            BlockPos neighborPos = pos.relative(dir);
-            BlockState neighborState = level.getBlockState(neighborPos);
-            if (neighborState.getBlock() instanceof net.minecraft.world.level.block.ChestBlock) {
-                // 检查是否是同一个大箱子的一部分
-                if (state.hasProperty(net.minecraft.world.level.block.ChestBlock.TYPE) && 
-                    neighborState.hasProperty(net.minecraft.world.level.block.ChestBlock.TYPE)) {
-                    return neighborPos;
-                }
-            }
-        }
-        return null;
-    }
-
-    /**
      * 性能优化：检查区块是否就绪，避免每 tick 重复检查
      * 只在区块未就绪时执行完整检查逻辑
      */
@@ -793,11 +797,8 @@ public class ConstructionTask {
             return checkAndWaitChunks(serverLevel);
         }
         
-        // 快速检查：只检查六个方向是否都已加载
-        Direction[] directions = new Direction[]{Direction.UP, Direction.DOWN, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST};
-        for (Direction dir : directions) {
-            BlockPos checkPos = buildBoxPos.relative(dir);
-            if (!serverLevel.isLoaded(checkPos)) {
+        for (ChunkPos chunkPos : requiredWorkflowChunks) {
+            if (!serverLevel.hasChunk(chunkPos.x, chunkPos.z)) {
                 // 发现未加载的区块，进入等待模式
                 return checkAndWaitChunks(serverLevel);
             }
@@ -812,13 +813,10 @@ public class ConstructionTask {
         int maxWaitTicks = ServerConfig.getBuilderChunkLoadWaitTicks();
         boolean allChunksLoaded = true;
         
-        Direction[] directions = new Direction[]{Direction.UP, Direction.DOWN, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST};
-        for (Direction dir : directions) {
-            BlockPos checkPos = buildBoxPos.relative(dir);
-            if (!serverLevel.isLoaded(checkPos)) {
+        for (ChunkPos chunkPos : requiredWorkflowChunks) {
+            if (!serverLevel.hasChunk(chunkPos.x, chunkPos.z)) {
                 allChunksLoaded = false;
-                ChunkPos chunkPos = new ChunkPos(checkPos);
-                serverLevel.setChunkForced(chunkPos.x, chunkPos.z, true);
+                ensureWorkflowChunkForced(serverLevel, chunkPos);
                 break;
             }
         }
@@ -852,16 +850,10 @@ public class ConstructionTask {
         if (serverLevel == null) {
             return;
         }
-        // 释放主区块
-        if (loadedChunkPos != null) {
-            ChunkPos mainChunk = loadedChunkPos;
-            serverLevel.setChunkForced(mainChunk.x, mainChunk.z, false);
-        }
-        // 释放建筑盒周围的区块
-        for (ChunkPos chunkPos : forcedChunks) {
+        for (ChunkPos chunkPos : workflowForcedChunks) {
             serverLevel.setChunkForced(chunkPos.x, chunkPos.z, false);
         }
-        forcedChunks.clear();
+        workflowForcedChunks.clear();
     }
 
     public boolean isCompleted() {
@@ -875,27 +867,17 @@ public class ConstructionTask {
         currentBlockIndex++;
     }
 
-    /**
-     * 从容器中尝试消耗材料（支持Container接口和IItemHandler Capability）
-     * 性能优化：使用直接查找并消耗的方法，避免复制整个容器内容
-     * @param containerPos 容器位置
-     * @param state 要放置的方块状态
-     * @return 是否成功消耗材料
-     */
-    private boolean tryConsumeFromContainer(BlockPos containerPos, BlockState state) {
-        ServerLevel serverLevel = getRuntimeLevel();
-        if (serverLevel == null) return false;
-
-        // 性能优化：直接查找并消耗建筑材料，避免复制整个容器内容
-        return ContainerUtils.findAndConsumeBuildingMaterial(serverLevel, containerPos, state);
-    }
-
     public CustomEntity getBuilder() {
         return builder;
     }
 
     public String getBuildingName() {
         return displayName;
+    }
+
+    @Nonnull
+    public List<BlockInfo> getBlocksToPlace() {
+        return blocksToPlace;
     }
     
     public String getInternalBuildingName() {

@@ -47,22 +47,13 @@ public class PortableCityCoreItem extends Item {
         UUID playerUUID = player.getUUID();
         String playerName = player.getName().getString();
 
-        // 获取玩家作为市长的城市列表
-        java.util.List<CityData.CityInfo> playerCities = cityData.getCitiesByMayor(playerUUID);
+        // 统一走登录自修复后的城市归属，避免离线档因旧映射导致便携核心误判无权限
+        UUID playerCityId = cityData.refreshPlayerCityAccess(serverPlayer);
         CityData.CityInfo cityInfo = null;
-        boolean isMayor = !playerCities.isEmpty();
-        
-        if (isMayor) {
-            // 玩家是市长，获取第一个城市
-            cityInfo = playerCities.get(0);
-        } else {
-            // 玩家不是市长，检查是否为市民身份
-            UUID playerCityId = cityData.getPlayerCityId(playerName);
-            if (playerCityId != null) {
-                CityData.CityInfo city = cityData.getCity(playerCityId);
-                if (city != null && city.isOfficial(playerName)) {
-                    cityInfo = city;
-                }
+        if (playerCityId != null) {
+            CityData.CityInfo city = cityData.getCity(playerCityId);
+            if (city != null && (city.isMayor(playerUUID) || city.isOfficial(playerName))) {
+                cityInfo = city;
             }
         }
         

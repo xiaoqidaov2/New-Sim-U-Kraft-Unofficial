@@ -115,9 +115,14 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
 
     @Override
     public void init() {
-        super.init();
-        // simukraft: 初始化时重新应用可完整显示的最佳缩放
         GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
+        super.init();
+    }
+
+    @Override
+    public void resize(Minecraft minecraft, int width, int height) {
+        GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
+        super.resize(minecraft, width, height);
     }
 
     @Override
@@ -131,8 +136,6 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
-        // simukraft: 保持可完整显示的最佳缩放
-        GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
         super.render(graphics, mouseX, mouseY, partialTicks);
     }
 
@@ -530,20 +533,8 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
             addSectionTitle(parent, width, startY, "区块加载");
             startY += 24;
 
-            addBooleanOption(parent, width, startY, "builderForceLoadChunks",
-                    "强制加载", "建筑师工作时是否强制加载周围区块",
-                    ServerConfig.BUILDER_FORCE_LOAD_CHUNKS.get(),
-                    value -> configValues.put("builderForceLoadChunks", new BooleanConfigValue(value)));
-            startY += ITEM_HEIGHT;
-
-            addIntOption(parent, width, startY, "builderChunkLoadRadius",
-                    "加载半径", "强制加载区块的半径",
-                    ServerConfig.BUILDER_CHUNK_LOAD_RADIUS.get(), 1, 5,
-                    value -> configValues.put("builderChunkLoadRadius", new IntConfigValue(value)));
-            startY += ITEM_HEIGHT;
-
             addIntOption(parent, width, startY, "builderChunkLoadWaitTicks",
-                    "等待时间", "等待区块加载的最大tick数",
+                    "等待时间", "按工作流强加载后等待区块就绪的最大tick数",
                     ServerConfig.BUILDER_CHUNK_LOAD_WAIT_TICKS.get(), 10, 200,
                     value -> configValues.put("builderChunkLoadWaitTicks", new IntConfigValue(value)));
             startY += ITEM_HEIGHT + SECTION_SPACING;
@@ -846,7 +837,6 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
                         case "plannerDropItemsOnRemove" -> ServerConfig.PLANNER_DROP_ITEMS_ON_REMOVE.set(boolValue);
                         case "plannerStoreItemsInChest" -> ServerConfig.PLANNER_STORE_ITEMS_IN_CHEST.set(boolValue);
                         case "plannerEnableXpGain" -> ServerConfig.PLANNER_ENABLE_XP_GAIN.set(boolValue);
-                        case "builderForceLoadChunks" -> ServerConfig.BUILDER_FORCE_LOAD_CHUNKS.set(boolValue);
                         case "builderEnableXpGain" -> ServerConfig.BUILDER_ENABLE_XP_GAIN.set(boolValue);
                         case "enableExpertMode" -> ServerConfig.ENABLE_EXPERT_MODE.set(boolValue);
                         case "enableCreativeMode" -> ServerConfig.ENABLE_CREATIVE_MODE.set(boolValue);
@@ -866,7 +856,6 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
                         case "plannerXpPerBlock" -> ServerConfig.PLANNER_XP_PER_BLOCK.set(intValue);
                         case "builderPlaceSpeedBase" -> ServerConfig.BUILDER_PLACE_SPEED_BASE.set(intValue);
                         case "builderChestSearchRange" -> ServerConfig.BUILDER_CHEST_SEARCH_RANGE.set(intValue);
-                        case "builderChunkLoadRadius" -> ServerConfig.BUILDER_CHUNK_LOAD_RADIUS.set(intValue);
                         case "builderChunkLoadWaitTicks" -> ServerConfig.BUILDER_CHUNK_LOAD_WAIT_TICKS.set(intValue);
                         case "builderWarningCooldown" -> ServerConfig.BUILDER_WARNING_COOLDOWN.set(intValue);
                         case "builderXpPerBlock" -> ServerConfig.BUILDER_XP_PER_BLOCK.set(intValue);

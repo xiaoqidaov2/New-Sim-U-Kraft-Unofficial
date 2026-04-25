@@ -76,9 +76,8 @@ public class PlayerEvents {
                     int cityPopulation = 0;
 
                     CityData cityData = CityData.get(level);
-                    String playerName = player.getName().getString();
-                    // 使用玩家名获取城市ID（支持官员身份）
-                    UUID cityId = cityData.getPlayerCityIdByName(playerName);
+                    // 登录时先修复玩家名 -> 城市映射，避免离线档/部分服务器环境下掉权
+                    UUID cityId = cityData.refreshPlayerCityAccess(player);
                     if (cityId != null) {
                         CityData.CityInfo cityInfo = cityData.getCity(cityId);
                         if (cityInfo != null) {

@@ -107,13 +107,21 @@ public abstract class ConfigurableListScreenLDLib extends ModularUIGuiContainer 
 
     @Override
     public void init() {
+        GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
         super.init();
+        clearUIReferences();
         // simukraft: 重新查找UI引用（因为UI是在super中创建的，当时currentInstance还未设置）
         findUIReferences();
         // simukraft: 初始化完成后刷新列表
         if (listGroup != null) {
             refreshList();
         }
+    }
+
+    @Override
+    public void resize(Minecraft minecraft, int width, int height) {
+        GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
+        super.resize(minecraft, width, height);
     }
 
     /**
@@ -192,9 +200,13 @@ public abstract class ConfigurableListScreenLDLib extends ModularUIGuiContainer 
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
-        // simukraft: 保持可完整显示的最佳缩放
-        GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
         super.render(graphics, mouseX, mouseY, partialTicks);
+    }
+
+    private void clearUIReferences() {
+        listGroup = null;
+        searchField = null;
+        addField = null;
     }
 
     /**

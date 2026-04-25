@@ -3,11 +3,14 @@ package com.xiaoliang.simukraft.event;
 import com.xiaoliang.simukraft.entity.CustomEntity;
 import com.xiaoliang.simukraft.entity.WorkStatus;
 import com.xiaoliang.simukraft.entity.WorkSubState;
+import com.xiaoliang.simukraft.building.ConstructionTask;
 import com.xiaoliang.simukraft.utils.*;
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -15,7 +18,9 @@ import net.minecraftforge.fml.common.Mod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -46,6 +51,8 @@ public class ServerTickHandler {
     private static final int WORK_PROGRESS_INTERVAL = 2; // 每2个tick更新一次工作进度
     private static int startupRestoreDelayTicks = -1;
     private static final int STARTUP_RESTORE_DELAY = 40;
+    private static final int BUILDER_CONTAINER_SEARCH_RADIUS = 32;
+    private static final List<ScheduledBuilderRefresh> scheduledBuilderRefreshes = new ArrayList<>();
 
     @SubscribeEvent
     public static void onServerTick(TickEvent.ServerTickEvent event) {
@@ -58,6 +65,8 @@ public class ServerTickHandler {
                     startupRestoreDelayTicks = -1;
                 }
             }
+
+            processScheduledBuilderRefreshes(event.getServer());
 
             // 处理延迟的NPC处理
             if (delayedPlayer != null) {
@@ -251,6 +260,7 @@ public class ServerTickHandler {
      */
     public static void onServerStart(MinecraftServer server) {
         playerSleepingStates.clear();
+        scheduledBuilderRefreshes.clear();
         delayedPlayer = null;
         delayTicks = 0;
         startupRestoreDelayTicks = STARTUP_RESTORE_DELAY;
@@ -318,9 +328,80 @@ public class ServerTickHandler {
             npc.scheduleHireArrivalTeleport(workplacePos);
         }
     }
+
+    public static void scheduleBuilderContainerRefresh(ServerLevel level, BlockPos containerPos, int delayTicks) {
+        if (level == null || containerPos == null) {
+            return;
+        }
+
+        long executeTick = level.getGameTime() + Math.max(0, delayTicks);
+        BlockPos immutablePos = containerPos.immutable();
+        ResourceKey<Level> dimension = level.dimension();
+        for (ScheduledBuilderRefresh scheduledRefresh : scheduledBuilderRefreshes) {
+            if (scheduledRefresh.dimension.equals(dimension) && scheduledRefresh.containerPos.equals(immutablePos)) {
+                scheduledRefresh.executeTick = Math.min(scheduledRefresh.executeTick, executeTick);
+                return;
+            }
+        }
+        scheduledBuilderRefreshes.add(new ScheduledBuilderRefresh(dimension, immutablePos, executeTick));
+    }
+
+    private static void processScheduledBuilderRefreshes(MinecraftServer server) {
+        if (server == null || scheduledBuilderRefreshes.isEmpty()) {
+            return;
+        }
+
+        Iterator<ScheduledBuilderRefresh> iterator = scheduledBuilderRefreshes.iterator();
+        while (iterator.hasNext()) {
+            ScheduledBuilderRefresh scheduledRefresh = iterator.next();
+            ServerLevel level = server.getLevel(scheduledRefresh.dimension);
+            if (level == null) {
+                iterator.remove();
+                continue;
+            }
+            if (level.getGameTime() < scheduledRefresh.executeTick) {
+                continue;
+            }
+
+            refreshNearbyBuildersForContainer(level, scheduledRefresh.containerPos);
+            iterator.remove();
+        }
+    }
+
+    private static void refreshNearbyBuildersForContainer(ServerLevel level, BlockPos containerPos) {
+        AABB searchBox = new AABB(containerPos).inflate(BUILDER_CONTAINER_SEARCH_RADIUS);
+        for (CustomEntity npc : level.getEntitiesOfClass(CustomEntity.class, searchBox)) {
+            if (!"builder".equals(npc.getJob())) {
+                continue;
+            }
+
+            ConstructionTask constructionTask = npc.getConstructionTask();
+            if (constructionTask == null || constructionTask.isCompleted() || !constructionTask.hasNextBlock()) {
+                continue;
+            }
+            if (!constructionTask.handlesContainerInteraction(level, containerPos)) {
+                continue;
+            }
+
+            constructionTask.requestMaterialRefresh(0);
+            NPCWorkResumeCoordinator.resumeBuilderWork(npc, constructionTask.getBuildBoxPos(), true);
+        }
+    }
     
     public static void scheduleDelayedNPCProcessing(ServerPlayer player, int ticks) {
         delayedPlayer = player;
         delayTicks = ticks;
+    }
+
+    private static final class ScheduledBuilderRefresh {
+        private final ResourceKey<Level> dimension;
+        private final BlockPos containerPos;
+        private long executeTick;
+
+        private ScheduledBuilderRefresh(ResourceKey<Level> dimension, BlockPos containerPos, long executeTick) {
+            this.dimension = dimension;
+            this.containerPos = containerPos;
+            this.executeTick = executeTick;
+        }
     }
 }

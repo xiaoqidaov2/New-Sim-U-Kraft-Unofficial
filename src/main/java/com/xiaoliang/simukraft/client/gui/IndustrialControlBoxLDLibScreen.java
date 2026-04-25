@@ -71,7 +71,10 @@ public class IndustrialControlBoxLDLibScreen extends ModularUIGuiContainer {
     private static final int BASE_CARD_HEIGHT = 110;
     private static final int BASE_CARD_SPACING = 12;
 
+    private final BlockPos controlBoxPos;
+    private final String buildingFileName;
     private final ControlBoxUIHolder holder;
+    private int appliedScale;
 
     @Nonnull
     private static <T> T nn(@Nullable T value) {
@@ -85,12 +88,15 @@ public class IndustrialControlBoxLDLibScreen extends ModularUIGuiContainer {
 
     public IndustrialControlBoxLDLibScreen(BlockPos pos, String buildingFileName) {
         super(createHolderAndUI(pos, buildingFileName), 0);
+        this.controlBoxPos = pos.immutable();
+        this.buildingFileName = buildingFileName;
         this.holder = ((ModularUI) this.modularUI).holder instanceof ControlBoxUIHolder
                 ? (ControlBoxUIHolder) ((ModularUI) this.modularUI).holder
                 : null;
 
         // simukraft: 应用自适应缩放
         GuiScaleManager.applyBestFitScale(BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT);
+        this.appliedScale = GuiScaleManager.calculateBestScale(BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT);
 
         // 播放打开音效
         Minecraft.getInstance().getSoundManager().play(
@@ -140,14 +146,23 @@ public class IndustrialControlBoxLDLibScreen extends ModularUIGuiContainer {
 
     @Override
     public void render(@Nonnull GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
-        // simukraft: 保持自适应缩放
-        GuiScaleManager.applyBestFitScale(BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT);
         super.render(graphics, mouseX, mouseY, partialTicks);
 
         // 在裁剪完成后绘制tooltip
         if (holder != null) {
             holder.renderTooltip(graphics, mouseX, mouseY);
         }
+    }
+
+    @Override
+    public void resize(@Nonnull Minecraft minecraft, int width, int height) {
+        int targetScale = GuiScaleManager.calculateBestScale(BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT);
+        if (targetScale != appliedScale) {
+            minecraft.setScreen(new IndustrialControlBoxLDLibScreen(controlBoxPos, buildingFileName));
+            return;
+        }
+        GuiScaleManager.applyBestFitScale(BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT);
+        super.resize(minecraft, width, height);
     }
 
     @Override

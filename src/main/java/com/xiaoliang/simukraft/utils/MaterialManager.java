@@ -30,7 +30,7 @@ public class MaterialManager {
         }
 
         Block block = state.getBlock();
-        String blockId = ForgeRegistries.BLOCKS.getKey(block).toString();
+        String blockId = getBlockId(block);
 
         // 专家模式：所有方块都需要材料（除了跳过列表中的）
         if (ServerConfig.isExpertModeEnabled()) {
@@ -62,7 +62,7 @@ public class MaterialManager {
      */
     public static List<String> getRequiredMaterials(BlockState state) {
         Block block = state.getBlock();
-        String blockId = ForgeRegistries.BLOCKS.getKey(block).toString();
+        String blockId = getBlockId(block);
 
         // 专家模式：返回方块本身
         if (ServerConfig.isExpertModeEnabled()) {
@@ -81,6 +81,54 @@ public class MaterialManager {
     }
 
     /**
+     * 获取可用于该方块的物品 ID 集合。
+     * 该方法与 canUseItemForBlock 保持同一套判定规则，方便缓存快速命中。
+     */
+    public static Set<String> getAcceptedItemIds(BlockState state) {
+        LinkedHashSet<String> acceptedItemIds = new LinkedHashSet<>();
+        ResourceLocation blockKey = ForgeRegistries.BLOCKS.getKey(state.getBlock());
+        if (blockKey == null) {
+            return acceptedItemIds;
+        }
+
+        String blockId = blockKey.toString();
+        if (ServerConfig.isExpertModeEnabled()) {
+            addAcceptedMaterialId(acceptedItemIds, blockId);
+            return acceptedItemIds;
+        }
+
+        if (ServerConfig.isMaterialCategoryMatchingEnabled()) {
+            ServerConfig.MaterialGroupInfo groupInfo = ServerConfig.getMaterialGroup(blockId);
+            if (groupInfo != null) {
+                if (!groupInfo.getHeaders().isEmpty()) {
+                    if (!groupInfo.isHeader(blockId)) {
+                        addAcceptedMaterialId(acceptedItemIds, blockId);
+                    }
+                    for (String header : groupInfo.getHeaders()) {
+                        addAcceptedMaterialId(acceptedItemIds, header);
+                    }
+                    return acceptedItemIds;
+                }
+
+                for (String materialId : groupInfo.getAllMaterials()) {
+                    addAcceptedMaterialId(acceptedItemIds, materialId);
+                }
+                return acceptedItemIds;
+            }
+        }
+
+        addAcceptedMaterialId(acceptedItemIds, blockId);
+        return acceptedItemIds;
+    }
+
+    public static String getItemId(ItemStack itemStack) {
+        if (itemStack.isEmpty()) {
+            return "";
+        }
+        return getItemId(itemStack.getItem());
+    }
+
+    /**
      * 检查物品是否可以用于放置指定方块
      * 考虑通类匹配配置（组头可以匹配组员，组员不能匹配其他材料）
      * @param itemStack 物品堆
@@ -91,10 +139,10 @@ public class MaterialManager {
         if (itemStack.isEmpty()) return false;
 
         Item item = itemStack.getItem();
-        String itemId = ForgeRegistries.ITEMS.getKey(item).toString();
+        String itemId = getItemId(item);
 
         Block block = state.getBlock();
-        String blockId = ForgeRegistries.BLOCKS.getKey(block).toString();
+        String blockId = getBlockId(block);
 
         // 专家模式：需要精确匹配（但处理方块变体如墙上的火把）
         if (ServerConfig.isExpertModeEnabled()) {
@@ -149,6 +197,41 @@ public class MaterialManager {
         }
 
         return false;
+    }
+
+    private static void addAcceptedMaterialId(Set<String> acceptedItemIds, String materialId) {
+        acceptedItemIds.add(materialId);
+        addVariantItemIds(acceptedItemIds, materialId);
+    }
+
+    private static String getBlockId(Block block) {
+        ResourceLocation blockKey = ForgeRegistries.BLOCKS.getKey(block);
+        return blockKey != null ? blockKey.toString() : "";
+    }
+
+    private static String getItemId(Item item) {
+        ResourceLocation itemKey = ForgeRegistries.ITEMS.getKey(item);
+        return itemKey != null ? itemKey.toString() : "";
+    }
+
+    private static void addVariantItemIds(Set<String> acceptedItemIds, String blockId) {
+        String namespace = "minecraft";
+        String path = blockId;
+        int separatorIndex = blockId.indexOf(':');
+        if (separatorIndex >= 0) {
+            namespace = blockId.substring(0, separatorIndex);
+            path = blockId.substring(separatorIndex + 1);
+        }
+
+        switch (path) {
+            case "wall_torch" -> acceptedItemIds.add(namespace + ":torch");
+            case "soul_wall_torch" -> acceptedItemIds.add(namespace + ":soul_torch");
+            case "redstone_wall_torch" -> acceptedItemIds.add(namespace + ":redstone_torch");
+            case "wall_lantern" -> acceptedItemIds.add(namespace + ":lantern");
+            case "soul_wall_lantern" -> acceptedItemIds.add(namespace + ":soul_lantern");
+            default -> {
+            }
+        }
     }
 
     /**

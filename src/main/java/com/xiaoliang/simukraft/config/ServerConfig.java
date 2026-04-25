@@ -53,8 +53,6 @@ public class ServerConfig {
     public static final ForgeConfigSpec.ConfigValue<Integer> BUILDER_WARNING_COOLDOWN;
     public static final ForgeConfigSpec.ConfigValue<Boolean> BUILDER_ENABLE_XP_GAIN;
     public static final ForgeConfigSpec.ConfigValue<Integer> BUILDER_XP_PER_BLOCK;
-    public static final ForgeConfigSpec.ConfigValue<Boolean> BUILDER_FORCE_LOAD_CHUNKS;
-    public static final ForgeConfigSpec.ConfigValue<Integer> BUILDER_CHUNK_LOAD_RADIUS;
     public static final ForgeConfigSpec.ConfigValue<Integer> BUILDER_CHUNK_LOAD_WAIT_TICKS;
 
     // ==================== NPC等级配置 ====================
@@ -254,18 +252,9 @@ public class ServerConfig {
                 .defineInRange("xpPerBlock", 1, 0, 100);
 
         // 区块加载配置
-        BUILDER_FORCE_LOAD_CHUNKS = builder
-                .comment("建筑师工作时是否强制加载周围区块",
-                        "关闭后建筑师可能在区块未加载时停止工作")
-                .define("forceLoadChunks", true);
-
-        BUILDER_CHUNK_LOAD_RADIUS = builder
-                .comment("建筑师工作时强制加载区块的半径")
-                .defineInRange("chunkLoadRadius", 1, 1, 5);
-
         BUILDER_CHUNK_LOAD_WAIT_TICKS = builder
                 .comment("建筑师等待区块加载的最大tick数",
-                        "重启游戏后区块可能需要时间加载，此值决定最大等待时间")
+                        "工作流按需强加载后等待区块就绪的最大tick数")
                 .defineInRange("chunkLoadWaitTicks", 60, 10, 200);
 
         builder.pop();
@@ -588,14 +577,6 @@ public class ServerConfig {
 
     public static int getBuilderXpPerBlock() {
         return getCached("builderXpPerBlock", BUILDER_XP_PER_BLOCK);
-    }
-
-    public static boolean isBuilderForceLoadChunks() {
-        return getCached("builderForceLoadChunks", BUILDER_FORCE_LOAD_CHUNKS);
-    }
-
-    public static int getBuilderChunkLoadRadius() {
-        return getCached("builderChunkLoadRadius", BUILDER_CHUNK_LOAD_RADIUS);
     }
 
     public static int getBuilderChunkLoadWaitTicks() {

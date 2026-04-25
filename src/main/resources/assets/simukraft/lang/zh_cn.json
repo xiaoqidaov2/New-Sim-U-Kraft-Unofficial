@@ -736,12 +736,8 @@
   "gui.server_config.builder_enable_xp.tooltip": "§7建筑师是否获得经验",
   "gui.server_config.builder_xp_per_block": "§d每方块经验",
   "gui.server_config.builder_xp_per_block.tooltip": "§7每放置一个方块获得的经验值",
-  "gui.server_config.builder_force_load_chunks": "§d强制加载区块",
-  "gui.server_config.builder_force_load_chunks.tooltip": "§7工作时是否强制加载周围区块",
-  "gui.server_config.builder_chunk_load_radius": "§d区块加载半径",
-  "gui.server_config.builder_chunk_load_radius.tooltip": "§7强制加载区块的半径",
   "gui.server_config.builder_chunk_wait_ticks": "§d区块加载等待时间",
-  "gui.server_config.builder_chunk_wait_ticks.tooltip": "§7重启游戏后等待区块加载的最大 tick 数\n§7用于解决箱子读取不到的问题",
+  "gui.server_config.builder_chunk_wait_ticks.tooltip": "§7按工作流强加载后等待区块就绪的最大 tick 数\n§7用于解决箱子读取不到的问题",
 
   "gui.server_config.enable_expert_mode": "§a启用专家模式",
   "gui.server_config.enable_expert_mode.tooltip": "§7专家模式下建筑师需要所有材料（除了跳过列表中的）\n§7普通模式下使用基础材料列表和通类匹配组",

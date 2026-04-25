@@ -25,6 +25,19 @@ public class CityData extends SavedData {
     private final Map<UUID, CityInfo> cities = new HashMap<>();
     private final Map<String, UUID> playerCityMap = new HashMap<>(); // playerName -> cityUUID
 
+    private static boolean isGeneratedMayorPlaceholder(String playerName, UUID playerId) {
+        if (playerName == null || playerName.isBlank() || playerId == null) {
+            return true;
+        }
+
+        String uuidPrefix = playerId.toString().substring(0, 8);
+        return playerName.startsWith("Player_") || uuidPrefix.equals(playerName);
+    }
+
+    private static boolean isUsableStoredPlayerName(String playerName, UUID playerId) {
+        return !isGeneratedMayorPlaceholder(playerName, playerId);
+    }
+
     public static class CityInfo {
         private final UUID cityId;
         private String cityName;
@@ -265,18 +278,22 @@ public class CityData extends SavedData {
     }
 
     public boolean hasCity(String playerName) {
-        return playerCityMap.containsKey(playerName);
+        return getPlayerCityId(playerName) != null;
     }
 
     public boolean hasCity(UUID playerId) {
-        return false;
+        return getPlayerCityId(playerId) != null;
     }
 
     public UUID getPlayerCityId(String playerName) {
-        return playerCityMap.get(playerName);
+        return getPlayerCityIdByName(playerName);
     }
 
     public UUID getPlayerCityId(UUID playerId) {
+        if (playerId == null) {
+            return null;
+        }
+
         // 遍历所有城市，检查玩家是否是市长
         for (CityInfo city : cities.values()) {
             if (city.getMayorId().equals(playerId)) {
@@ -287,6 +304,10 @@ public class CityData extends SavedData {
     }
 
     public UUID getPlayerCityIdByName(String playerName) {
+        if (playerName == null || playerName.isBlank()) {
+            return null;
+        }
+
         // 首先检查playerCityMap
         if (playerCityMap.containsKey(playerName)) {
             return playerCityMap.get(playerName);
@@ -304,6 +325,71 @@ public class CityData extends SavedData {
             }
         }
         return null;
+    }
+
+    public UUID refreshPlayerCityAccess(ServerPlayer player) {
+        if (player == null) {
+            return null;
+        }
+
+        String playerName = player.getGameProfile().getName();
+        UUID playerId = player.getUUID();
+        boolean changed = false;
+
+        UUID mappedCityId = playerCityMap.get(playerName);
+        if (mappedCityId != null && !cities.containsKey(mappedCityId)) {
+            playerCityMap.remove(playerName);
+            mappedCityId = null;
+            changed = true;
+        }
+
+        UUID cityId = mappedCityId;
+        if (cityId == null) {
+            cityId = getPlayerCityId(playerId);
+        }
+        if (cityId == null) {
+            cityId = getPlayerCityIdByName(playerName);
+        }
+        if (cityId == null) {
+            if (changed) {
+                setDirty();
+            }
+            return null;
+        }
+
+        CityInfo city = getCity(cityId);
+        if (city == null) {
+            if (changed) {
+                setDirty();
+            }
+            return null;
+        }
+
+        if (!cityId.equals(playerCityMap.get(playerName))) {
+            playerCityMap.put(playerName, cityId);
+            changed = true;
+        }
+
+        if (city.getMayorId().equals(playerId)) {
+            String previousMayorName = city.getMayorName();
+            if (!playerName.equals(previousMayorName)) {
+                city.setMayorName(playerName);
+                changed = true;
+            }
+
+            if (previousMayorName != null
+                    && !previousMayorName.equals(playerName)
+                    && isGeneratedMayorPlaceholder(previousMayorName, playerId)
+                    && cityId.equals(playerCityMap.get(previousMayorName))) {
+                playerCityMap.remove(previousMayorName);
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            setDirty();
+        }
+        return cityId;
     }
 
     public CityInfo getCity(UUID cityId) {
@@ -519,6 +605,13 @@ public class CityData extends SavedData {
     }
 
     public double getPlayerCityFunds(UUID playerId) {
+        UUID cityId = getPlayerCityId(playerId);
+        if (cityId != null) {
+            CityInfo city = getCity(cityId);
+            if (city != null) {
+                return city.getFunds();
+            }
+        }
         return 0.0;
     }
 
@@ -637,6 +730,17 @@ public class CityData extends SavedData {
     }
 
     public boolean setPlayerCityFunds(UUID playerId, double funds) {
+        UUID cityId = getPlayerCityId(playerId);
+        if (cityId != null) {
+            CityInfo city = getCity(cityId);
+            if (city != null) {
+                BigDecimal bd = new BigDecimal(funds);
+                bd = bd.setScale(2, RoundingMode.HALF_UP);
+                city.setFunds(bd.doubleValue());
+                setDirty();
+                return true;
+            }
+        }
         return false;
     }
 
@@ -663,6 +767,13 @@ public class CityData extends SavedData {
     }
 
     public String getPlayerCityName(UUID playerId) {
+        UUID cityId = getPlayerCityId(playerId);
+        if (cityId != null) {
+            CityInfo city = getCity(cityId);
+            if (city != null) {
+                return city.getCityName();
+            }
+        }
         return "";
     }
     
@@ -738,11 +849,9 @@ public class CityData extends SavedData {
                 String playerName = data.getPlayerNameFromCity(cityId, playerId);
                 
                 // 如果找不到或名称无效，尝试从所有城市中查找
-                if (playerName == null || playerName.isEmpty() || 
-                    playerName.startsWith("Player_") || playerName.length() == 8) {
+                if (!isUsableStoredPlayerName(playerName, playerId)) {
                     String foundName = data.findPlayerNameFromCities(playerId);
-                    if (foundName != null && !foundName.isEmpty() && 
-                        !foundName.startsWith("Player_") && foundName.length() != 8) {
+                    if (isUsableStoredPlayerName(foundName, playerId)) {
                         playerName = foundName;
                     }
                 }
@@ -757,8 +866,7 @@ public class CityData extends SavedData {
                 // 同时更新城市信息中的市长名称（如果无效）
                 CityInfo city = data.cities.get(cityId);
                 if (city != null && city.getMayorId().equals(playerId)) {
-                    if (city.getMayorName() == null || city.getMayorName().isEmpty() ||
-                        city.getMayorName().startsWith("Player_") || city.getMayorName().length() == 8) {
+                    if (!isUsableStoredPlayerName(city.getMayorName(), playerId)) {
                         city.setMayorName(playerName);
                     }
                 }
@@ -789,7 +897,7 @@ public class CityData extends SavedData {
         for (CityInfo city : cities.values()) {
             if (city.getMayorId().equals(playerId)) {
                 String mayorName = city.getMayorName();
-                if (mayorName != null && !mayorName.isEmpty()) {
+                if (isUsableStoredPlayerName(mayorName, playerId)) {
                     return mayorName;
                 }
             }

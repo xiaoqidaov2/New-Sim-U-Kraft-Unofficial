@@ -117,7 +117,7 @@ public class CityPermissionManager {
 
         String playerName = player.getName().getString();
         CityData cityData = CityData.get(level);
-        UUID cityId = cityData.getPlayerCityIdByName(playerName);
+        UUID cityId = cityData.refreshPlayerCityAccess(player);
 
         if (cityId == null) {
             return PermissionLevel.NONE;

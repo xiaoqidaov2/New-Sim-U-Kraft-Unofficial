@@ -736,12 +736,8 @@
   "gui.server_config.builder_enable_xp.tooltip": "§7Whether builders gain experience",
   "gui.server_config.builder_xp_per_block": "§dXP Per Block",
   "gui.server_config.builder_xp_per_block.tooltip": "§7Experience gained per block placed",
-  "gui.server_config.builder_force_load_chunks": "§dForce Load Chunks",
-  "gui.server_config.builder_force_load_chunks.tooltip": "§7Whether to force load surrounding chunks while working",
-  "gui.server_config.builder_chunk_load_radius": "§dChunk Load Radius",
-  "gui.server_config.builder_chunk_load_radius.tooltip": "§7Radius of chunks to force load",
   "gui.server_config.builder_chunk_wait_ticks": "§dChunk Load Wait Ticks",
-  "gui.server_config.builder_chunk_wait_ticks.tooltip": "§7Max ticks to wait for chunk loading after game restart\n§7Used to fix chest reading issues",
+  "gui.server_config.builder_chunk_wait_ticks.tooltip": "§7Max ticks to wait for workflow chunk readiness after targeted force loading\n§7Used to fix chest reading issues",
 
   "gui.server_config.enable_expert_mode": "§aEnable Expert Mode",
   "gui.server_config.enable_expert_mode.tooltip": "§7In expert mode, builders need all materials (except skip list)\n§7In normal mode, use basic material list and category matching",

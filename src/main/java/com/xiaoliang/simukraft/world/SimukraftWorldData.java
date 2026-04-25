@@ -57,9 +57,8 @@ public class SimukraftWorldData extends SavedData {
             int cityPopulation = 0;
             
             CityData cityData = CityData.get(level);
-            String playerName = player.getName().getString();
-            if (cityData.hasCity(playerName)) {
-                UUID cityId = cityData.getPlayerCityId(playerName);
+            UUID cityId = cityData.refreshPlayerCityAccess(player);
+            if (cityId != null) {
                 CityData.CityInfo city = cityData.getCity(cityId);
                 if (city != null) {
                     cityName = city.getCityName();

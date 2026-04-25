@@ -449,7 +449,7 @@ public class ResidentManager {
 
                 for (CustomEntity npc : allNPCs) {
                     if (citizenIds.contains(npc.getUUID())) {
-                        boolean hasResidence = hasResidenceAssigned(server, npc.getFullName());
+                        boolean hasResidence = hasResidenceAssigned(server, npc.getUUID());
                         npcList.add(new NPCInfo(
                                 npc.getUUID(),
                                 npc.getFullName(),
@@ -1241,6 +1241,17 @@ public class ResidentManager {
     }
 
     /**
+     * 按住宅控制盒绑定的 resident_uuid 检查 NPC 是否已分配住宅。
+     */
+    public static boolean hasResidenceAssigned(MinecraftServer server, UUID npcUuid) {
+        if (server == null || npcUuid == null) {
+            return false;
+        }
+
+        return getNPCResidenceControlBoxPos(server, npcUuid) != null;
+    }
+
+    /**
      * 鏇存柊浣忓畢鍒嗛厤缂撳瓨
      */
     private static void updateResidenceCache(MinecraftServer server) {
@@ -1352,6 +1363,39 @@ public class ResidentManager {
     }
 
     /**
+     * 按住宅控制盒 resident_uuid 绑定关系获取住宅控制盒坐标。
+     */
+    public static BlockPos getNPCResidenceControlBoxPos(MinecraftServer server, UUID npcUuid) {
+        if (server == null || npcUuid == null) {
+            return null;
+        }
+
+        try {
+            Path worldDir = getWorldPath(server);
+            Path residenceDir = worldDir.resolve(FileUtils.MODE_DIR).resolve(RESIDENCE_DIR);
+
+            if (!Files.exists(residenceDir)) {
+                return null;
+            }
+
+            List<Path> skFiles = findSkFiles(residenceDir);
+
+            for (Path skFile : skFiles) {
+                BlockPos position = getPositionFromResidenceFileByUuid(skFile, npcUuid);
+                if (position != null) {
+                    return position;
+                }
+            }
+
+            return null;
+
+        } catch (Exception e) {
+            LOGGER.error("Error getting residence position for NPC UUID: " + npcUuid, e);
+            return null;
+        }
+    }
+
+    /**
      * 浠庝綇瀹呮枃浠朵腑鑾峰彇鎺у埗绠卞潗鏍?
      */
     private static String getPositionFromResidenceFile(Path skFile, String npcName) {
@@ -1376,6 +1420,66 @@ public class ResidentManager {
 
         } catch (Exception e) {
             LOGGER.error("Error getting position from residence file: " + skFile.getFileName(), e);
+            return null;
+        }
+    }
+
+    private static BlockPos getPositionFromResidenceFileByUuid(Path skFile, UUID npcUuid) {
+        try {
+            if (!Files.exists(skFile) || npcUuid == null) {
+                return null;
+            }
+
+            List<String> lines = Files.readAllLines(skFile, StandardCharsets.UTF_8);
+            String position = null;
+            UUID boundResidentUuid = null;
+
+            for (String line : lines) {
+                String trimmedLine = line.trim();
+                if (trimmedLine.startsWith("resident_uuid:")) {
+                    String uuidStr = trimmedLine.substring("resident_uuid:".length()).trim();
+                    if (!uuidStr.isEmpty()) {
+                        try {
+                            boundResidentUuid = UUID.fromString(uuidStr);
+                        } catch (IllegalArgumentException e) {
+                            LOGGER.warn("[ResidentManager] 住宅文件 resident_uuid 非法: {}", skFile.getFileName());
+                            return null;
+                        }
+                    }
+                } else if (trimmedLine.startsWith("position:")) {
+                    position = trimmedLine.substring("position:".length()).trim();
+                }
+            }
+
+            if (!npcUuid.equals(boundResidentUuid)) {
+                return null;
+            }
+
+            return parseResidencePosition(position);
+
+        } catch (Exception e) {
+            LOGGER.error("Error getting position from residence file by UUID: " + skFile.getFileName(), e);
+            return null;
+        }
+    }
+
+    private static BlockPos parseResidencePosition(String position) {
+        if (position == null || position.isBlank()) {
+            return null;
+        }
+
+        try {
+            String[] parts = position.replace("(", "").replace(")", "").split(",");
+            if (parts.length != 3) {
+                return null;
+            }
+
+            int x = Integer.parseInt(parts[0].trim());
+            int y = Integer.parseInt(parts[1].trim());
+            int z = Integer.parseInt(parts[2].trim());
+            return new BlockPos(x, y, z);
+        } catch (Exception e) {
+            LOGGER.error("Error parsing residence position: {}", position, e);
             return null;
         }
     }

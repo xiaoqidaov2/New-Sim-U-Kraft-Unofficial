@@ -3,88 +3,78 @@ package com.xiaoliang.simukraft.client.gui;
 import com.mojang.blaze3d.platform.Window;
 import net.minecraft.client.Minecraft;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-
 /**
  * GUI缩放管理类
  * 统一管理界面缩放，提供简洁的API
  */
 public class GuiScaleManager {
 
-    private static float originalScale = -1;
+    private static int originalScale = -1;
     private static final int DEFAULT_SCREEN_MARGIN = 16;
 
     /**
      * 从options.txt读取原始缩放值
      */
     public static int readOriginalScale() {
-        try {
-            File optionsFile = new File(Minecraft.getInstance().gameDirectory, "options.txt");
-            if (optionsFile.exists()) {
-                String content = new String(Files.readAllBytes(optionsFile.toPath()));
-                for (String line : content.split("\n")) {
-                    if (line.startsWith("guiScale:")) {
-                        return Integer.parseInt(line.substring("guiScale:".length()).trim());
-                    }
-                }
-            }
-        } catch (IOException | NumberFormatException e) {
-            // 读取失败返回默认值
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft == null) {
+            return 2;
         }
-        return 2;
+        return minecraft.options.guiScale().get();
     }
 
     /**
      * 应用3x缩放，保存原始值
      */
-    public static void apply3x() {
+    public static boolean apply3x() {
         // simukraft: 每次应用3x时都确保原始值已保存
         // 如果originalScale已经设置，保持原值；否则读取当前值
         if (originalScale < 0) {
             originalScale = readOriginalScale();
         }
-        setScale(3);
+        return setScaleIfNeeded(3);
     }
 
     /**
      * 优先使用 3x 缩放；若界面在当前分辨率下放不下，则自动降为 2x/1x。
      */
-    public static void applyBestFitScale(int contentWidth, int contentHeight) {
-        applyBestFitScale(3, contentWidth, contentHeight, DEFAULT_SCREEN_MARGIN);
+    public static boolean applyBestFitScale(int contentWidth, int contentHeight) {
+        return applyBestFitScale(3, contentWidth, contentHeight, DEFAULT_SCREEN_MARGIN);
     }
 
     /**
      * 根据目标界面尺寸选择能完整显示的最大 GUI 缩放。
      */
-    public static void applyBestFitScale(int preferredScale, int contentWidth, int contentHeight, int margin) {
+    public static boolean applyBestFitScale(int preferredScale, int contentWidth, int contentHeight, int margin) {
         if (originalScale < 0) {
             originalScale = readOriginalScale();
         }
         // 直接按内容尺寸反推可用 guiScale，避免固定 3x 时界面超出屏幕。
-        setScale(chooseBestScale(preferredScale, contentWidth, contentHeight, margin));
+        return setScaleIfNeeded(chooseBestScale(preferredScale, contentWidth, contentHeight, margin));
     }
 
     /**
      * 恢复原始缩放
      * 注意：不重置originalScale，以便嵌套界面返回时能保持原始值
      */
-    public static void restore() {
-        if (originalScale > 0) {
-            setScale(Math.round(originalScale));
+    public static boolean restore() {
+        if (originalScale >= 0) {
+            return setScaleIfNeeded(originalScale);
         }
+        return false;
     }
 
     /**
      * 强制恢复原始缩放并重置状态
      * 用于最终关闭时清理状态
      */
-    public static void forceRestore() {
-        if (originalScale > 0) {
-            setScale(Math.round(originalScale));
+    public static boolean forceRestore() {
+        boolean changed = false;
+        if (originalScale >= 0) {
+            changed = setScaleIfNeeded(originalScale);
         }
         originalScale = -1;
+        return changed;
     }
 
     /**
@@ -102,6 +92,22 @@ public class GuiScaleManager {
         Window window = mc.getWindow();
         mc.options.guiScale().set(scale);
         window.setGuiScale(scale);
+    }
+
+    public static int getCurrentScale() {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft == null) {
+            return 2;
+        }
+        return minecraft.options.guiScale().get();
+    }
+
+    public static boolean setScaleIfNeeded(int scale) {
+        if (getCurrentScale() == scale) {
+            return false;
+        }
+        setScale(scale);
+        return true;
     }
 
     private static int chooseBestScale(int preferredScale, int contentWidth, int contentHeight, int margin) {

@@ -23,7 +23,6 @@ import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.TicketType;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
@@ -50,7 +49,6 @@ import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Block;
@@ -419,12 +417,6 @@ public class CustomEntity extends Animal {
         isDying = true;
 
         if (!this.level().isClientSide) {
-            // 清理区块加载
-            if (loadedChunkPos != null) {
-                ((ServerLevel) this.level()).getChunkSource().removeRegionTicket(NPC_CHUNK_TICKET, loadedChunkPos, 2, loadedChunkPos);
-                loadedChunkPos = null;
-            }
-
             if (npcId != -1) {
                     // 获取城市信息用于发送死亡消息
                     UUID cityId = this.getCityId();
@@ -529,10 +521,6 @@ public class CustomEntity extends Animal {
 
     @Override
     public void remove(RemovalReason reason) {
-        if (!this.level().isClientSide && loadedChunkPos != null) {
-            ((ServerLevel) this.level()).getChunkSource().removeRegionTicket(NPC_CHUNK_TICKET, loadedChunkPos, 2, loadedChunkPos);
-            loadedChunkPos = null;
-        }
         super.remove(reason);
     }
 
@@ -683,22 +671,6 @@ public class CustomEntity extends Animal {
                 }
             }
 
-            // 处理区块加载 - 使用冷却时间减少更新频率
-            chunkTicketUpdateCooldown--;
-            if (chunkTicketUpdateCooldown <= 0) {
-                chunkTicketUpdateCooldown = CHUNK_TICKET_UPDATE_INTERVAL;
-                ChunkPos currentChunkPos = new ChunkPos(this.blockPosition());
-                if (loadedChunkPos == null || !loadedChunkPos.equals(currentChunkPos)) {
-                    // 卸载旧区块的加载
-                    if (loadedChunkPos != null) {
-                        ((ServerLevel) this.level()).getChunkSource().removeRegionTicket(NPC_CHUNK_TICKET, loadedChunkPos, 2, loadedChunkPos);
-                    }
-
-                    // 加载新区块
-                    ((ServerLevel) this.level()).getChunkSource().addRegionTicket(NPC_CHUNK_TICKET, currentChunkPos, 2, currentChunkPos);
-                    loadedChunkPos = currentChunkPos;
-                }
-            }
         }
 
         // 处理传送粒子效果
@@ -994,15 +966,6 @@ public class CustomEntity extends Animal {
     }
 
     private int aiRestoreDelay = -1; // AI恢复延迟计数器
-
-    // 区块加载相关
-    private static final TicketType<ChunkPos> NPC_CHUNK_TICKET = TicketType.create("simukraft:npc", (pos1, pos2) -> {
-        int compareX = Integer.compare(pos1.x, pos2.x);
-        return compareX != 0 ? compareX : Integer.compare(pos1.z, pos2.z);
-    });
-    private ChunkPos loadedChunkPos = null;
-    private int chunkTicketUpdateCooldown = 0; // 区块票证更新冷却
-    private static final int CHUNK_TICKET_UPDATE_INTERVAL = 20; // 每20tick（1秒）更新一次区块票证
 
     private void performTeleport() {
         if (targetPos != null) {
@@ -1300,6 +1263,9 @@ public class CustomEntity extends Animal {
 
     public void setConstructionTask(com.xiaoliang.simukraft.building.ConstructionTask task) {
         com.xiaoliang.simukraft.building.ConstructionTask previousTask = this.constructionTask;
+        if (previousTask != null && previousTask != task) {
+            previousTask.detachBuilder();
+        }
         this.constructionTask = task;
         if (task != null) {
             task.attachBuilder(this);

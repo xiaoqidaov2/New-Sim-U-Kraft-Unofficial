@@ -125,13 +125,22 @@ public class MaterialCategoryGroupsScreenLDLib extends ModularUIGuiContainer {
 
     @Override
     public void init() {
+        GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
         super.init();
+        clearUIReferences();
+        needsRefresh = true;
         // simukraft: 重新查找UI引用（因为UI是在super中创建的，当时currentInstance还未设置）
         findUIReferences();
         // simukraft: 初始化完成后刷新所有列表
         if (groupListGroup != null && headerListGroup != null && memberListGroup != null) {
             refreshAllLists();
         }
+    }
+
+    @Override
+    public void resize(Minecraft minecraft, int width, int height) {
+        GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
+        super.resize(minecraft, width, height);
     }
 
     /**
@@ -232,13 +241,25 @@ public class MaterialCategoryGroupsScreenLDLib extends ModularUIGuiContainer {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
-        GuiScaleManager.applyBestFitScale(WINDOW_WIDTH, WINDOW_HEIGHT);
         // simukraft: 首次渲染时刷新列表
         if (needsRefresh && groupListGroup != null) {
             refreshAllLists();
             needsRefresh = false;
         }
         super.render(graphics, mouseX, mouseY, partialTicks);
+    }
+
+    private void clearUIReferences() {
+        groupListGroup = null;
+        headerListGroup = null;
+        memberListGroup = null;
+        newGroupField = null;
+        headerField = null;
+        memberField = null;
+        deleteGroupBtn = null;
+        addHeaderBtn = null;
+        addMemberBtn = null;
+        addGroupBtn = null;
     }
 
     /**

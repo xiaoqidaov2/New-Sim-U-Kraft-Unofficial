@@ -82,24 +82,7 @@ public abstract class LDLibMenuScreen extends Screen {
 
         super.init();
 
-        // simukraft: 应用缩放后，使用缩放后的窗口尺寸重新计算
-        // Screen.width/height 是缩放后的逻辑尺寸，但我们需要根据实际缩放级别调整
-        Minecraft mc = Minecraft.getInstance();
-        int windowWidth = mc.getWindow().getWidth();
-        int windowHeight = mc.getWindow().getHeight();
-        int scale = mc.options.guiScale().get();
-
-        // 计算缩放后的逻辑尺寸
-        int scaledWidth = Math.max(1, windowWidth / scale);
-        int scaledHeight = Math.max(1, windowHeight / scale);
-
-        // 更新 Screen 的 width/height，确保背景渲染正确
-        this.width = scaledWidth;
-        this.height = scaledHeight;
-
-        // 使用缩放后的尺寸计算居中位置
-        this.guiLeft = (scaledWidth - getUIWidth()) / 2;
-        this.guiTop = (scaledHeight - getUIHeight()) / 2;
+        updateLayoutMetrics();
 
         // 创建ModularUI
         if (this.modularUI == null) {
@@ -119,11 +102,6 @@ public abstract class LDLibMenuScreen extends Screen {
 
     @Override
     public void render(@Nonnull GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
-        // simukraft: 保持缩放状态
-        if (enableAutoScale()) {
-            GuiScaleManager.applyBestFitScale(getPreferredScale(), getUIWidth(), getUIHeight(), 16);
-        }
-
         // 渲染背景（半透明黑色）
         this.renderBackground(graphics);
 
@@ -158,6 +136,15 @@ public abstract class LDLibMenuScreen extends Screen {
 
         // 渲染工具提示
         super.render(graphics, mouseX, mouseY, partialTicks);
+    }
+
+    @Override
+    public void resize(@Nonnull Minecraft minecraft, int width, int height) {
+        if (enableAutoScale()) {
+            GuiScaleManager.applyBestFitScale(getPreferredScale(), getUIWidth(), getUIHeight(), 16);
+        }
+        super.resize(minecraft, width, height);
+        updateLayoutMetrics();
     }
 
     @Override
@@ -306,6 +293,14 @@ public abstract class LDLibMenuScreen extends Screen {
      */
     public ModularUI getModularUI() {
         return modularUI;
+    }
+
+    private void updateLayoutMetrics() {
+        Minecraft mc = Minecraft.getInstance();
+        this.width = mc.getWindow().getGuiScaledWidth();
+        this.height = mc.getWindow().getGuiScaledHeight();
+        this.guiLeft = (this.width - getUIWidth()) / 2;
+        this.guiTop = (this.height - getUIHeight()) / 2;
     }
 
     /**

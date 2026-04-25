@@ -4,10 +4,14 @@ import com.xiaoliang.simukraft.entity.CustomEntity;
 import com.xiaoliang.simukraft.entity.WorkStatus;
 import com.xiaoliang.simukraft.entity.WorkSubState;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.ai.navigation.PathNavigation;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.phys.Vec3;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -16,7 +20,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * NPC休息处理器
+ * NPC休息处理流
  * 处理NPC的休息状态：所有NPC（工作中的和空闲的）在晚上都会返回家中休息
  */
 @SuppressWarnings("null")
@@ -25,12 +29,15 @@ public class NPCRestHandler {
 
     // 休息时间配置（游戏刻）
     private static final int EVENING_START_TIME = 12000; // 傍晚开始时间（约18:00）
-    private static final int EVENING_FORCE_TELEPORT_TIME = 14000; // 傍晚强制传送时间（约19:00），超过此时间未到家则传送
+    private static final int EVENING_FORCE_TELEPORT_TIME = 13000; // 晚上19:00仍未到家则强制传送
     private static final int MORNING_END_TIME = 0; // 早上结束时间（约6:00）
-    private static final int MORNING_PREPARE_TIME = 2000; // 早上准备出发时间（约5:00，游戏刻2000）
+    private static final int MORNING_PREPARE_TIME = 23000; // 早上准备出发时间（约5:00）
     @SuppressWarnings("unused")
     private static final int REST_CHECK_INTERVAL = 100; // 检查间隔（5秒）
     private static final int MAX_GOING_TO_WORK_TIME = 6000; // 最长去工作时间（游戏刻5分钟）
+    private static final int BED_SEARCH_HORIZONTAL_RADIUS = 8;
+    private static final int BED_SEARCH_VERTICAL_RADIUS = 4;
+    private static final long BED_REPATH_INTERVAL_TICKS = 40L;
 
     // 存储正在休息的NPC数据
     private static final Map<UUID, RestData> restingNPCs = new ConcurrentHashMap<>();
@@ -52,9 +59,10 @@ public class NPCRestHandler {
     private static final int REST_STAGE_IDLE = 0;
     private static final int REST_STAGE_GOING_HOME = 1;
     private static final int REST_STAGE_AT_HOME = 2;
+    private static final int REST_STAGE_SLEEPING = 3;
+    private static final int REST_STAGE_WAKING_UP = 4;
     @SuppressWarnings("unused")
-    private static final int REST_STAGE_GOING_TO_WORK = 4; // 新增：正在去工作
-    private static final int REST_STAGE_WAKING_UP = 3;
+    private static final int REST_STAGE_GOING_TO_WORK = 5; // 新增：正在去工作
 
     // 存储正在去工作的NPC数据
     private static final Map<UUID, GoingToWorkData> goingToWorkNPCs = new ConcurrentHashMap<>();
@@ -71,6 +79,8 @@ public class NPCRestHandler {
         @SuppressWarnings("unused")
         public long restStartTime;
         public boolean hasArrivedHome;
+        public BlockPos bedPos;
+        public long nextBedRetryTick;
 
         public RestData(CustomEntity npc, ServerLevel level) {
             this.npc = npc;
@@ -78,6 +88,8 @@ public class NPCRestHandler {
             this.restStage = REST_STAGE_IDLE;
             this.restStartTime = System.currentTimeMillis();
             this.hasArrivedHome = false;
+            this.bedPos = null;
+            this.nextBedRetryTick = Long.MIN_VALUE;
         }
     }
 
@@ -130,7 +142,7 @@ public class NPCRestHandler {
     public static boolean shouldPrepareForWork(ServerLevel level) {
         long dayTime = level.getDayTime() % 24000L;
         // 早上5:00到6:00之间准备出发
-        return dayTime >= MORNING_PREPARE_TIME && dayTime < EVENING_START_TIME;
+        return dayTime >= MORNING_PREPARE_TIME || dayTime < MORNING_END_TIME;
     }
 
     /**
@@ -455,10 +467,7 @@ public class NPCRestHandler {
         WorkStatus previousWorkStatus = npcPreviousWorkStatus.getOrDefault(npcUuid, WorkStatus.IDLE);
         String previousJob = npcPreviousJob.getOrDefault(npcUuid, "unemployed");
 
-        // 恢复NPC的正常活动（允许移动）
-        npc.setNoAi(false);
-        npc.setWorking(false); // 先设置为false，允许移动
-        npc.getNavigation().stop();
+        wakeUpAtHome(npc, level, restData);
 
         // 如果被雇佣的NPC，先寻路到工作岗位
         if (previousWorkStatus == WorkStatus.WORKING && !"unemployed".equals(previousJob)) {
@@ -503,9 +512,7 @@ public class NPCRestHandler {
                     sendWakeUpMessage(npc, level.getServer());
 
                     // 清理休息数据（但保留工作状态相关数据，等到达后再清理）
-                    restingNPCs.remove(npcUuid);
-                    npcPathfindingStatus.remove(npcUuid);
-                    npcSubStates.remove(npcUuid); // 关键修复：清理子状态数据
+                    clearRestWorkflowData(npcUuid, false);
 
                     LOGGER.info("NPC {} 结束休息，正在前往工作岗位: {}，职业: {}",
                         npc.getFullName(), workPos, previousJob);
@@ -549,17 +556,15 @@ public class NPCRestHandler {
             npc.getFullName(), previousWorkStatus, previousJob);
 
         // 清理休息数据
-        restingNPCs.remove(npcUuid);
-        npcPathfindingStatus.remove(npcUuid);
-        npcPreviousWorkStatus.remove(npcUuid);
-        npcPreviousJob.remove(npcUuid);
-        // 不再使用npcPreviousConstructionTask，建造任务统一从JSON恢复
+        clearRestWorkflowData(npcUuid, true);
     }
 
     /**
      * 恢复NPC的工作状态（带level参数的版本）
      */
     private static void restoreWorkStatus(CustomEntity npc, UUID npcUuid, WorkStatus previousWorkStatus, String previousJob, ServerLevel level) {
+        stopSleepingIfNeeded(npc);
+
         // 先恢复职业，再恢复工作状态，避免商业/NPC交互判定在过夜后读到旧职业
         if (previousJob != null && !previousJob.isBlank()) {
             npc.setJob(previousJob);
@@ -611,15 +616,7 @@ public class NPCRestHandler {
             npc.getFullName(), previousWorkStatus, previousJob);
 
         // 清理数据 - 确保完全清理所有休息状态数据
-        npcPreviousWorkStatus.remove(npcUuid);
-        npcPreviousJob.remove(npcUuid);
-        // 不再使用npcPreviousConstructionTask，建造任务统一从JSON恢复
-        npcPreviousPlanningTaskId.remove(npcUuid);
-
-        // 关键修复：清理休息状态数据，确保标签能正确更新
-        restingNPCs.remove(npcUuid);
-        npcSubStates.remove(npcUuid);
-        npcPathfindingStatus.remove(npcUuid);
+        clearRestWorkflowData(npcUuid, true);
 
         LOGGER.info("[NPCRestHandler] NPC {} 休息状态数据已完全清理，标签将恢复正常显示", npc.getFullName());
     }
@@ -926,12 +923,26 @@ public class NPCRestHandler {
 
             UUID npcUuid = npc.getUUID();
             RestData restData = restingNPCs.get(npcUuid);
+            GoingToWorkData workData = goingToWorkNPCs.get(npcUuid);
+
+            if (restData != null && shouldPrepareForWork(level, npc)) {
+                if (restData.hasArrivedHome) {
+                    enqueueMainThreadLevelTask(level, () -> prepareNPCForWork(npc, level, restData),
+                            "PrepareForWork-" + npcUuid);
+                } else {
+                    updateRestingNPC(npc, restData, level);
+                }
+
+                if (workData != null) {
+                    updateGoingToWorkStatus(npc, workData, level);
+                }
+                continue;
+            }
 
             if (shouldStartResting(level, npc)) {
                 // 应该开始休息 - 所有NPC都进入休息状态（优先级最高）
 
                 // 首先检查是否正在去工作，如果是则取消
-                GoingToWorkData workData = goingToWorkNPCs.get(npcUuid);
                 if (workData != null) {
                     // 正在去工作的路上，但到休息时间了，取消去工作，改为回家休息
                     LOGGER.info("[NPCRestHandler] NPC {} 正在去工作，但到休息时间了，优先回家休息", npc.getFullName());
@@ -980,21 +991,6 @@ public class NPCRestHandler {
                 }
 
                 // 更新正在去工作的NPC（检查是否超时需要传送）
-                GoingToWorkData workData = goingToWorkNPCs.get(npcUuid);
-                if (workData != null) {
-                    updateGoingToWorkStatus(npc, workData, level);
-                }
-            } else if (shouldPrepareForWork(level, npc)) {
-                // 工作开始前，被雇佣的NPC提前出发去工作
-                if (restData != null && restData.restStage == REST_STAGE_AT_HOME) {
-                    // NPC已经在家休息，准备出发去工作
-                    final RestData finalRestData = restData;
-                    enqueueMainThreadLevelTask(level, () -> prepareNPCForWork(npc, level, finalRestData),
-                            "PrepareForWork-" + npcUuid);
-                }
-
-                // 更新正在去工作的NPC
-                GoingToWorkData workData = goingToWorkNPCs.get(npcUuid);
                 if (workData != null) {
                     updateGoingToWorkStatus(npc, workData, level);
                 }
@@ -1022,11 +1018,14 @@ public class NPCRestHandler {
                 updateGoingHomeStatus(npc, restData, level);
                 break;
             case REST_STAGE_AT_HOME:
-                // 已经到家，保持静止
-                updateAtHomeStatus(npc, restData);
+                // 已经到家，进一步找床并进入睡觉状态
+                updateAtHomeStatus(npc, restData, level);
+                break;
+            case REST_STAGE_SLEEPING:
+                updateSleepingStatus(npc, restData, level);
                 break;
             case REST_STAGE_WAKING_UP:
-                // 正在醒来
+                // 起床
                 break;
             default:
                 break;
@@ -1064,8 +1063,7 @@ public class NPCRestHandler {
         if (distance > 50.0) {
             LOGGER.info("[NPCRestHandler] NPC {} 距离家{}格，超过50格，直接传送回家", npc.getFullName(), distance);
             teleportNPCHomeWithEffects(npc, homePos);
-            restData.hasArrivedHome = true;
-            restData.restStage = REST_STAGE_AT_HOME;
+            markArrivedHome(npc, restData);
             return;
         }
 
@@ -1075,23 +1073,13 @@ public class NPCRestHandler {
             LOGGER.info("[NPCRestHandler] NPC {} 超过19:00仍未到家（当前时间：{}），强制传送回家", 
                 npc.getFullName(), dayTime);
             teleportNPCHomeWithEffects(npc, homePos);
-            restData.hasArrivedHome = true;
-            restData.restStage = REST_STAGE_AT_HOME;
+            markArrivedHome(npc, restData);
             return;
         }
 
         // 如果距离小于3格，认为已到达
         if (distance < 3.0) {
-            restData.hasArrivedHome = true;
-            restData.restStage = REST_STAGE_AT_HOME;
-
-            // 停止移动
-            npc.getNavigation().stop();
-            npc.setDeltaMovement(Objects.requireNonNull(Vec3.ZERO));
-
-            // 更新状态标签
-            npc.setStatusLabel("gui.npc.status.at_home");
-
+            markArrivedHome(npc, restData);
             LOGGER.info("NPC {} 已到达住宅，开始休息", npc.getFullName());
         } else {
             // 检查是否需要重新寻路
@@ -1102,11 +1090,7 @@ public class NPCRestHandler {
                     LOGGER.info("[NPCRestHandler] NPC {} 距离家{}格（小于10格）但寻路失败，直接传送回家", 
                         npc.getFullName(), distance);
                     teleportNPCHomeWithEffects(npc, homePos);
-                    restData.hasArrivedHome = true;
-                    restData.restStage = REST_STAGE_AT_HOME;
-                    npc.getNavigation().stop();
-                    npc.setDeltaMovement(Objects.requireNonNull(Vec3.ZERO));
-                    npc.setStatusLabel("gui.npc.status.at_home");
+                    markArrivedHome(npc, restData);
                 } else {
                     // 重新启动寻路
                     LOGGER.info("[NPCRestHandler] NPC {} 重新启动寻路回家，当前距离: {}", npc.getFullName(), distance);
@@ -1136,6 +1120,15 @@ public class NPCRestHandler {
         spawnTeleportParticles(npc);
 
         LOGGER.info("[NPCRestHandler] NPC {} 已传送回家并添加粒子效果", npc.getFullName());
+    }
+
+    private static void markArrivedHome(CustomEntity npc, RestData restData) {
+        restData.hasArrivedHome = true;
+        restData.restStage = REST_STAGE_AT_HOME;
+        npcPathfindingStatus.put(npc.getUUID(), false);
+        npc.getNavigation().stop();
+        npc.setDeltaMovement(Objects.requireNonNull(Vec3.ZERO));
+        npc.setStatusLabel("gui.npc.status.at_home");
     }
 
     /**
@@ -1182,15 +1175,259 @@ public class NPCRestHandler {
     /**
      * 更新在家状态
      */
-    private static void updateAtHomeStatus(CustomEntity npc, RestData restData) {
-        // 确保NPC保持静止，禁用AI防止被攻击时击退或移动
-        npc.setNoAi(true);
-        npc.setDeltaMovement(Objects.requireNonNull(Vec3.ZERO));
-
-        // 偶尔改变朝向，让NPC看起来更自然
-        if (npc.tickCount % 200 == 0) {
-            npc.setYRot(npc.getYRot() + 45);
+    private static void updateAtHomeStatus(CustomEntity npc, RestData restData, ServerLevel level) {
+        if (npc == null || restData == null || level == null) {
+            return;
         }
+
+        if (!isBedStillValid(level, restData.bedPos)) {
+            restData.bedPos = null;
+        }
+
+        long gameTime = level.getGameTime();
+        if (restData.bedPos == null && gameTime >= restData.nextBedRetryTick) {
+            restData.bedPos = findNearbyBed(level, restData.homePos);
+            restData.nextBedRetryTick = gameTime + BED_REPATH_INTERVAL_TICKS;
+            if (restData.bedPos != null) {
+                LOGGER.info("[NPCRestHandler] NPC {} 在住宅附近找到床位: {}", npc.getFullName(), restData.bedPos);
+            }
+        }
+
+        if (restData.bedPos == null) {
+            npc.getNavigation().stop();
+            npc.setNoAi(true);
+            npc.setDeltaMovement(Objects.requireNonNull(Vec3.ZERO));
+            return;
+        }
+
+        BlockPos bedStandPos = findBedStandPos(level, restData.bedPos);
+        double bedDistance = npc.position().distanceTo(Vec3.atCenterOf(restData.bedPos));
+
+        if (bedDistance <= 2.2D) {
+            tryStartSleeping(npc, restData.bedPos);
+            restData.restStage = REST_STAGE_SLEEPING;
+            npcPathfindingStatus.put(npc.getUUID(), false);
+            return;
+        }
+
+        npc.setNoAi(false);
+        npc.setWorking(false);
+
+        if (bedStandPos == null) {
+            bedStandPos = restData.bedPos;
+        }
+
+        if (npc.getNavigation().isDone() || !Boolean.TRUE.equals(npcPathfindingStatus.get(npc.getUUID()))) {
+            boolean navigating = npc.getNavigation().moveTo(
+                bedStandPos.getX() + 0.5,
+                bedStandPos.getY() + 0.1,
+                bedStandPos.getZ() + 0.5,
+                1.0D
+            );
+            npcPathfindingStatus.put(npc.getUUID(), navigating);
+
+            if (!navigating && bedDistance <= 6.0D) {
+                npc.teleportTo(
+                    bedStandPos.getX() + 0.5,
+                    bedStandPos.getY() + 0.1,
+                    bedStandPos.getZ() + 0.5
+                );
+                tryStartSleeping(npc, restData.bedPos);
+                restData.restStage = REST_STAGE_SLEEPING;
+                npcPathfindingStatus.put(npc.getUUID(), false);
+            }
+        }
+    }
+
+    private static void updateSleepingStatus(CustomEntity npc, RestData restData, ServerLevel level) {
+        if (npc == null || restData == null || level == null) {
+            return;
+        }
+
+        if (!isBedStillValid(level, restData.bedPos)) {
+            restData.bedPos = null;
+            restData.restStage = REST_STAGE_AT_HOME;
+            npc.setNoAi(false);
+            return;
+        }
+
+        if (!npc.isSleeping()) {
+            restData.restStage = REST_STAGE_AT_HOME;
+            updateAtHomeStatus(npc, restData, level);
+            return;
+        }
+
+        npc.getNavigation().stop();
+        npc.setNoAi(true);
+        npc.setWorking(false);
+        npc.setDeltaMovement(Objects.requireNonNull(Vec3.ZERO));
+        npc.setStatusLabel("gui.npc.status.at_home");
+    }
+
+    private static void tryStartSleeping(CustomEntity npc, BlockPos bedPos) {
+        if (npc == null || bedPos == null) {
+            return;
+        }
+
+        if (npc.isSleeping()) {
+            npc.setNoAi(true);
+            npc.setDeltaMovement(Objects.requireNonNull(Vec3.ZERO));
+            return;
+        }
+
+        npc.getNavigation().stop();
+        npc.setDeltaMovement(Objects.requireNonNull(Vec3.ZERO));
+        npc.teleportTo(
+            bedPos.getX() + 0.5,
+            bedPos.getY() + 0.5625D,
+            bedPos.getZ() + 0.5
+        );
+        npc.startSleeping(bedPos);
+        npc.setNoAi(true);
+    }
+
+    private static void stopSleepingIfNeeded(CustomEntity npc) {
+        if (npc == null) {
+            return;
+        }
+        if (!npc.isSleeping()) {
+            npc.setNoAi(false);
+            return;
+        }
+
+        npc.stopSleeping();
+        npc.setNoAi(false);
+    }
+
+    private static void wakeUpAtHome(CustomEntity npc, ServerLevel level, RestData restData) {
+        if (npc == null) {
+            return;
+        }
+
+        if (restData != null) {
+            restData.restStage = REST_STAGE_WAKING_UP;
+        }
+
+        BlockPos wakePos = null;
+        if (level != null && restData != null && restData.bedPos != null) {
+            wakePos = findBedStandPos(level, restData.bedPos);
+        }
+        if (wakePos == null && restData != null) {
+            wakePos = restData.homePos;
+        }
+
+        stopSleepingIfNeeded(npc);
+        npc.getNavigation().stop();
+        npc.setWorking(false);
+        npc.setStatusLabel("gui.npc.status.at_home");
+
+        if (wakePos != null) {
+            npc.teleportTo(wakePos.getX() + 0.5, wakePos.getY() + 0.1, wakePos.getZ() + 0.5);
+        }
+        npc.setDeltaMovement(Objects.requireNonNull(Vec3.ZERO));
+    }
+
+    private static void clearRestWorkflowData(UUID npcUuid, boolean clearPreviousWorkData) {
+        restingNPCs.remove(npcUuid);
+        npcSubStates.remove(npcUuid);
+        npcPathfindingStatus.remove(npcUuid);
+        npcHomePositions.remove(npcUuid);
+        if (clearPreviousWorkData) {
+            npcPreviousWorkStatus.remove(npcUuid);
+            npcPreviousJob.remove(npcUuid);
+            npcPreviousPlanningTaskId.remove(npcUuid);
+        }
+    }
+
+    private static boolean isBedStillValid(ServerLevel level, BlockPos bedPos) {
+        if (level == null || bedPos == null || !level.isLoaded(bedPos)) {
+            return false;
+        }
+
+        BlockState bedState = level.getBlockState(bedPos);
+        return bedState.getBlock() instanceof BedBlock;
+    }
+
+    private static BlockPos findNearbyBed(ServerLevel level, BlockPos homePos) {
+        if (level == null || homePos == null) {
+            return null;
+        }
+
+        BlockPos bestBedPos = null;
+        double bestDistance = Double.MAX_VALUE;
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        for (int y = -BED_SEARCH_VERTICAL_RADIUS; y <= BED_SEARCH_VERTICAL_RADIUS; y++) {
+            for (int x = -BED_SEARCH_HORIZONTAL_RADIUS; x <= BED_SEARCH_HORIZONTAL_RADIUS; x++) {
+                for (int z = -BED_SEARCH_HORIZONTAL_RADIUS; z <= BED_SEARCH_HORIZONTAL_RADIUS; z++) {
+                    cursor.set(homePos.getX() + x, homePos.getY() + y, homePos.getZ() + z);
+                    if (!level.isLoaded(cursor)) {
+                        continue;
+                    }
+
+                    BlockState state = level.getBlockState(cursor);
+                    if (!(state.getBlock() instanceof BedBlock)) {
+                        continue;
+                    }
+                    if (state.hasProperty(BedBlock.PART) && state.getValue(BedBlock.PART) != BedPart.FOOT) {
+                        continue;
+                    }
+
+                    BlockPos candidateBedPos = cursor.immutable();
+                    if (findBedStandPos(level, candidateBedPos) == null) {
+                        continue;
+                    }
+
+                    double distance = candidateBedPos.distSqr(homePos);
+                    if (distance < bestDistance) {
+                        bestDistance = distance;
+                        bestBedPos = candidateBedPos;
+                    }
+                }
+            }
+        }
+        return bestBedPos;
+    }
+
+    private static BlockPos findBedStandPos(ServerLevel level, BlockPos bedPos) {
+        if (level == null || bedPos == null || !level.isLoaded(bedPos)) {
+            return null;
+        }
+
+        BlockState bedState = level.getBlockState(bedPos);
+        List<BlockPos> candidates = new ArrayList<>();
+
+        if (bedState.getBlock() instanceof BedBlock && bedState.hasProperty(BedBlock.FACING)) {
+            Direction facing = bedState.getValue(BedBlock.FACING);
+            candidates.add(bedPos.relative(facing.getOpposite()));
+            candidates.add(bedPos.relative(facing.getClockWise()));
+            candidates.add(bedPos.relative(facing.getCounterClockWise()));
+        }
+
+        for (Direction direction : Direction.Plane.HORIZONTAL) {
+            candidates.add(bedPos.relative(direction));
+        }
+
+        for (BlockPos candidate : candidates) {
+            if (canNpcStandAt(level, candidate)) {
+                return candidate.immutable();
+            }
+        }
+
+        return bedPos;
+    }
+
+    private static boolean canNpcStandAt(ServerLevel level, BlockPos pos) {
+        if (level == null || pos == null) {
+            return false;
+        }
+        BlockPos abovePos = pos.above();
+        if (!level.isLoaded(pos) || !level.isLoaded(abovePos)) {
+            return false;
+        }
+
+        return level.getBlockState(pos).canBeReplaced()
+            && level.getBlockState(abovePos).canBeReplaced()
+            && level.getBlockState(pos.below()).isFaceSturdy(level, pos.below(), Direction.UP);
     }
 
     /**
@@ -1200,6 +1437,7 @@ public class NPCRestHandler {
         if (npc == null || level == null || restData == null) return;
 
         UUID npcUuid = npc.getUUID();
+        wakeUpAtHome(npc, level, restData);
 
         // 获取NPC的工作状态和职业
         WorkStatus previousWorkStatus = npcPreviousWorkStatus.getOrDefault(npcUuid, WorkStatus.IDLE);
@@ -1226,7 +1464,7 @@ public class NPCRestHandler {
             npc.getFullName(), workPos, previousJob);
 
         // 从休息数据中移除（不再处于休息状态）
-        restingNPCs.remove(npcUuid);
+        clearRestWorkflowData(npcUuid, false);
 
         // 允许NPC移动
         npc.setNoAi(false);
@@ -1437,31 +1675,12 @@ public class NPCRestHandler {
      * 获取NPC的住宅位置
      */
     private static BlockPos getNPCHomePosition(CustomEntity npc, MinecraftServer server) {
-        if (npc == null || server == null) return null;
-
-        String npcName = npc.getFullName();
-        if (npcName == null || npcName.isEmpty()) return null;
-
-        // 从ResidentManager获取住宅位置
-        String positionStr = ResidentManager.getNPCResidencePosition(server, npcName);
-        if (positionStr == null || positionStr.isEmpty()) {
+        if (npc == null || server == null) {
             return null;
         }
 
-        // 解析位置字符串 (x, y, z)
-        try {
-            String[] parts = positionStr.replace("(", "").replace(")", "").split(",");
-            if (parts.length == 3) {
-                int x = Integer.parseInt(parts[0].trim());
-                int y = Integer.parseInt(parts[1].trim());
-                int z = Integer.parseInt(parts[2].trim());
-                return new BlockPos(x, y, z);
-            }
-        } catch (Exception e) {
-            LOGGER.error("解析NPC住宅位置失败: {}", positionStr, e);
-        }
-
-        return null;
+        // 住宅归属必须以住宅控制盒 resident_uuid 绑定为准，避免按名字匹配回错家。
+        return ResidentManager.getNPCResidenceControlBoxPos(server, npc.getUUID());
     }
 
     /**

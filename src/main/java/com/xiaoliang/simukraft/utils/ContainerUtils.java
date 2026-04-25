@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
@@ -663,6 +664,90 @@ public class ContainerUtils {
     }
 
     /**
+     * 快照当前容器槽位，用于低频缓存建筑材料。
+     */
+    public static List<ContainerSlotSnapshot> snapshotContainerSlots(Level level, BlockPos pos) {
+        List<ContainerSlotSnapshot> snapshots = new ArrayList<>();
+        BlockPos safePos = Objects.requireNonNull(pos);
+        BlockEntity blockEntity = level.getBlockEntity(safePos);
+        if (blockEntity == null || blockEntity.isRemoved()) {
+            return snapshots;
+        }
+
+        Optional<IItemHandler> cap = blockEntity.getCapability(ForgeCapabilities.ITEM_HANDLER).resolve();
+        if (cap.isPresent()) {
+            IItemHandler handler = cap.get();
+            for (int i = 0; i < handler.getSlots(); i++) {
+                ItemStack stack = handler.getStackInSlot(i);
+                if (!stack.isEmpty()) {
+                    snapshots.add(new ContainerSlotSnapshot(i, true, stack.copy()));
+                }
+            }
+            return snapshots;
+        }
+
+        if (blockEntity instanceof Container container) {
+            for (int i = 0; i < container.getContainerSize(); i++) {
+                ItemStack stack = container.getItem(i);
+                if (!stack.isEmpty()) {
+                    snapshots.add(new ContainerSlotSnapshot(i, false, stack.copy()));
+                }
+            }
+        }
+
+        return snapshots;
+    }
+
+    /**
+     * 按缓存槽位定点消耗 1 个物品，避免再次遍历整箱。
+     */
+    public static boolean consumeSingleItemAtSlot(Level level, BlockPos pos, int slot, boolean useItemHandler,
+                                                  Predicate<ItemStack> matcher) {
+        BlockPos safePos = Objects.requireNonNull(pos);
+        BlockEntity blockEntity = level.getBlockEntity(safePos);
+        if (blockEntity == null || blockEntity.isRemoved()) {
+            return false;
+        }
+
+        if (useItemHandler) {
+            Optional<IItemHandler> cap = blockEntity.getCapability(ForgeCapabilities.ITEM_HANDLER).resolve();
+            if (cap.isEmpty()) {
+                return false;
+            }
+
+            IItemHandler handler = cap.get();
+            if (slot < 0 || slot >= handler.getSlots()) {
+                return false;
+            }
+
+            ItemStack stack = handler.getStackInSlot(slot);
+            if (stack.isEmpty() || !matcher.test(stack)) {
+                return false;
+            }
+
+            ItemStack extracted = handler.extractItem(slot, 1, false);
+            return !extracted.isEmpty();
+        }
+
+        if (!(blockEntity instanceof Container container) || slot < 0 || slot >= container.getContainerSize()) {
+            return false;
+        }
+
+        ItemStack stack = container.getItem(slot);
+        if (stack.isEmpty() || !matcher.test(stack)) {
+            return false;
+        }
+
+        stack.shrink(1);
+        if (stack.isEmpty()) {
+            container.setItem(slot, Objects.requireNonNull(ItemStack.EMPTY));
+        }
+        container.setChanged();
+        blockEntity.setChanged();
+        return true;
+    }
+
+    /**
      * 包装类：统一访问容器中的单个槽位
      */
     public static class SlotAccessor {
@@ -702,6 +787,9 @@ public class ContainerUtils {
             }
             return itemHandler.getSlotLimit(slot);
         }
+    }
+
+    public record ContainerSlotSnapshot(int slot, boolean usesItemHandler, ItemStack stack) {
     }
 
     /**

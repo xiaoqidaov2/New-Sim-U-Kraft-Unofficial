@@ -36,8 +36,9 @@ public class CheckCityStatusPacket {
             if (player != null) {
                 ServerLevel level = player.serverLevel();
                 CityData cityData = CityData.get(level);
-                String playerName = player.getName().getString();
+                String playerName = player.getGameProfile().getName();
                 UUID playerUUID = player.getUUID();
+                UUID playerCityId = cityData.refreshPlayerCityAccess(player);
                 
                 // 检查当前城市核心位置是否已经有城市
                 CityData.CityInfo cityInfo = cityData.getCityByCorePos(message.cityCorePos);
@@ -45,7 +46,7 @@ public class CheckCityStatusPacket {
                 
                 if (hasData) {
                     // 城市已存在
-                    boolean isMayor = cityInfo.isMayor(playerName);
+                    boolean isMayor = cityInfo.isMayor(playerUUID);
                     boolean isOfficial = cityInfo.isOfficial(playerName);
                     boolean canManage = isMayor || isOfficial; // 市长或官员都可以管理
                     String cityName = cityInfo.getCityName();
@@ -63,15 +64,15 @@ public class CheckCityStatusPacket {
                         }
                     }
 
-                    // 检查玩家是否已有城市（使用玩家名检查，官员也在playerCityMap中）
-                    boolean hasCity = cityData.hasCity(playerName);
+                    // 登录自修复后直接使用修复结果，避免旧映射导致界面误判
+                    boolean hasCity = playerCityId != null;
 
                     // 发送响应包给客户端（官员也可以管理城市）
                     CityStatusResponsePacket responsePacket = new CityStatusResponsePacket(hasCity, canManage, hasData, message.cityCorePos, cityName, population, mayorName);
                     NetworkManager.sendToPlayer(responsePacket, player);
                 } else {
-                    // 城市不存在，检查玩家是否已有城市（使用玩家名）
-                    boolean hasCity = cityData.hasCity(playerName);
+                    // 城市不存在时也沿用登录自修复结果
+                    boolean hasCity = playerCityId != null;
 
                     // 发送响应包给客户端
                     CityStatusResponsePacket responsePacket = new CityStatusResponsePacket(hasCity, false, hasData, message.cityCorePos, "", 0, "");

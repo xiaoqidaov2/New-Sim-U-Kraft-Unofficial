@@ -16,11 +16,17 @@ import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraftforge.registries.ForgeRegistries;
 import net.minecraftforge.network.NetworkEvent;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
 import java.util.function.Supplier;
 
 public class MaterialRequirementsRequestPacket {
@@ -107,9 +113,9 @@ public class MaterialRequirementsRequestPacket {
         // 用于追踪已处理的双格方块位置，避免重复计数
         Set<BlockPos> processedDoubleBlocks = new HashSet<>();
 
-        // 获取未放置的方块（从当前索引到末尾）
+        // 直接复用任务的只读方块列表，避免每次请求复制整份蓝图数据。
         int currentIndex = task.getCurrentBlockIndex();
-        List<ConstructionTask.BlockInfo> blocks = getBlocksToPlace(task);
+        List<ConstructionTask.BlockInfo> blocks = task.getBlocksToPlace();
 
         for (int i = currentIndex; i < blocks.size(); i++) {
             ConstructionTask.BlockInfo blockInfo = blocks.get(i);
@@ -236,25 +242,20 @@ public class MaterialRequirementsRequestPacket {
      */
     private static Map<String, Integer> countMaterialsInChests(ServerLevel level, BlockPos buildBoxPos) {
         Map<String, Integer> chestMaterials = new HashMap<>();
-        
-        // 确保区块已加载
         BlockPos safeBuildBoxPos = Objects.requireNonNull(buildBoxPos);
-        ChunkPos chunkPos = new ChunkPos(safeBuildBoxPos);
-        level.setChunkForced(chunkPos.x, chunkPos.z, true);
-        
+
         // 搜索范围：以建筑盒为中心上下左右5格
         for (int x = -5; x <= 5; x++) {
             for (int y = -5; y <= 5; y++) {
                 for (int z = -5; z <= 5; z++) {
                     BlockPos checkPos = safeBuildBoxPos.offset(x, y, z);
-                    
+
                     // 检查是否是容器（支持Container和IItemHandler）
                     if (ContainerUtils.isContainer(level, checkPos)) {
                         // 获取容器中的所有物品
                         List<ItemStack> items = ContainerUtils.getAllItems(level, checkPos);
                         for (ItemStack stack : items) {
                             if (!stack.isEmpty()) {
-                                // 获取物品对应的方块ID
                                 String blockId = getBlockIdFromItem(stack);
                                 if (blockId != null) {
                                     chestMaterials.put(blockId, chestMaterials.getOrDefault(blockId, 0) + stack.getCount());
@@ -265,7 +266,7 @@ public class MaterialRequirementsRequestPacket {
                 }
             }
         }
-        
+
         return chestMaterials;
     }
 
@@ -281,25 +282,6 @@ public class MaterialRequirementsRequestPacket {
         }
         
         return null;
-    }
-
-    /**
-     * 获取建造任务中所有需要放置的方块
-     */
-    private static List<ConstructionTask.BlockInfo> getBlocksToPlace(ConstructionTask task) {
-        List<ConstructionTask.BlockInfo> blocks = new ArrayList<>();
-        try {
-            java.lang.reflect.Field field = ConstructionTask.class.getDeclaredField("blocksToPlace");
-            field.setAccessible(true);
-            @SuppressWarnings("unchecked")
-            List<ConstructionTask.BlockInfo> blockList = (List<ConstructionTask.BlockInfo>) field.get(task);
-            if (blockList != null) {
-                blocks.addAll(blockList);
-            }
-        } catch (Exception e) {
-            // 无法获取方块列表
-        }
-        return blocks;
     }
 
     /**

@@ -109,8 +109,7 @@ public class SyncConfigPacket {
             case "builderWarningCooldown" -> ServerConfig.BUILDER_WARNING_COOLDOWN.set(intValue);
             case "builderEnableXpGain" -> ServerConfig.BUILDER_ENABLE_XP_GAIN.set(boolValue);
             case "builderXpPerBlock" -> ServerConfig.BUILDER_XP_PER_BLOCK.set(intValue);
-            case "builderForceLoadChunks" -> ServerConfig.BUILDER_FORCE_LOAD_CHUNKS.set(boolValue);
-            case "builderChunkLoadRadius" -> ServerConfig.BUILDER_CHUNK_LOAD_RADIUS.set(intValue);
+            case "builderChunkLoadWaitTicks" -> ServerConfig.BUILDER_CHUNK_LOAD_WAIT_TICKS.set(intValue);
 
             // 通用配置 - 建造模式
             case "enableCreativeMode" -> ServerConfig.ENABLE_CREATIVE_MODE.set(boolValue);
