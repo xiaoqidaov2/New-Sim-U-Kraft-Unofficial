@@ -501,6 +501,17 @@ public class CustomEntity extends Animal {
                         cityData.removeCitizenFromCity(cityId, this.getUUID());
                     }
 
+                    // menglan: NPC死亡时自动解雇，释放工作方块
+                    try {
+                        com.xiaoliang.simukraft.employment.service.EmploymentService employmentService =
+                            com.xiaoliang.simukraft.employment.service.EmploymentServices.get(serverLevel.getServer());
+                        com.xiaoliang.simukraft.employment.service.EmploymentCommands.FireByNpcCommand fireCommand =
+                            new com.xiaoliang.simukraft.employment.service.EmploymentCommands.FireByNpcCommand(this.getUUID());
+                        employmentService.fireByNpc(fireCommand);
+                    } catch (Exception e) {
+                        Simukraft.LOGGER.error("[CustomEntity] NPC {} 死亡时解雇失败", this.getFullName(), e);
+                    }
+
                     PopulationData populationData = PopulationData.get(serverLevel);
                     populationData.removePopulation();
                     populationData.syncToAllPlayers(serverLevel);
