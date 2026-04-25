@@ -21,6 +21,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @SuppressWarnings("null")
 public class ClientToastHUDOverlay implements IGuiOverlay {
     public static final ClientToastHUDOverlay INSTANCE = new ClientToastHUDOverlay();
+    private static final long TOAST_DURATION_MS = 3000L;
+    private static final long CLEANUP_INTERVAL_MS = 5000L;
     private static final ResourceLocation W1_TEXTURE = ResourceLocation.parse("simukraft:textures/gui/w1.png");
     private static final ResourceLocation W2_TEXTURE = ResourceLocation.parse("simukraft:textures/gui/w2.png");
     private static final ResourceLocation G1_TEXTURE = ResourceLocation.parse("simukraft:textures/gui/g1.png");
@@ -31,12 +33,13 @@ public class ClientToastHUDOverlay implements IGuiOverlay {
     
     // 存储每个玩家的toast显示状态
     private static final Map<UUID, ToastInfo> playerToasts = new ConcurrentHashMap<>();
+    private static volatile long lastCleanupTime = 0L;
     
     private static class ToastInfo {
-        final ResourceLocation texture;
+        ResourceLocation texture;
         long startTime;
-        final long duration;
-        final com.xiaoliang.simukraft.world.CityUpgradeManager.CityUpgrade upgrade;
+        long duration;
+        com.xiaoliang.simukraft.world.CityUpgradeManager.CityUpgrade upgrade;
         
         ToastInfo(ResourceLocation texture, long duration, com.xiaoliang.simukraft.world.CityUpgradeManager.CityUpgrade upgrade) {
             this.texture = texture;
@@ -49,7 +52,10 @@ public class ClientToastHUDOverlay implements IGuiOverlay {
             return System.currentTimeMillis() - startTime > duration;
         }
         
-        void reset() {
+        void update(ResourceLocation texture, long duration, com.xiaoliang.simukraft.world.CityUpgradeManager.CityUpgrade upgrade) {
+            this.texture = texture;
+            this.duration = duration;
+            this.upgrade = upgrade;
             this.startTime = System.currentTimeMillis();
         }
         
@@ -76,6 +82,7 @@ public class ClientToastHUDOverlay implements IGuiOverlay {
     @Override
     public void render(@Nonnull ForgeGui gui, @Nonnull GuiGraphics guiGraphics, float partialTick, int screenWidth, int screenHeight) {
         Minecraft mc = Objects.requireNonNull(Minecraft.getInstance());
+        pruneExpiredToasts(false);
         if (mc.player == null) {
             return;
         }
@@ -208,12 +215,11 @@ public class ClientToastHUDOverlay implements IGuiOverlay {
         // 显示toast
         ToastInfo toastInfo = playerToasts.get(playerId);
         if (toastInfo != null) {
-            // 如果已有toast，重置时间
-            toastInfo.reset();
+            toastInfo.update(texture, TOAST_DURATION_MS, upgrade);
         } else {
-            // 创建新的toast，显示3秒
-            playerToasts.put(playerId, new ToastInfo(texture, 3000, upgrade));
+            playerToasts.put(playerId, new ToastInfo(texture, TOAST_DURATION_MS, upgrade));
         }
+        pruneExpiredToasts(false);
     }
     
     /**
@@ -228,6 +234,20 @@ public class ClientToastHUDOverlay implements IGuiOverlay {
      */
     public static void clearToast(UUID playerId) {
         playerToasts.remove(playerId);
+    }
+
+    public static void clearAllToasts() {
+        playerToasts.clear();
+        lastCleanupTime = 0L;
+    }
+
+    private static void pruneExpiredToasts(boolean force) {
+        long now = System.currentTimeMillis();
+        if (!force && now - lastCleanupTime < CLEANUP_INTERVAL_MS) {
+            return;
+        }
+        lastCleanupTime = now;
+        playerToasts.entrySet().removeIf(entry -> entry.getValue().isExpired());
     }
 
     private static float computeBoundedScale(int textWidth, int maxWidth, float preferredScale, float minScale) {

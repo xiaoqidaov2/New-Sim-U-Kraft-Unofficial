@@ -248,14 +248,17 @@ public class CityOfficialScreen extends ModularUIGuiContainer {
     // ==================== 渲染 ====================
 
     @Override
-    public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTicks) {
-        // 自动刷新
+    public void containerTick() {
+        super.containerTick();
         long currentTime = System.currentTimeMillis();
         if (currentTime - lastRefreshTime >= REFRESH_INTERVAL_MS) {
             lastRefreshTime = currentTime;
             requestOfficialListFromServer();
         }
+    }
 
+    @Override
+    public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTicks) {
         super.render(nn(guiGraphics), mouseX, mouseY, partialTicks);
     }
 

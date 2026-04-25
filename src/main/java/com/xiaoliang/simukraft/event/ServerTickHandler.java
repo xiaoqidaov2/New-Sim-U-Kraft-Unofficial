@@ -19,11 +19,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Mod.EventBusSubscriber(modid = "simukraft", bus = Mod.EventBusSubscriber.Bus.FORGE)
 @SuppressWarnings("null")
@@ -32,7 +32,7 @@ public class ServerTickHandler {
     private static ServerPlayer delayedPlayer;
     
     // 使用Map来跟踪每个玩家的睡眠状态，更可靠
-    private static final Map<UUID, Boolean> playerSleepingStates = new HashMap<>();
+    private static final Map<UUID, Boolean> playerSleepingStates = new ConcurrentHashMap<>();
 
     // 添加日志记录器
     private static final Logger LOGGER = LogManager.getLogger();
@@ -71,23 +71,7 @@ public class ServerTickHandler {
             // 处理延迟的NPC处理
             if (delayedPlayer != null) {
                 if (delayTicks-- <= 0) {
-                    ServerLevel level = delayedPlayer.serverLevel();
-                    // 使用覆盖整个世界的AABB
-                    AABB worldBounds = new AABB(
-                            Double.NEGATIVE_INFINITY,
-                            Double.NEGATIVE_INFINITY,
-                            Double.NEGATIVE_INFINITY,
-                            Double.POSITIVE_INFINITY,
-                            Double.POSITIVE_INFINITY,
-                            Double.POSITIVE_INFINITY
-                    );
-
-                    for (CustomEntity npc : level.getEntitiesOfClass(
-                            CustomEntity.class, worldBounds)) {
-                        if (!npc.isDataRecorded()) {
-                            npc.initializeName();
-                        }
-                    }
+                    initializePendingNpcData(delayedPlayer.serverLevel());
                     delayedPlayer = null;
                 }
             }
@@ -114,6 +98,20 @@ public class ServerTickHandler {
     }
 
     /**
+     * 登录延迟阶段只处理当前世界已缓存的 NPC，避免为了补名字扫描整张世界。
+     */
+    private static void initializePendingNpcData(ServerLevel level) {
+        if (level == null) {
+            return;
+        }
+        for (CustomEntity npc : NPCTaskScheduler.getNPCsInLevel(level)) {
+            if (!npc.isDataRecorded()) {
+                npc.initializeName();
+            }
+        }
+    }
+
+    /**
      * 提交工作进度更新任务到多线程调度器
      */
     private static void submitWorkProgressTasks(MinecraftServer server) {
@@ -135,7 +133,7 @@ public class ServerTickHandler {
         if (allNPCs.isEmpty()) return;
 
         // 将NPC按世界分组
-        Map<ServerLevel, List<CustomEntity>> npcsByLevel = new HashMap<>();
+        Map<ServerLevel, List<CustomEntity>> npcsByLevel = new ConcurrentHashMap<>();
         for (CustomEntity npc : allNPCs) {
             if (npc.level() instanceof ServerLevel level) {
                 npcsByLevel.computeIfAbsent(level, k -> new java.util.ArrayList<>()).add(npc);

@@ -563,14 +563,17 @@ public class CityCitizenScreen extends AbstractTransitionScreen {
     }
 
     @Override
-    public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTicks) {
-        // 自动刷新市民列表
+    public void tick() {
+        super.tick();
         long currentTime = System.currentTimeMillis();
         if (currentTime - lastRefreshTime >= REFRESH_INTERVAL_MS) {
             lastRefreshTime = currentTime;
             requestCitizenListFromServer();
         }
+    }
 
+    @Override
+    public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTicks) {
         // 绘制黑色半透明背景（调整透明度）
         guiGraphics.fillGradient(0, 0, this.width, this.height, 0x80000000, 0x80000000);
 

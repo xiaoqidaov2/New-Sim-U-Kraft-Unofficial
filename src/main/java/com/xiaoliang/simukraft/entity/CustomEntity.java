@@ -552,33 +552,34 @@ public class CustomEntity extends Animal {
         }
 
         if (!this.level().isClientSide) {
+            String currentJob = getJob();
+            boolean aliveAndActive = !this.isDeadOrDying() && !isDying;
             // 计算是否有活跃任务（用于同步到客户端）
             boolean hasActiveWork = false;
             
             // 建筑师：检查是否有未完成的建造任务
-            if ("builder".equals(getJob()) && constructionTask != null 
+            if ("builder".equals(currentJob) && constructionTask != null 
                     && !constructionTask.isCompleted() && constructionTask.hasNextBlock()) {
                 hasActiveWork = true;
             }
             
             // 规划师：检查是否有进行中的规划任务
-            if ("planner".equals(getJob())) {
-                if (plannerWorkHandler == null) {
-                    plannerWorkHandler = new com.xiaoliang.simukraft.utils.PlannerWorkHandler(this);
-                }
-                if (plannerWorkHandler.hasActiveTask()) {
+            if ("planner".equals(currentJob)) {
+                if (getOrCreatePlannerWorkHandler().hasActiveTask()) {
                     hasActiveWork = true;
                 }
             }
             
             // 牧羊人和屠夫：保持原有行为（工作时挥手）
-            if (("shepherd".equals(getJob()) || "butcher".equals(getJob())) 
+            if (("shepherd".equals(currentJob) || "butcher".equals(currentJob))
                     && getWorkStatus() == WorkStatus.WORKING) {
                 hasActiveWork = true;
             }
             
             // 同步活跃任务状态到客户端
-            this.entityData.set(DATA_HAS_ACTIVE_TASK, hasActiveWork);
+            if (this.entityData.get(DATA_HAS_ACTIVE_TASK) != hasActiveWork) {
+                this.entityData.set(DATA_HAS_ACTIVE_TASK, hasActiveWork);
+            }
             
             // 触发挥手动画（服务器端）
             if (hasActiveWork && this.tickCount % 20 == 0) {
@@ -593,26 +594,26 @@ public class CustomEntity extends Animal {
 
             // 处理居民分配（每5秒检查一次）
             // 修复：死亡NPC不应该再分配住宅
-            if (nameInitialized && fullName != null && !fullName.isEmpty()
+            if (aliveAndActive && nameInitialized && fullName != null && !fullName.isEmpty()
                     && this.tickCount % ASSIGNMENT_INTERVAL == 0
-                    && !this.isDeadOrDying() && !isDying) {
+            ) {
                 assignResidenceToNPC();
 
                 // 更新流浪状态
                 updateHomelessStatus();
             }
 
-            if (this.tickCount % 1200 == 0 && !this.isDeadOrDying() && !isDying) {
+            if (aliveAndActive && this.tickCount % 1200 == 0) {
                 if (getHunger() > 0) {
                     setHunger(getHunger() - 1);
                 }
             }
 
-            if (this.tickCount % 20 == 0 && !this.isDeadOrDying() && !isDying) {
+            if (aliveAndActive && this.tickCount % 20 == 0) {
                 tryPickupDroppedFood();
             }
 
-            if (this.tickCount % 40 == 0 && !this.isDeadOrDying() && !isDying) {
+            if (aliveAndActive && this.tickCount % 40 == 0) {
                 refreshWorkNeedDetail();
             }
 
@@ -625,7 +626,7 @@ public class CustomEntity extends Animal {
                 statusLabelExpireKey = null;
             }
 
-            if (this.tickCount % 20 == 0 && !this.isDeadOrDying() && !isDying) {
+            if (aliveAndActive && this.tickCount % 20 == 0) {
                 String current = this.entityData.get(DATA_STATUS_LABEL);
                 if (current == null) current = "";
                 boolean canOverride = canUseDynamicStatusLabel(current);
@@ -799,10 +800,7 @@ public class CustomEntity extends Animal {
 
         // 处理规划师任务
         if (!this.level().isClientSide && "planner".equals(getJob())) {
-            if (plannerWorkHandler == null) {
-                plannerWorkHandler = new com.xiaoliang.simukraft.utils.PlannerWorkHandler(this);
-            }
-            plannerWorkHandler.tick(this.level());
+            getOrCreatePlannerWorkHandler().tick(this.level());
         }
 
         // 寿命检查 - 每20秒检查一次（400 ticks）
@@ -821,6 +819,13 @@ public class CustomEntity extends Animal {
             return com.xiaoliang.simukraft.config.ServerConfig.getBuilderPlaceSpeed(level);
         }
         return com.xiaoliang.simukraft.config.ServerConfig.getBuilderPlaceSpeed(1);
+    }
+
+    private com.xiaoliang.simukraft.utils.PlannerWorkHandler getOrCreatePlannerWorkHandler() {
+        if (plannerWorkHandler == null) {
+            plannerWorkHandler = new com.xiaoliang.simukraft.utils.PlannerWorkHandler(this);
+        }
+        return plannerWorkHandler;
     }
 
     /**

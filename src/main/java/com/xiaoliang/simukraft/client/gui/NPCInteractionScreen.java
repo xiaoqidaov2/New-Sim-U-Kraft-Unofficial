@@ -35,8 +35,16 @@ public class NPCInteractionScreen extends ModularUIGuiContainer {
     private static final ResourceLocation BACKGROUND = ResourceLocation.fromNamespaceAndPath("simukraft", "textures/gui/npc_background.png");
     private static final int BACKGROUND_WIDTH = 256;
     private static final int BACKGROUND_HEIGHT = 250;
+    private static final long CITY_LOOKUP_DELAY_MS = 500L;
+    private static final long RESIDENCE_LOOKUP_DELAY_MS = 600L;
 
     private final CustomEntity npc;
+    @Nullable
+    private UUID pendingCityId;
+    @Nullable
+    private String pendingResidenceNpcName;
+    private long cityRequestTimeMs = -1L;
+    private long residenceRequestTimeMs = -1L;
 
     @Nonnull
     private static <T> T nn(@Nullable T value) {
@@ -49,20 +57,25 @@ public class NPCInteractionScreen extends ModularUIGuiContainer {
     }
 
     public NPCInteractionScreen(CustomEntity npc) {
-        super(createModularUI(npc), 0);
+        super(createHolderAndUI(npc), 0);
         this.npc = npc;
 
         loadCityName();
         requestResidenceInfo();
     }
 
-    private static ModularUI createModularUI(CustomEntity npc) {
+    private static ModularUI createHolderAndUI(CustomEntity npc) {
+        NPCUIHolder holder = new NPCUIHolder(npc);
+        return holder.createModularUI();
+    }
+
+    private static ModularUI createModularUI(NPCUIHolder holder) {
+        CustomEntity npc = holder.npc;
         // 将数据保存到NPC的NBT中以便后续更新
         npc.getPersistentData().putString("_temp_city_ref", "loading");
         npc.getPersistentData().putString("_temp_residence_ref", "loading");
 
-        Player player = Minecraft.getInstance().player;
-        NPCUIHolder holder = new NPCUIHolder();
+        Player player = nn(Minecraft.getInstance().player);
         ModularUI modularUI = new ModularUI(new Size(BACKGROUND_WIDTH, BACKGROUND_HEIGHT), holder, player);
 
         // 创建根容器
@@ -203,26 +216,8 @@ public class NPCInteractionScreen extends ModularUIGuiContainer {
             return;
         }
         NetworkManager.INSTANCE.sendToServer(new RequestNPCResidencePacket(npcNameStr));
-        
-        // 延迟更新
-        Minecraft.getInstance().tell(() -> {
-            new Thread(() -> {
-                try {
-                    Thread.sleep(600);
-                    Minecraft.getInstance().tell(() -> {
-                        NPCResidenceCache.ResidenceInfo info = NPCResidenceCache.getResidenceInfo(npcNameStr);
-                        if (info != null) {
-                            updateResidenceText(info);
-                        } else {
-                            npc.getPersistentData().putString("_temp_residence_ref",
-                                safeString(Component.translatable("gui.npc_interaction.no_residence").getString()));
-                        }
-                    });
-                } catch (InterruptedException e) {
-                    // ignore
-                }
-            }).start();
-        });
+        pendingResidenceNpcName = npcNameStr;
+        residenceRequestTimeMs = System.currentTimeMillis();
     }
 
     private void updateResidenceText(NPCResidenceCache.ResidenceInfo cachedInfo) {
@@ -251,25 +246,8 @@ public class NPCInteractionScreen extends ModularUIGuiContainer {
                     return;
                 }
                 NetworkManager.INSTANCE.sendToServer(new GetCityNamePacket(cityId));
-                Minecraft.getInstance().tell(() -> {
-                    new Thread(() -> {
-                        try {
-                            Thread.sleep(500);
-                            Minecraft.getInstance().tell(() -> {
-                                String name = CityNameCache.get(cityId);
-                                if (name != null) {
-                                    npc.getPersistentData().putString("_temp_city_ref", name);
-                                } else {
-                                    npc.getPersistentData().putString("_temp_city_ref",
-                                        safeString(Component.translatable("gui.city.unknown").getString()));
-                                }
-                            });
-                        } catch (InterruptedException e) {
-                            npc.getPersistentData().putString("_temp_city_ref",
-                                safeString(Component.translatable("gui.city.unknown").getString()));
-                        }
-                    }).start();
-                });
+                pendingCityId = cityId;
+                cityRequestTimeMs = System.currentTimeMillis();
             } catch (IllegalArgumentException e) {
                 npc.getPersistentData().putString("_temp_city_ref",
                     safeString(Component.translatable("gui.city.none").getString()));
@@ -281,11 +259,75 @@ public class NPCInteractionScreen extends ModularUIGuiContainer {
     }
 
     @Override
+    public void containerTick() {
+        super.containerTick();
+        pollPendingCityName();
+        pollPendingResidenceInfo();
+    }
+
+    @Override
     public boolean isPauseScreen() {
         return false;
     }
 
-    private static class NPCUIHolder implements IUIHolder {
+    @Override
+    public void onClose() {
+        pendingCityId = null;
+        pendingResidenceNpcName = null;
+        cityRequestTimeMs = -1L;
+        residenceRequestTimeMs = -1L;
+        super.onClose();
+    }
+
+    private void pollPendingCityName() {
+        if (pendingCityId == null || cityRequestTimeMs < 0L) {
+            return;
+        }
+        String name = CityNameCache.get(pendingCityId);
+        if (name != null) {
+            npc.getPersistentData().putString("_temp_city_ref", name);
+            pendingCityId = null;
+            cityRequestTimeMs = -1L;
+            return;
+        }
+        if (System.currentTimeMillis() - cityRequestTimeMs >= CITY_LOOKUP_DELAY_MS) {
+            npc.getPersistentData().putString("_temp_city_ref",
+                safeString(Component.translatable("gui.city.unknown").getString()));
+            pendingCityId = null;
+            cityRequestTimeMs = -1L;
+        }
+    }
+
+    private void pollPendingResidenceInfo() {
+        if (pendingResidenceNpcName == null || residenceRequestTimeMs < 0L) {
+            return;
+        }
+        NPCResidenceCache.ResidenceInfo info = NPCResidenceCache.getResidenceInfo(pendingResidenceNpcName);
+        if (info != null) {
+            updateResidenceText(info);
+            pendingResidenceNpcName = null;
+            residenceRequestTimeMs = -1L;
+            return;
+        }
+        if (System.currentTimeMillis() - residenceRequestTimeMs >= RESIDENCE_LOOKUP_DELAY_MS) {
+            npc.getPersistentData().putString("_temp_residence_ref",
+                safeString(Component.translatable("gui.npc_interaction.no_residence").getString()));
+            pendingResidenceNpcName = null;
+            residenceRequestTimeMs = -1L;
+        }
+    }
+
+    private static final class NPCUIHolder implements IUIHolder {
+        private final CustomEntity npc;
+
+        private NPCUIHolder(CustomEntity npc) {
+            this.npc = nn(npc);
+        }
+
+        private ModularUI createModularUI() {
+            return NPCInteractionScreen.createModularUI(this);
+        }
+
         @Override
         public ModularUI createUI(Player entityPlayer) {
             return null;

@@ -7,10 +7,14 @@ import net.minecraft.network.chat.Component;
 import net.minecraftforge.client.gui.overlay.ForgeGui;
 import net.minecraftforge.client.gui.overlay.IGuiOverlay;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import java.util.Locale;
 import java.util.Objects;
 
 public class ClientHUDOverlay implements IGuiOverlay {
     public static final ClientHUDOverlay INSTANCE = new ClientHUDOverlay();
+    private static final int HUD_COLOR = 0xFFFFFF;
     private static final String[] WEEKDAYS = {
             "weekday.sunday",
             "weekday.monday", 
@@ -20,6 +24,21 @@ public class ClientHUDOverlay implements IGuiOverlay {
             "weekday.friday",
             "weekday.saturday"
     };
+    @Nonnull
+    private static String cachedDisplayText = "";
+    private static int cachedTextWidth = 0;
+    private static int cachedDay = Integer.MIN_VALUE;
+    private static int cachedWorldPopulation = Integer.MIN_VALUE;
+    @Nonnull
+    private static String cachedCityName = "";
+    private static double cachedFunds = Double.NaN;
+    private static int cachedCityPopulation = Integer.MIN_VALUE;
+    private static boolean cachedCreativeMode = false;
+
+    @Nonnull
+    private static String safeText(@Nullable String value) {
+        return value != null ? value : "";
+    }
 
     @Override
     public void render(ForgeGui gui, GuiGraphics guiGraphics, float partialTick, int screenWidth, int screenHeight) {
@@ -29,58 +48,75 @@ public class ClientHUDOverlay implements IGuiOverlay {
         }
 
         try {
-            // 从客户端缓存获取数据
             int currentDay = ClientSimukraftData.getCurrentDay();
             int worldPopulation = ClientSimukraftData.getCurrentPopulation();
             String cityName = ClientSimukraftData.getCurrentCityName();
             double funds = ClientSimukraftData.getCurrentCityFunds();
             int cityPopulation = ClientSimukraftData.getCurrentCityPopulation();
-
-            // 计算周几
-            String weekDayKey = Objects.requireNonNull(WEEKDAYS[(currentDay - 1) % 7]);
-            Component weekDay = Component.translatable(weekDayKey);
-
-            // 检查创造模式
             boolean isCreativeMode = ClientSimukraftData.isCreativeMode();
+            var font = Objects.requireNonNull(mc.font);
 
-            // 构建显示文本 - 只显示周几，不显示天数
-            StringBuilder statusLine = new StringBuilder();
-            if (!cityName.isEmpty()) {
-                // 有城市时显示完整信息
-                statusLine.append(Component.translatable("hud.simukraft.city", cityName).getString()).append(" | ");
-                // 创造模式下显示∞符号，否则显示正常金额
-                String fundsDisplay = isCreativeMode ? "∞" : String.format("%.2f", funds);
-                statusLine.append(Component.translatable("hud.simukraft.funds", fundsDisplay).getString()).append(" | ");
-                statusLine.append(weekDay.getString()).append(" | ");
-                statusLine.append(Component.translatable("hud.simukraft.world_population", worldPopulation).getString()).append(" | ");
-                statusLine.append(Component.translatable("hud.simukraft.city_population", cityPopulation).getString());
-            } else {
-                // 无城市时显示简化信息
-                statusLine.append(weekDay.getString()).append(" | ");
-                statusLine.append(Component.translatable("hud.simukraft.world_population", worldPopulation).getString());
-            }
-
-            String displayText = Objects.requireNonNull(statusLine.toString());
-            int textWidth = Objects.requireNonNull(mc.font).width(displayText);
+            String displayText = getOrBuildDisplayText(font, currentDay, worldPopulation, cityName, funds, cityPopulation, isCreativeMode);
+            int textWidth = cachedTextWidth;
 
             // 使用配置的锚点位置
             int[] position = ClientConfig.calculatePosition(screenWidth, screenHeight, textWidth);
             int x = position[0];
             int y = position[1];
 
-            // 使用白色统一显示，简化颜色处理
-            var font = Objects.requireNonNull(mc.font);
             guiGraphics.drawString(
                     font,
                     displayText,
                     x,
                     y,
-                    0xFFFFFF,
+                    HUD_COLOR,
                     true
             );
 
         } catch (Exception e) {
             // 静默处理异常，确保HUD不影响游戏运行
         }
+    }
+
+    @Nonnull
+    private static String getOrBuildDisplayText(net.minecraft.client.gui.Font font, int currentDay, int worldPopulation,
+                                                @Nullable String cityName, double funds, int cityPopulation, boolean isCreativeMode) {
+        String safeCityName = safeText(cityName);
+        if (currentDay == cachedDay
+                && worldPopulation == cachedWorldPopulation
+                && cityPopulation == cachedCityPopulation
+                && isCreativeMode == cachedCreativeMode
+                && Double.compare(funds, cachedFunds) == 0
+                && safeCityName.equals(cachedCityName)) {
+            return safeText(cachedDisplayText);
+        }
+
+        cachedDay = currentDay;
+        cachedWorldPopulation = worldPopulation;
+        cachedCityName = safeCityName;
+        cachedFunds = funds;
+        cachedCityPopulation = cityPopulation;
+        cachedCreativeMode = isCreativeMode;
+
+        String weekDayKey = Objects.requireNonNull(WEEKDAYS[Math.floorMod(currentDay - 1, WEEKDAYS.length)]);
+        Component weekDayComponent = Component.translatable(weekDayKey);
+        String weekDay = Objects.requireNonNull(weekDayComponent.getString());
+        StringBuilder statusLine = new StringBuilder(96);
+
+        if (!safeCityName.isEmpty()) {
+            statusLine.append(Component.translatable("hud.simukraft.city", safeCityName).getString()).append(" | ");
+            String fundsDisplay = isCreativeMode ? "∞" : String.format(Locale.US, "%.2f", funds);
+            statusLine.append(Component.translatable("hud.simukraft.funds", fundsDisplay).getString()).append(" | ");
+            statusLine.append(weekDay).append(" | ");
+            statusLine.append(Component.translatable("hud.simukraft.world_population", worldPopulation).getString()).append(" | ");
+            statusLine.append(Component.translatable("hud.simukraft.city_population", cityPopulation).getString());
+        } else {
+            statusLine.append(weekDay).append(" | ");
+            statusLine.append(Component.translatable("hud.simukraft.world_population", worldPopulation).getString());
+        }
+
+        cachedDisplayText = safeText(statusLine.toString());
+        cachedTextWidth = font.width(cachedDisplayText);
+        return safeText(cachedDisplayText);
     }
 }

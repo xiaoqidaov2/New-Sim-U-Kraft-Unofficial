@@ -1,8 +1,10 @@
 package com.xiaoliang.simukraft.utils;
 
 import com.xiaoliang.simukraft.entity.CustomEntity;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.Level;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
@@ -12,6 +14,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.lang.ref.WeakReference;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -52,8 +55,8 @@ public class NPCTaskScheduler {
     private static long lastStatsTime = 0;
     private static final long STATS_INTERVAL_MS = 30000; // 30秒输出一次统计
 
-    // NPC缓存
-    private static final Map<ServerLevel, CopyOnWriteArrayList<CustomEntity>> NPC_CACHE = new ConcurrentHashMap<>();
+    // 仅缓存弱引用，避免世界卸载后仍被静态集合强持有
+    private static final Map<ResourceKey<Level>, CopyOnWriteArrayList<WeakReference<CustomEntity>>> NPC_CACHE = new ConcurrentHashMap<>();
     private static volatile long lastCacheUpdate = 0;
     private static final long CACHE_UPDATE_INTERVAL = 100; // 每5秒更新一次缓存（100 ticks）
 
@@ -112,6 +115,7 @@ public class NPCTaskScheduler {
             // 清空队列
             mainThreadTasks.clear();
             pendingTaskCount.set(0);
+            invalidateCache();
 
             initialized = false;
             LOGGER.info("NPC任务调度器已关闭");
@@ -347,23 +351,14 @@ public class NPCTaskScheduler {
         if (needUpdate) {
             NPC_CACHE.clear();
             for (ServerLevel level : server.getAllLevels()) {
-                List<CustomEntity> levelNPCs = new ArrayList<>();
-                // 使用更高效的遍历方式 - 直接获取实体列表而不是遍历所有实体
-                level.getEntities().getAll().forEach(entity -> {
-                    if (entity instanceof CustomEntity npc && npc.isAlive()) {
-                        levelNPCs.add(npc);
-                    }
-                });
-                NPC_CACHE.put(level, new CopyOnWriteArrayList<>(levelNPCs));
+                refreshLevelCache(level);
             }
             lastCacheUpdate = currentTime;
         }
 
         // 从缓存中获取NPC列表
-        for (CopyOnWriteArrayList<CustomEntity> levelNPCs : NPC_CACHE.values()) {
-            // 过滤掉已死亡的NPC
-            levelNPCs.removeIf(npc -> !npc.isAlive());
-            allNPCs.addAll(levelNPCs);
+        for (CopyOnWriteArrayList<WeakReference<CustomEntity>> levelNPCs : NPC_CACHE.values()) {
+            collectAliveNPCs(levelNPCs, allNPCs);
         }
 
         return allNPCs;
@@ -377,24 +372,17 @@ public class NPCTaskScheduler {
 
         // 检查缓存是否有效
         long currentTime = System.currentTimeMillis();
-        CopyOnWriteArrayList<CustomEntity> cachedNPCs = NPC_CACHE.get(level);
+        ResourceKey<Level> levelKey = level.dimension();
+        CopyOnWriteArrayList<WeakReference<CustomEntity>> cachedNPCs = NPC_CACHE.get(levelKey);
 
         if (cachedNPCs == null || (currentTime - lastCacheUpdate > CACHE_UPDATE_INTERVAL * 50)) {
-            // 重新构建缓存
-            List<CustomEntity> newNPCs = new ArrayList<>();
-            level.getEntities().getAll().forEach(entity -> {
-                if (entity instanceof CustomEntity npc && npc.isAlive()) {
-                    newNPCs.add(npc);
-                }
-            });
-            NPC_CACHE.put(level, new CopyOnWriteArrayList<>(newNPCs));
+            refreshLevelCache(level);
             lastCacheUpdate = currentTime;
-            return new ArrayList<>(newNPCs);
-        } else {
-            // 过滤掉已死亡的NPC
-            cachedNPCs.removeIf(npc -> !npc.isAlive());
-            return new ArrayList<>(cachedNPCs);
         }
+
+        List<CustomEntity> resolvedNPCs = new ArrayList<>();
+        collectAliveNPCs(NPC_CACHE.get(levelKey), resolvedNPCs);
+        return resolvedNPCs;
     }
 
     /**
@@ -403,6 +391,32 @@ public class NPCTaskScheduler {
     public static void invalidateCache() {
         NPC_CACHE.clear();
         lastCacheUpdate = 0;
+    }
+
+    private static void refreshLevelCache(ServerLevel level) {
+        List<WeakReference<CustomEntity>> levelNPCs = new ArrayList<>();
+        level.getEntities().getAll().forEach(entity -> {
+            if (entity instanceof CustomEntity npc && npc.isAlive()) {
+                levelNPCs.add(new WeakReference<>(npc));
+            }
+        });
+        NPC_CACHE.put(level.dimension(), new CopyOnWriteArrayList<>(levelNPCs));
+    }
+
+    private static void collectAliveNPCs(CopyOnWriteArrayList<WeakReference<CustomEntity>> cachedNPCs, List<CustomEntity> output) {
+        if (cachedNPCs == null) {
+            return;
+        }
+        cachedNPCs.removeIf(reference -> {
+            CustomEntity npc = reference.get();
+            return npc == null || !npc.isAlive() || npc.level().isClientSide();
+        });
+        for (WeakReference<CustomEntity> reference : cachedNPCs) {
+            CustomEntity npc = reference.get();
+            if (npc != null && npc.isAlive()) {
+                output.add(npc);
+            }
+        }
     }
 
     /**

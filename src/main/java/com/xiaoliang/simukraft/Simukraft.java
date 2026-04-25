@@ -3,6 +3,7 @@ package com.xiaoliang.simukraft;
 import com.mojang.logging.LogUtils;
 import com.xiaoliang.simukraft.client.ClientToastHUDOverlay;
 import com.xiaoliang.simukraft.client.ClientHUDOverlay;
+import com.xiaoliang.simukraft.client.ClientSimukraftData;
 import com.xiaoliang.simukraft.client.ModModelLayers;
 import com.xiaoliang.simukraft.client.config.ModMenuIntegration;
 import com.xiaoliang.simukraft.config.ClientConfigSpec;
@@ -238,6 +239,10 @@ public class Simukraft {
             if (com.xiaoliang.simukraft.client.map.SimuMapManager.isAvailable()) {
                 com.xiaoliang.simukraft.client.map.SimuMapManager.getInstance().shutdown();
             }
+            com.xiaoliang.simukraft.client.CityNameCache.clear();
+            com.xiaoliang.simukraft.client.NPCResidenceCache.clearCache();
+            ClientSimukraftData.resetAllClientState();
+            ClientToastHUDOverlay.clearAllToasts();
             hasLoadedData = false;
         }
 

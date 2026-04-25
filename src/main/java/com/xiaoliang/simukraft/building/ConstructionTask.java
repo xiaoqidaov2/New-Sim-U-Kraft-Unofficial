@@ -499,7 +499,6 @@ public class ConstructionTask {
 
     private long lastWarningTime = 0;
 
-    @SuppressWarnings("null")
     private boolean consumeFromNearbyChests(BlockState state) {
         ServerLevel serverLevel = getRuntimeLevel();
         if (serverLevel == null) return false;
@@ -533,7 +532,7 @@ public class ConstructionTask {
             Component materialInfo = com.xiaoliang.simukraft.utils.MaterialManager.getMaterialRequirementComponent(state);
             Component message = Component.translatable("message.simukraft.construction.need_materials", displayName, materialInfo, 1);
             // 使用原版消息系统广播给所有玩家
-            serverLevel.getServer().getPlayerList().broadcastSystemMessage(Objects.requireNonNull(message), false);
+            serverLevel.getServer().getPlayerList().broadcastSystemMessage(message, false);
         }
         return false;
     }

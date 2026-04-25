@@ -39,6 +39,7 @@ import java.util.stream.Stream;
 @Mod.EventBusSubscriber(modid = Simukraft.MOD_ID)
 @SuppressWarnings({"null", "unused"})
 public class WorldEvents {
+    private static final long HUD_SYNC_INTERVAL_TICKS = 20L;
     private static long lastRecordedDay = -1;
     private static long lastRecordedTimeOfDay = -1;
 
@@ -101,8 +102,10 @@ public class WorldEvents {
         // 检测从夜晚到早晨的过渡（自然等到早晨）
         detectMorningTransition(serverLevel);
 
-        // 实时同步HUD数据（每tick同步）
-        syncHUDDataToAllPlayers(serverLevel);
+        // HUD 采用周期保底同步，避免每 tick 重复发包和重复解析城市快照
+        if (serverLevel.getGameTime() % HUD_SYNC_INTERVAL_TICKS == 0L) {
+            syncHUDDataToAllPlayers(serverLevel);
+        }
     }
 
     /**
@@ -250,6 +253,14 @@ public class WorldEvents {
         for (ServerPlayer player : level.getServer().getPlayerList().getPlayers()) {
             PlayerCitySnapshot citySnapshot = resolvePlayerCitySnapshot(level, player);
             NetworkManager.sendHUDDataToPlayer(currentDay, worldPopulation, citySnapshot.cityName(), citySnapshot.cityFunds(), citySnapshot.cityPopulation(), player);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
+        if (event.getEntity() instanceof ServerPlayer serverPlayer) {
+            pendingMoneySounds.remove(serverPlayer.getUUID());
+            NetworkManager.clearHUDSyncState(serverPlayer.getUUID());
         }
     }
 
@@ -871,6 +882,10 @@ public class WorldEvents {
 
         IndustrialHiredData.saveAnimalGenerationData(event.getServer());
         FarmlandHiredData.saveAllFarmlandData(event.getServer());
+        pendingMoneySounds.clear();
+        collectedIncomeByCity.clear();
+        NetworkManager.clearAllHUDSyncState();
+        com.xiaoliang.simukraft.utils.NPCTaskScheduler.invalidateCache();
         com.xiaoliang.simukraft.utils.NPCTaskScheduler.shutdown();
 
         Simukraft.LOGGER.info("[WorldEvents] 动物生成数据、农田盒数据已保存，NPC任务调度器已关闭");

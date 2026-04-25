@@ -53,9 +53,11 @@ public class BuildingListScreen extends ModularUIGuiContainer {
     private BuildingResponseInfo selectedBuilding = null;
     private String searchQuery = "";
     private TextFieldWidget searchBox;
-    private boolean needsRefresh = false;
     private final PinManager pinManager = new PinManager(); // 置顶管理器
     private Set<String> pinnedBuildings; // 从文件加载的置顶建筑
+    private final Map<String, String> searchableNameCache = new HashMap<>();
+    private final Map<String, Integer> parsedPriceCache = new HashMap<>();
+    private final Map<String, Integer> parsedVolumeCache = new HashMap<>();
 
     public record BuildingResponseInfo(String name, String size, String amount, String author, String description,
                                        String category, String fileName, String nbtFileName, List<String> tags) {
@@ -453,6 +455,7 @@ public class BuildingListScreen extends ModularUIGuiContainer {
                 ));
             }
             screen.buildings = localBuildings;
+            screen.rebuildDerivedCaches();
             screen.filteredBuildings = new ArrayList<>(localBuildings);
             screen.isLoading = false;
             screen.applyFilterAndSort();
@@ -710,9 +713,9 @@ public class BuildingListScreen extends ModularUIGuiContainer {
         if (searchQuery.isEmpty()) {
             filteredBuildings.addAll(buildings);
         } else {
-            String lowerQuery = searchQuery.toLowerCase();
+            String lowerQuery = searchQuery.toLowerCase(Locale.ROOT);
             for (BuildingResponseInfo b : buildings) {
-                if (b.name().toLowerCase().contains(lowerQuery)) {
+                if (getSearchableName(b).contains(lowerQuery)) {
                     filteredBuildings.add(b);
                 }
             }
@@ -720,8 +723,8 @@ public class BuildingListScreen extends ModularUIGuiContainer {
 
         Comparator<BuildingResponseInfo> comp = switch (sortMode) {
             case NAME -> Comparator.comparing(BuildingResponseInfo::name, String.CASE_INSENSITIVE_ORDER);
-            case PRICE -> Comparator.comparingInt(b -> parsePrice(b.amount()));
-            case SIZE -> Comparator.comparingInt(b -> parseVolume(b.size()));
+            case PRICE -> Comparator.comparingInt(this::getCachedPrice);
+            case SIZE -> Comparator.comparingInt(this::getCachedVolume);
         };
         if (!sortAscending) comp = comp.reversed();
         
@@ -730,6 +733,51 @@ public class BuildingListScreen extends ModularUIGuiContainer {
         
         filteredBuildings.sort(comp);
         currentPage = 0;
+    }
+
+    private void rebuildDerivedCaches() {
+        searchableNameCache.clear();
+        parsedPriceCache.clear();
+        parsedVolumeCache.clear();
+        for (BuildingResponseInfo building : buildings) {
+            String cacheKey = getCacheKey(building);
+            searchableNameCache.put(cacheKey, safeString(building.name()).toLowerCase(Locale.ROOT));
+            parsedPriceCache.put(cacheKey, parsePrice(building.amount()));
+            parsedVolumeCache.put(cacheKey, parseVolume(building.size()));
+        }
+    }
+
+    private String getSearchableName(BuildingResponseInfo building) {
+        return searchableNameCache.computeIfAbsent(
+                getCacheKey(building),
+                ignored -> safeString(building.name()).toLowerCase(Locale.ROOT)
+        );
+    }
+
+    private int getCachedPrice(BuildingResponseInfo building) {
+        return parsedPriceCache.computeIfAbsent(getCacheKey(building), ignored -> parsePrice(building.amount()));
+    }
+
+    private int getCachedVolume(BuildingResponseInfo building) {
+        return parsedVolumeCache.computeIfAbsent(getCacheKey(building), ignored -> parseVolume(building.size()));
+    }
+
+    private String getCacheKey(BuildingResponseInfo building) {
+        String fileName = building.fileName();
+        return fileName == null || fileName.isEmpty() ? safeString(building.name()) : fileName;
+    }
+
+    private void syncSearchQueryFromWidget() {
+        if (searchBox == null) {
+            return;
+        }
+        String currentText = safeString(searchBox.getCurrentString());
+        if (currentText.equals(searchQuery)) {
+            return;
+        }
+        searchQuery = currentText;
+        applyFilterAndSort();
+        refreshBuildingList();
     }
 
     private static int parsePrice(String amount) {
@@ -746,25 +794,16 @@ public class BuildingListScreen extends ModularUIGuiContainer {
         } catch (Exception e) { return 0; }
     }
 
-    // 在渲染时检测搜索框内容变化
     @Override
     public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        GuiGraphics safeGuiGraphics = nn(guiGraphics);
-        // 检测搜索框内容变化
-        if (searchBox != null) {
-            String currentText = searchBox.getCurrentString();
-            if (!currentText.equals(searchQuery)) {
-                searchQuery = currentText;
-                applyFilterAndSort();
-                needsRefresh = true;
-            }
-        }
-        // 执行刷新（在 super.render 之前�?
-        if (needsRefresh) {
-            needsRefresh = false;
-            refreshBuildingList();
-        }
-        super.render(safeGuiGraphics, mouseX, mouseY, partialTick);
+        super.render(nn(guiGraphics), mouseX, mouseY, partialTick);
+    }
+
+    @Override
+    public boolean charTyped(char codePoint, int modifiers) {
+        boolean handled = super.charTyped(codePoint, modifiers);
+        syncSearchQueryFromWidget();
+        return handled;
     }
 
     @Override
@@ -777,7 +816,9 @@ public class BuildingListScreen extends ModularUIGuiContainer {
             }
             return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        boolean handled = super.keyPressed(keyCode, scanCode, modifiers);
+        syncSearchQueryFromWidget();
+        return handled;
     }
 
     @Override

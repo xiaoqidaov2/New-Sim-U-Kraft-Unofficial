@@ -47,9 +47,12 @@ public class SimuMapRegionData {
     /** 设置指定位置的数据 */
     public void setData(int localX, int localZ, short h, int argbColor, boolean water, int light) {
         int idx = index(localX, localZ);
+        short f = (short) ((water ? 1 : 0) | ((light & 0xF) << 1));
+        if (height[idx] == h && color[idx] == argbColor && flags[idx] == f) {
+            return;
+        }
         height[idx] = h;
         color[idx] = argbColor;
-        short f = (short) ((water ? 1 : 0) | ((light & 0xF) << 1));
         flags[idx] = f;
         dirty = true;
     }

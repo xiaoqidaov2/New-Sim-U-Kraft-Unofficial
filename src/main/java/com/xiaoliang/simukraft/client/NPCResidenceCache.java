@@ -1,13 +1,17 @@
 package com.xiaoliang.simukraft.client;
 
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * NPC居住信息客户端缓存
  * 用于存储从服务端获取的NPC居住信息
  */
 public class NPCResidenceCache {
+    private static final long CACHE_VALIDITY = 30000L; // 缓存有效期30秒
+    private static final int MAX_CACHE_SIZE = 256;
+    private static final Map<String, ResidenceInfo> cache = new ConcurrentHashMap<>();
+    private static volatile long lastCleanupTime = 0L;
     
     public static class ResidenceInfo {
         public final boolean hasResidence;
@@ -20,14 +24,12 @@ public class NPCResidenceCache {
             this.timestamp = System.currentTimeMillis();
         }
     }
-    
-    private static final Map<String, ResidenceInfo> cache = new HashMap<>();
-    private static final long CACHE_VALIDITY = 30000; // 缓存有效期30秒
-    
+
     /**
      * 设置NPC居住信息
      */
     public static void setResidenceInfo(String npcName, boolean hasResidence, String position) {
+        cleanupExpiredEntries(false);
         cache.put(npcName, new ResidenceInfo(hasResidence, position));
     }
     
@@ -35,6 +37,7 @@ public class NPCResidenceCache {
      * 获取NPC居住信息
      */
     public static ResidenceInfo getResidenceInfo(String npcName) {
+        cleanupExpiredEntries(false);
         ResidenceInfo info = cache.get(npcName);
         if (info == null) {
             return null;
@@ -55,11 +58,31 @@ public class NPCResidenceCache {
     public static boolean hasCachedInfo(String npcName) {
         return getResidenceInfo(npcName) != null;
     }
+
+    public static void remove(String npcName) {
+        if (npcName == null || npcName.isEmpty()) {
+            return;
+        }
+        cache.remove(npcName);
+    }
     
     /**
      * 清除所有缓存
      */
     public static void clearCache() {
         cache.clear();
+        lastCleanupTime = 0L;
+    }
+
+    private static void cleanupExpiredEntries(boolean force) {
+        long now = System.currentTimeMillis();
+        if (!force) {
+            boolean recentlyCleaned = now - lastCleanupTime < 5000L;
+            if (recentlyCleaned && cache.size() < MAX_CACHE_SIZE) {
+                return;
+            }
+        }
+        lastCleanupTime = now;
+        cache.entrySet().removeIf(entry -> now - entry.getValue().timestamp > CACHE_VALIDITY);
     }
 }

@@ -13,11 +13,15 @@ import net.minecraftforge.network.NetworkDirection;
 import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.simple.SimpleChannel;
 
+import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 @SuppressWarnings({"null", "unused"})
 public class NetworkManager {
     private static final String PROTOCOL_VERSION = "1";
+    private static final Map<UUID, HudSyncState> LAST_HUD_SYNC = new ConcurrentHashMap<>();
     public static final SimpleChannel INSTANCE = NetworkRegistry.newSimpleChannel(
             ResourceLocation.fromNamespaceAndPath("simukraft", "main"),
             () -> PROTOCOL_VERSION,
@@ -827,7 +831,29 @@ public class NetworkManager {
         // 获取创造模式状态
         boolean creativeMode = ServerConfig.isCreativeModeEnabled();
 
-        SyncHUDDataPacket packet = new SyncHUDDataPacket(currentDay, worldPopulation, cityName, cityFunds, cityPopulation, level.getLevel(), creativeMode);
+        HudSyncState nextState = new HudSyncState(
+                currentDay,
+                worldPopulation,
+                Objects.requireNonNullElse(cityName, ""),
+                cityFunds,
+                cityPopulation,
+                level.getLevel(),
+                creativeMode
+        );
+        HudSyncState previousState = LAST_HUD_SYNC.put(player.getUUID(), nextState);
+        if (nextState.equals(previousState)) {
+            return;
+        }
+
+        SyncHUDDataPacket packet = new SyncHUDDataPacket(
+                nextState.currentDay(),
+                nextState.worldPopulation(),
+                nextState.cityName(),
+                nextState.cityFunds(),
+                nextState.cityPopulation(),
+                nextState.permissionLevel(),
+                nextState.creativeMode()
+        );
         sendToPlayer(packet, player);
     }
 
@@ -908,6 +934,21 @@ public class NetworkManager {
             sendToPlayer(packet, player);
         }
     }
+
+    public static void clearHUDSyncState(UUID playerId) {
+        if (playerId != null) {
+            LAST_HUD_SYNC.remove(playerId);
+        }
+    }
+
+    public static void clearAllHUDSyncState() {
+        LAST_HUD_SYNC.clear();
+    }
+
+    private record HudSyncState(int currentDay, int worldPopulation, String cityName, double cityFunds,
+                                int cityPopulation, int permissionLevel, boolean creativeMode) {
+    }
+
 
     /**
      * 发送数据包给所有玩家（通用方法）

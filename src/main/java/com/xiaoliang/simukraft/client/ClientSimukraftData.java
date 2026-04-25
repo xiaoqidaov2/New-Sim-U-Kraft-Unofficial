@@ -74,6 +74,13 @@ public class ClientSimukraftData {
         playerPermissionLevel = CityPermissionManager.PermissionLevel.NONE;
         canManageCity = false;
     }
+
+    public static void resetAllClientState() {
+        currentDay = 1;
+        currentPopulation = 0;
+        creativeMode = false;
+        resetCityData();
+    }
     
     // 权限数据设置方法
     public static void setPlayerPermissionLevel(CityPermissionManager.PermissionLevel level) {
