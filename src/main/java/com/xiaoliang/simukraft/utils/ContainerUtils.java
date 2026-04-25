@@ -703,4 +703,57 @@ public class ContainerUtils {
             return itemHandler.getSlotLimit(slot);
         }
     }
+
+    /**
+     * 性能优化：直接查找并消耗建筑材料，避免复制整个容器内容
+     * @param level 世界
+     * @param pos 容器位置
+     * @param state 要放置的方块状态
+     * @return 是否成功消耗材料
+     */
+    public static boolean findAndConsumeBuildingMaterial(Level level, BlockPos pos, net.minecraft.world.level.block.state.BlockState state) {
+        BlockPos safePos = Objects.requireNonNull(pos);
+        BlockEntity blockEntity = level.getBlockEntity(safePos);
+        if (blockEntity == null || blockEntity.isRemoved()) {
+            return false;
+        }
+
+        // 使用材料管理器获取需要的物品类型
+        java.util.function.Predicate<ItemStack> canUse = stack -> 
+            com.xiaoliang.simukraft.utils.MaterialManager.canUseItemForBlock(stack, state);
+
+        // 优先使用 IItemHandler Capability
+        Optional<IItemHandler> cap = blockEntity.getCapability(ForgeCapabilities.ITEM_HANDLER).resolve();
+        if (cap.isPresent()) {
+            IItemHandler handler = cap.get();
+            for (int i = 0; i < handler.getSlots(); i++) {
+                ItemStack stack = handler.getStackInSlot(i);
+                if (!stack.isEmpty() && canUse.test(stack)) {
+                    // 尝试消耗1个物品
+                    ItemStack extracted = handler.extractItem(i, 1, false);
+                    if (!extracted.isEmpty()) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        // 回退到 Container 接口
+        if (blockEntity instanceof Container container) {
+            for (int i = 0; i < container.getContainerSize(); i++) {
+                ItemStack stack = container.getItem(i);
+                if (!stack.isEmpty() && canUse.test(stack)) {
+                    // 消耗1个物品
+                    ItemStack toConsume = stack.copy();
+                    toConsume.setCount(1);
+                    if (consumeItem(level, pos, toConsume)) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
 }

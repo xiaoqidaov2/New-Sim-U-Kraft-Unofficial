@@ -6,14 +6,15 @@ import com.xiaoliang.simukraft.entity.CustomEntity;
 import com.xiaoliang.simukraft.planning.PlanningTask;
 import com.xiaoliang.simukraft.planning.PlanningTaskManager;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.AABB;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.ArrayList;
@@ -26,6 +27,7 @@ import java.util.UUID;
  * 规划师工作处理器
  * 处理规划师的拆除、替换、填充任务
  */
+@SuppressWarnings("null")
 public class PlannerWorkHandler {
 
     private final CustomEntity npc;
@@ -42,8 +44,6 @@ public class PlannerWorkHandler {
     }
 
     private int restCheckTimer = 0;
-    private boolean wasResting = false;
-
     /**
      * 每tick调用，处理工作逻辑
      */
@@ -89,7 +89,6 @@ public class PlannerWorkHandler {
             npc.setWorkStatus(com.xiaoliang.simukraft.entity.WorkStatus.WORKING);
             npc.setWorkSubState(com.xiaoliang.simukraft.entity.WorkSubState.WORKING);
             npc.setWorking(true);
-            Simukraft.LOGGER.info("[PlannerWorkHandler] NPC {} 状态恢复为工作中", npc.getFullName());
         }
     }
 
@@ -97,19 +96,6 @@ public class PlannerWorkHandler {
      * 检查并处理NPC休息状态
      */
     private void checkAndHandleRest(ServerLevel level) {
-        boolean isResting = NPCRestHandler.shouldStartResting(level);
-
-        if (isResting && !wasResting && currentTask != null) {
-            // NPC开始休息，暂停任务
-            Simukraft.LOGGER.info("[PlannerWorkHandler] NPC {} 进入休息状态，暂停任务 {}",
-                npc.getFullName(), currentTask.getTaskId());
-        } else if (!isResting && wasResting && currentTask != null) {
-            // NPC结束休息，恢复任务
-            Simukraft.LOGGER.info("[PlannerWorkHandler] NPC {} 结束休息，恢复任务 {}",
-                npc.getFullName(), currentTask.getTaskId());
-        }
-
-        wasResting = isResting;
     }
 
     /**
@@ -150,9 +136,6 @@ public class PlannerWorkHandler {
             Block block = state.getBlock();
             ResourceLocation blockId = ForgeRegistries.BLOCKS.getKey(block);
             if (blockId != null && ServerConfig.isBlockBlacklistedForPlanning(blockId.toString())) {
-                if (ServerConfig.shouldLogSkippedBlocks()) {
-                    Simukraft.LOGGER.info("[PlannerWorkHandler] 跳过黑名单方块: {}", blockId);
-                }
                 currentTask.markCurrentBlockComplete();
                 continue;
             }
@@ -255,9 +238,6 @@ public class PlannerWorkHandler {
             // 检查黑名单
             ResourceLocation blockId = ForgeRegistries.BLOCKS.getKey(currentBlock);
             if (blockId != null && ServerConfig.isBlockBlacklistedForPlanning(blockId.toString())) {
-                if (ServerConfig.shouldLogSkippedBlocks()) {
-                    Simukraft.LOGGER.info("[PlannerWorkHandler] 跳过黑名单方块: {}", blockId);
-                }
                 currentTask.markCurrentBlockComplete();
                 continue;
             }
@@ -282,7 +262,6 @@ public class PlannerWorkHandler {
         // 获取目标方块ID
         String targetBlockId = replacementMap.get(currentBlockId);
         if (targetBlockId == null) {
-            Simukraft.LOGGER.error("[PlannerWorkHandler] 无法找到目标方块ID: {}", currentBlockId);
             currentTask.markCurrentBlockComplete();
             return;
         }
@@ -477,28 +456,87 @@ public class PlannerWorkHandler {
         }
     }
 
+    // 性能优化：缓存容器位置和检查时间
+    private final java.util.List<BlockPos> cachedContainerPositions = new java.util.ArrayList<>();
+    private long lastContainerCheckTime = 0;
+    private static final long CONTAINER_CACHE_DURATION_MS = 30000; // 缓存30秒
+
     /**
      * 从附近箱子中消耗物品（支持Container接口和IItemHandler Capability）
+     * 只搜索建筑盒六个面紧贴的容器，支持大箱子
+     * 性能优化：使用缓存的容器位置，避免每tick重复检查
      */
     private boolean consumeItemFromNearbyChest(ServerLevel level, BlockPos sourcePos, ItemStack requiredItem) {
-        int range = ServerConfig.getPlannerChestSearchRange();
-        // 搜索范围内的容器
-        AABB searchBox = new AABB(
-            sourcePos.getX() - range, sourcePos.getY() - range, sourcePos.getZ() - range,
-            sourcePos.getX() + range, sourcePos.getY() + range, sourcePos.getZ() + range
-        );
+        // 性能优化：更新缓存的容器位置
+        updateContainerCache(level, sourcePos);
 
-        for (BlockPos pos : BlockPos.betweenClosed(
-            new BlockPos((int)searchBox.minX, (int)searchBox.minY, (int)searchBox.minZ),
-            new BlockPos((int)searchBox.maxX, (int)searchBox.maxY, (int)searchBox.maxZ))) {
+        // 使用缓存的容器位置
+        for (BlockPos pos : cachedContainerPositions) {
+            // 检查是否有足够物品并直接消耗
+            if (tryConsumeFromContainer(level, pos, requiredItem)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
-            // 检查是否是容器（支持Container和IItemHandler）
+    /**
+     * 性能优化：更新容器位置缓存
+     */
+    private void updateContainerCache(ServerLevel level, BlockPos sourcePos) {
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastContainerCheckTime < CONTAINER_CACHE_DURATION_MS && !cachedContainerPositions.isEmpty()) {
+            return; // 缓存未过期，直接使用
+        }
+
+        cachedContainerPositions.clear();
+        Direction[] directions = new Direction[]{Direction.UP, Direction.DOWN, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST};
+
+        for (Direction dir : directions) {
+            BlockPos pos = sourcePos.relative(dir);
             if (ContainerUtils.isContainer(level, pos)) {
-                // 检查是否有足够物品
-                int count = ContainerUtils.countItem(level, pos, requiredItem);
-                if (count > 0) {
-                    // 消耗1个物品
-                    ItemStack toConsume = requiredItem.copy();
+                cachedContainerPositions.add(pos);
+                // 检查是否是大箱子，添加另一半
+                BlockPos otherHalf = getOtherChestHalf(level, pos);
+                if (otherHalf != null && !cachedContainerPositions.contains(otherHalf)) {
+                    cachedContainerPositions.add(otherHalf);
+                }
+            }
+        }
+        lastContainerCheckTime = currentTime;
+    }
+
+    /**
+     * 性能优化：尝试从单个容器消耗物品
+     */
+    private boolean tryConsumeFromContainer(ServerLevel level, BlockPos pos, ItemStack requiredItem) {
+        BlockEntity blockEntity = level.getBlockEntity(pos);
+        if (blockEntity == null || blockEntity.isRemoved()) {
+            return false;
+        }
+
+        // 优先使用 IItemHandler Capability
+        var cap = blockEntity.getCapability(net.minecraftforge.common.capabilities.ForgeCapabilities.ITEM_HANDLER).resolve();
+        if (cap.isPresent()) {
+            net.minecraftforge.items.IItemHandler handler = cap.get();
+            for (int i = 0; i < handler.getSlots(); i++) {
+                net.minecraft.world.item.ItemStack stack = handler.getStackInSlot(i);
+                if (!stack.isEmpty() && net.minecraftforge.items.ItemHandlerHelper.canItemStacksStack(stack, requiredItem)) {
+                    net.minecraft.world.item.ItemStack extracted = handler.extractItem(i, 1, false);
+                    if (!extracted.isEmpty()) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        // 回退到 Container 接口
+        if (blockEntity instanceof net.minecraft.world.Container container) {
+            for (int i = 0; i < container.getContainerSize(); i++) {
+                net.minecraft.world.item.ItemStack stack = container.getItem(i);
+                if (!stack.isEmpty() && net.minecraftforge.items.ItemHandlerHelper.canItemStacksStack(stack, requiredItem)) {
+                    net.minecraft.world.item.ItemStack toConsume = requiredItem.copy();
                     toConsume.setCount(1);
                     if (ContainerUtils.consumeItem(level, pos, toConsume)) {
                         return true;
@@ -598,6 +636,7 @@ public class PlannerWorkHandler {
     /**
      * 将物品存入附近的容器
      * 支持：箱子、陷阱箱、木桶、潜影盒等所有实现 Container 接口或 IItemHandler Capability 的方块
+     * 性能优化：使用缓存的容器位置，避免每tick重复检查
      */
     private void storeItemsInNearbyChest(ServerLevel level, BlockPos sourcePos, List<ItemStack> items) {
         // 复制物品列表，避免修改原始列表
@@ -612,33 +651,20 @@ public class PlannerWorkHandler {
             return;
         }
 
-        int range = ServerConfig.getPlannerChestSearchRange();
-        // 搜索范围内的容器
-        AABB searchBox = new AABB(
-            sourcePos.getX() - range, sourcePos.getY() - range, sourcePos.getZ() - range,
-            sourcePos.getX() + range, sourcePos.getY() + range, sourcePos.getZ() + range
-        );
+        // 性能优化：使用缓存的容器位置
+        updateContainerCache(level, sourcePos);
 
-        // 查找范围内的容器方块实体
-        for (BlockPos pos : BlockPos.betweenClosed(
-            new BlockPos((int)searchBox.minX, (int)searchBox.minY, (int)searchBox.minZ),
-            new BlockPos((int)searchBox.maxX, (int)searchBox.maxY, (int)searchBox.maxZ))) {
-
-            // 检查是否是容器（支持Container和IItemHandler）
-            if (ContainerUtils.isContainer(level, pos)) {
-                // 尝试将物品存入容器
-                for (ItemStack item : remainingItems) {
-                    if (item.isEmpty()) continue;
-
-                    int inserted = ContainerUtils.insertItem(level, pos, item);
-                    item.shrink(inserted);
-                }
-
-                // 如果所有物品都已存入，返回
-                boolean allStored = remainingItems.stream().allMatch(ItemStack::isEmpty);
-                if (allStored) {
-                    return;
-                }
+        // 使用缓存的容器位置
+        for (BlockPos pos : cachedContainerPositions) {
+            // 尝试将物品存入容器
+            if (tryInsertToContainer(level, pos, remainingItems)) {
+                return; // 全部存入
+            }
+            
+            // 检查是否全部存入
+            boolean allStored = remainingItems.stream().allMatch(ItemStack::isEmpty);
+            if (allStored) {
+                return;
             }
         }
 
@@ -655,6 +681,88 @@ public class PlannerWorkHandler {
             // 发送箱子已满提示（带冷却）
             sendChestFullMessage(level);
         }
+    }
+
+    /**
+     * 性能优化：尝试将物品存入单个容器
+     * @return 如果所有物品都已存入返回true
+     */
+    private boolean tryInsertToContainer(ServerLevel level, BlockPos pos, List<ItemStack> items) {
+        BlockEntity blockEntity = level.getBlockEntity(pos);
+        if (blockEntity == null || blockEntity.isRemoved()) {
+            return false;
+        }
+
+        // 优先使用 IItemHandler Capability
+        var cap = blockEntity.getCapability(net.minecraftforge.common.capabilities.ForgeCapabilities.ITEM_HANDLER).resolve();
+        if (cap.isPresent()) {
+            net.minecraftforge.items.IItemHandler handler = cap.get();
+            for (ItemStack item : items) {
+                if (item.isEmpty()) continue;
+
+                // 尝试插入到容器的空槽位
+                for (int i = 0; i < handler.getSlots() && !item.isEmpty(); i++) {
+                    net.minecraft.world.item.ItemStack remaining = handler.insertItem(i, item, false);
+                    item.setCount(remaining.getCount());
+                }
+            }
+            return items.stream().allMatch(ItemStack::isEmpty);
+        }
+
+        // 回退到 Container 接口
+        if (blockEntity instanceof net.minecraft.world.Container container) {
+            for (ItemStack item : items) {
+                if (item.isEmpty()) continue;
+
+                for (int i = 0; i < container.getContainerSize() && !item.isEmpty(); i++) {
+                    net.minecraft.world.item.ItemStack slotStack = container.getItem(i);
+                    if (slotStack.isEmpty()) {
+                        // 空槽位，直接放入
+                        container.setItem(i, item.copy());
+                        item.setCount(0);
+                    } else if (net.minecraftforge.items.ItemHandlerHelper.canItemStacksStack(slotStack, item)) {
+                        // 可以堆叠
+                        int maxStack = Math.min(slotStack.getMaxStackSize(), container.getMaxStackSize());
+                        int canAdd = maxStack - slotStack.getCount();
+                        if (canAdd > 0) {
+                            int toAdd = Math.min(canAdd, item.getCount());
+                            slotStack.grow(toAdd);
+                            item.shrink(toAdd);
+                        }
+                    }
+                }
+            }
+            return items.stream().allMatch(ItemStack::isEmpty);
+        }
+        return false;
+    }
+
+    /**
+     * 获取大箱子的另一半位置
+     * @param level 世界
+     * @param pos 箱子位置
+     * @return 另一半位置，如果不是大箱子则返回null
+     */
+    @javax.annotation.Nullable
+    private BlockPos getOtherChestHalf(ServerLevel level, BlockPos pos) {
+        net.minecraft.world.level.block.state.BlockState state = level.getBlockState(pos);
+        if (!(state.getBlock() instanceof net.minecraft.world.level.block.ChestBlock)) {
+            return null;
+        }
+
+        // 检查四个水平方向是否有相邻的箱子
+        for (Direction dir : new Direction[]{Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST}) {
+            BlockPos neighborPos = pos.relative(dir);
+            net.minecraft.world.level.block.state.BlockState neighborState = level.getBlockState(neighborPos);
+            if (neighborState.getBlock() instanceof net.minecraft.world.level.block.ChestBlock) {
+                // 检查是否是同一个大箱子的一部分
+                if (state.hasProperty(net.minecraft.world.level.block.ChestBlock.TYPE) &&
+                    neighborState.hasProperty(net.minecraft.world.level.block.ChestBlock.TYPE)) {
+                    return neighborPos;
+                }
+            }
+        }
+        return null;
     }
 
     /**

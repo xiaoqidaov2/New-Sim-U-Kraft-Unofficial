@@ -22,7 +22,7 @@ import java.util.Set;
 
 /**
  * 方块替换/填充箱子选择界面
- * 自动搜索建筑盒5x5范围内的所有箱子，并显示列表供玩家选择
+ * 自动搜索建筑盒六个面紧贴的所有箱子，并显示列表供玩家选择
  */
 @SuppressWarnings("null")
 public class BlockReplacementChestSelectScreen extends Screen {
@@ -37,7 +37,7 @@ public class BlockReplacementChestSelectScreen extends Screen {
     private final Screen parent;
     private final Mode mode;
 
-    // 建筑盒5x5范围内的箱子列表
+    // 建筑盒六个面紧贴的箱子列表
     private List<ContainerInfo> chestList = new ArrayList<>();
     private int selectedIndex = -1;
 
@@ -45,7 +45,6 @@ public class BlockReplacementChestSelectScreen extends Screen {
     private int scrollOffset = 0;
     private static final int ITEMS_PER_PAGE = 5;
     private static final int ITEM_HEIGHT = 30;
-    private static final int SEARCH_RADIUS = 5; // 5x5范围
 
     // 按钮
     private Button confirmButton;
@@ -71,7 +70,7 @@ public class BlockReplacementChestSelectScreen extends Screen {
     protected void init() {
         super.init();
 
-        // 搜索建筑盒5x5范围内的箱子
+        // 搜索建筑盒六个面紧贴的箱子
         scanChestsAroundBuildBox();
 
         int centerX = this.width / 2;
@@ -108,68 +107,43 @@ public class BlockReplacementChestSelectScreen extends Screen {
     }
 
     /**
-     * 扫描建筑盒5x5范围内的所有箱子
+     * 扫描建筑盒六个面紧贴的所有箱子
      */
     private void scanChestsAroundBuildBox() {
         chestList.clear();
         if (minecraft == null || minecraft.level == null || buildBoxPos == null) {
-            System.out.println("[BlockReplacement] 无法搜索箱子：minecraft=" + (minecraft == null) + 
-                    ", level=" + (minecraft != null ? minecraft.level == null : "N/A") + 
-                    ", buildBoxPos=" + buildBoxPos);
             return;
         }
 
-        // 计算5x5搜索范围（以建筑盒为中心）
-        int minX = buildBoxPos.getX() - SEARCH_RADIUS;
-        int maxX = buildBoxPos.getX() + SEARCH_RADIUS;
-        int minY = Math.max(-64, buildBoxPos.getY() - SEARCH_RADIUS); // 允许更低的高度
-        int maxY = buildBoxPos.getY() + SEARCH_RADIUS;
-        int minZ = buildBoxPos.getZ() - SEARCH_RADIUS;
-        int maxZ = buildBoxPos.getZ() + SEARCH_RADIUS;
+        // 只搜索六个面紧贴的容器
+        Set<BlockPos> processedChests = new HashSet<>();
+        Direction[] directions = new Direction[]{Direction.UP, Direction.DOWN, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST};
 
-        System.out.println("[BlockReplacement] 搜索范围: X[" + minX + "-" + maxX + "], Y[" + minY + "-" + maxY + "], Z[" + minZ + "-" + maxZ + "]");
-        System.out.println("[BlockReplacement] 建筑盒位置: " + buildBoxPos);
+        for (Direction dir : directions) {
+            BlockPos pos = buildBoxPos.relative(dir);
+            BlockState state = minecraft.level.getBlockState(pos);
+            BlockEntity blockEntity = minecraft.level.getBlockEntity(pos);
 
-        // 搜索范围内的箱子
-        int checkedBlocks = 0;
-        Set<BlockPos> processedChests = new HashSet<>(); // 用于避免大箱子被添加两次
-        
-        for (int x = minX; x <= maxX; x++) {
-            for (int y = minY; y <= maxY; y++) {
-                for (int z = minZ; z <= maxZ; z++) {
-                    BlockPos pos = new BlockPos(x, y, z);
-                    BlockState state = minecraft.level.getBlockState(pos);
-                    BlockEntity blockEntity = minecraft.level.getBlockEntity(pos);
-                    checkedBlocks++;
-                    
-                    // 如果是箱子，检查是否已经处理过（大箱子的另一半）
-                    if (state.getBlock() instanceof ChestBlock) {
-                        if (processedChests.contains(pos)) {
-                            continue; // 已经处理过这个箱子
-                        }
-                        
-                        // 检查是否是大箱子，获取另一半的位置
-                        BlockPos otherHalf = getOtherChestHalf(state, pos);
-                        if (otherHalf != null) {
-                            processedChests.add(otherHalf); // 标记另一半为已处理
-                        }
-                        processedChests.add(pos);
-                        
-                        String typeName = "大箱子";
-                        System.out.println("[BlockReplacement] 找到大箱子 at " + pos + (otherHalf != null ? " (另一半: " + otherHalf + ")" : ""));
-                        chestList.add(new ContainerInfo(pos, null, typeName));
-                    } 
-                    // 其他容器类型（木桶等）
-                    else if (blockEntity instanceof Container container) {
-                        String typeName = blockEntity.getClass().getSimpleName();
-                        System.out.println("[BlockReplacement] 找到容器: " + typeName + " at " + pos);
-                        chestList.add(new ContainerInfo(pos, container, typeName));
-                    }
+            // 如果是箱子，检查是否已经处理过（大箱子的另一半）
+            if (state.getBlock() instanceof ChestBlock) {
+                if (processedChests.contains(pos)) {
+                    continue;
                 }
+
+                BlockPos otherHalf = getOtherChestHalf(state, pos);
+                if (otherHalf != null) {
+                    processedChests.add(otherHalf);
+                }
+                processedChests.add(pos);
+
+                chestList.add(new ContainerInfo(pos, null, "大箱子"));
+            }
+            // 其他容器类型（木桶等）
+            else if (blockEntity instanceof Container container) {
+                String typeName = blockEntity.getClass().getSimpleName();
+                chestList.add(new ContainerInfo(pos, container, typeName));
             }
         }
-
-        System.out.println("[BlockReplacement] 检查了 " + checkedBlocks + " 个方块，找到 " + chestList.size() + " 个容器");
     }
     
     /**

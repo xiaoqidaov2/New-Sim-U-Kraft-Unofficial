@@ -213,7 +213,7 @@ public class AreaSelectionScreen extends Screen {
         FreeCameraManager.deactivate();
         AreaSelectionManager.endSelection();
 
-        // 打开箱子选择界面，在建筑盒5x5范围内搜索箱子
+        // 打开箱子选择界面，在建筑盒六个面紧贴范围内搜索箱子
         minecraft.setScreen(new BlockReplacementChestSelectScreen(p1, p2, buildBoxPos, parent));
     }
 
@@ -234,7 +234,7 @@ public class AreaSelectionScreen extends Screen {
         FreeCameraManager.deactivate();
         AreaSelectionManager.endSelection();
 
-        // 打开箱子选择界面（填充模式），在建筑盒5x5范围内搜索箱子
+        // 打开箱子选择界面（填充模式），在建筑盒六个面紧贴范围内搜索箱子
         minecraft.setScreen(new BlockReplacementChestSelectScreen(p1, p2, buildBoxPos, parent,
                 BlockReplacementChestSelectScreen.Mode.FILL));
     }

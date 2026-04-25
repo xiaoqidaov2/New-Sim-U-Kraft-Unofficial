@@ -1,6 +1,5 @@
 package com.xiaoliang.simukraft.building;
 
-import com.xiaoliang.simukraft.Simukraft;
 import com.xiaoliang.simukraft.client.preview.SchematicNBTLoader;
 import com.xiaoliang.simukraft.config.ServerConfig;
 import com.xiaoliang.simukraft.entity.CustomEntity;
@@ -9,7 +8,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Block;
@@ -38,6 +36,7 @@ import java.util.*;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+@SuppressWarnings("null")
 public class ConstructionTask {
     private static final Property<Direction> FACING_PROPERTY = requireProperty(BlockStateProperties.FACING);
     private static final Property<Direction> HORIZONTAL_FACING_PROPERTY = requireProperty(BlockStateProperties.HORIZONTAL_FACING);
@@ -118,17 +117,8 @@ public class ConstructionTask {
                         }
                     }
                 }
-                if (ServerConfig.isDebugLogEnabled()) {
-                    Simukraft.LOGGER.info("[ConstructionTask] 强制加载 " + (forcedChunks.size() + 1) + " 个区块以确保箱子可被找到");
-                }
             }
         }
-
-        Simukraft.LOGGER.info("[ConstructionTask] 创建建造任务: " + displayName +
-                            ", 方块数量: " + blocksToPlace.size() +
-                            ", 起始位置: " + startPos +
-                            ", 建筑盒位置: " + buildBoxPos +
-                            ", 朝向: " + facing);
     }
 
     /**
@@ -173,8 +163,6 @@ public class ConstructionTask {
             }
         }
 
-        Simukraft.LOGGER.info("[ConstructionTask] 从持久化数据恢复建造任务: " + displayName +
-                            ", 方块数量: " + blocksToPlace.size());
     }
 
     @Nonnull
@@ -184,8 +172,6 @@ public class ConstructionTask {
         // 使用新的NBT加载方式
         String filePath = "simukraftbuilding/" + category + "/" + buildingName + ".nbt";
         List<SchematicNBTLoader.SchematicBlock> schematicBlocks = SchematicNBTLoader.loadSchematicBlocks(filePath);
-
-        Simukraft.LOGGER.info("[ConstructionTask] 从文件加载: " + filePath + ", 加载到 " + schematicBlocks.size() + " 个方块");
 
         for (SchematicNBTLoader.SchematicBlock schematicBlock : schematicBlocks) {
             BlockPos pos = Objects.requireNonNull(schematicBlock.pos());
@@ -208,8 +194,6 @@ public class ConstructionTask {
 
         // 按层排序，每层优先级：普通方块 > 需要支撑/重力方块 > 液体相关方块
         blocks.sort(new LayeredBlockComparator());
-
-        Simukraft.LOGGER.info("[ConstructionTask] 方块已按层排序，共 " + blocks.size() + " 个方块");
 
         return blocks;
     }
@@ -511,7 +495,7 @@ public class ConstructionTask {
     // 性能优化：缓存附近容器的位置，避免每 tick 重复搜索
     private final List<BlockPos> cachedContainerPositions = new java.util.ArrayList<>();
     private long lastContainerSearchTime = 0;
-    private static final long CONTAINER_CACHE_DURATION_MS = 5000; // 缓存 5 秒
+    private static final long CONTAINER_CACHE_DURATION_MS = 30000; // 性能优化：缓存 30 秒（从5秒增加到30秒）
 
     @SuppressWarnings("null")
     private boolean consumeFromNearbyChests(BlockState state) {
@@ -523,74 +507,26 @@ public class ConstructionTask {
             return true; // 非材料方块直接允许放置
         }
 
-        // 修复：确保建筑盒周围的区块已加载（退出重进游戏后可能需要重新加载）
-        ensureChunksLoaded(serverLevel);
-
-        int range = ServerConfig.getBuilderChestSearchRange();
-        int maxWaitTicks = ServerConfig.getBuilderChunkLoadWaitTicks();
-        
-        // 修复：检查所有相关区块是否已加载（使用成员变量记录等待状态）
-        boolean allChunksLoaded = true;
-        for (int x = -range; x <= range; x++) {
-            for (int y = -range; y <= range; y++) {
-                for (int z = -range; z <= range; z++) {
-                    BlockPos checkPos = buildBoxPos.offset(x, y, z);
-                    if (!serverLevel.isLoaded(checkPos)) {
-                        allChunksLoaded = false;
-                        ChunkPos chunkPos = new ChunkPos(checkPos);
-                        serverLevel.setChunkForced(chunkPos.x, chunkPos.z, true);
-                        if (chunkLoadWaitTicks == 0 && ServerConfig.isDebugLogEnabled()) {
-                            Simukraft.LOGGER.debug("[ConstructionTask] 等待区块加载: " + chunkPos);
-                        }
-                        break;
-                    }
-                }
-                if (!allChunksLoaded) break;
-            }
-            if (!allChunksLoaded) break;
-        }
-        
-        // 修复：如果区块未完全加载，使用成员变量记录等待次数
-        if (!allChunksLoaded) {
-            chunkLoadWaitTicks++;
-            
-            // 第一次等待时通知区块正在加载
-            if (!hasNotifiedChunkLoading && chunkLoadWaitTicks == 1) {
-                hasNotifiedChunkLoading = true;
-                Component message = Component.translatable("message.simukraft.construction.chunk_loading", displayName)
-                    .withStyle(style -> style.withColor(0xFFFF00));
-                // 使用原版消息系统广播给所有玩家
-                serverLevel.getServer().getPlayerList().broadcastSystemMessage(Objects.requireNonNull(message), false);
-            }
-            
-            // 超过最大等待时间，重置计数器并继续尝试
-            if (chunkLoadWaitTicks >= maxWaitTicks) {
-                chunkLoadWaitTicks = 0;
-                if (ServerConfig.isDebugLogEnabled()) {
-                    Simukraft.LOGGER.warn("[ConstructionTask] 区块加载等待超时，继续尝试搜索箱子");
-                }
-            } else {
-                return false; // 区块未就绪，返回false等待下次tick
-            }
-        } else {
-            // 区块已就绪
-            if (chunkLoadWaitTicks > 0 && ServerConfig.isDebugLogEnabled()) {
-                Simukraft.LOGGER.debug("[ConstructionTask] 区块加载完成，耗时 " + chunkLoadWaitTicks + " tick");
-            }
-            chunkLoadWaitTicks = 0;
+        // 性能优化：只在区块未就绪时检查，避免每 tick 重复检查
+        if (!areChunksReady(serverLevel)) {
+            return false; // 区块未就绪，等待下次tick
         }
 
         long currentTime = System.currentTimeMillis();
         // 如果缓存已过期，或者缓存为空，重新搜索容器
+        // 只搜索建筑盒六个面紧贴的容器
         if (currentTime - lastContainerSearchTime > CONTAINER_CACHE_DURATION_MS || cachedContainerPositions.isEmpty()) {
             cachedContainerPositions.clear();
-            for (int x = -range; x <= range; x++) {
-                for (int y = -range; y <= range; y++) {
-                    for (int z = -range; z <= range; z++) {
-                        BlockPos checkPos = buildBoxPos.offset(x, y, z);
-                        if (serverLevel.isLoaded(checkPos) && ContainerUtils.isContainer(serverLevel, checkPos)) {
-                            cachedContainerPositions.add(checkPos);
-                        }
+            // 六个方向：上、下、北、南、西、东
+            Direction[] containerDirections = new Direction[]{Direction.UP, Direction.DOWN, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST};
+            for (Direction dir : containerDirections) {
+                BlockPos checkPos = buildBoxPos.relative(dir);
+                if (serverLevel.isLoaded(checkPos) && ContainerUtils.isContainer(serverLevel, checkPos)) {
+                    cachedContainerPositions.add(checkPos);
+                    // 检查是否是大箱子，如果是，添加另一半位置
+                    BlockPos otherHalf = getOtherChestHalf(serverLevel, checkPos);
+                    if (otherHalf != null && !cachedContainerPositions.contains(otherHalf)) {
+                        cachedContainerPositions.add(otherHalf);
                     }
                 }
             }
@@ -622,7 +558,7 @@ public class ConstructionTask {
             lastWarningTime = currentTime;
             // 使用材料管理器获取详细的材料需求信息（Component 版本，支持客户端翻译）
             Component materialInfo = com.xiaoliang.simukraft.utils.MaterialManager.getMaterialRequirementComponent(state);
-            Component message = Component.translatable("message.simukraft.construction.need_materials", displayName, materialInfo, range);
+            Component message = Component.translatable("message.simukraft.construction.need_materials", displayName, materialInfo, 1);
             // 使用原版消息系统广播给所有玩家
             serverLevel.getServer().getPlayerList().broadcastSystemMessage(Objects.requireNonNull(message), false);
         }
@@ -820,6 +756,95 @@ public class ConstructionTask {
     }
 
     /**
+     * 获取大箱子的另一半位置
+     * @param level 世界
+     * @param pos 箱子位置
+     * @return 另一半位置，如果不是大箱子则返回null
+     */
+    @Nullable
+    private BlockPos getOtherChestHalf(ServerLevel level, BlockPos pos) {
+        BlockState state = level.getBlockState(pos);
+        if (!(state.getBlock() instanceof net.minecraft.world.level.block.ChestBlock)) {
+            return null;
+        }
+        
+        // 检查四个水平方向是否有相邻的箱子
+        for (Direction dir : new Direction[]{Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST}) {
+            BlockPos neighborPos = pos.relative(dir);
+            BlockState neighborState = level.getBlockState(neighborPos);
+            if (neighborState.getBlock() instanceof net.minecraft.world.level.block.ChestBlock) {
+                // 检查是否是同一个大箱子的一部分
+                if (state.hasProperty(net.minecraft.world.level.block.ChestBlock.TYPE) && 
+                    neighborState.hasProperty(net.minecraft.world.level.block.ChestBlock.TYPE)) {
+                    return neighborPos;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 性能优化：检查区块是否就绪，避免每 tick 重复检查
+     * 只在区块未就绪时执行完整检查逻辑
+     */
+    private boolean areChunksReady(ServerLevel serverLevel) {
+        // 如果已经等待过区块加载，直接返回状态
+        if (chunkLoadWaitTicks > 0) {
+            return checkAndWaitChunks(serverLevel);
+        }
+        
+        // 快速检查：只检查六个方向是否都已加载
+        Direction[] directions = new Direction[]{Direction.UP, Direction.DOWN, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST};
+        for (Direction dir : directions) {
+            BlockPos checkPos = buildBoxPos.relative(dir);
+            if (!serverLevel.isLoaded(checkPos)) {
+                // 发现未加载的区块，进入等待模式
+                return checkAndWaitChunks(serverLevel);
+            }
+        }
+        return true; // 所有区块都已加载
+    }
+    
+    /**
+     * 检查并等待区块加载
+     */
+    private boolean checkAndWaitChunks(ServerLevel serverLevel) {
+        int maxWaitTicks = ServerConfig.getBuilderChunkLoadWaitTicks();
+        boolean allChunksLoaded = true;
+        
+        Direction[] directions = new Direction[]{Direction.UP, Direction.DOWN, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST};
+        for (Direction dir : directions) {
+            BlockPos checkPos = buildBoxPos.relative(dir);
+            if (!serverLevel.isLoaded(checkPos)) {
+                allChunksLoaded = false;
+                ChunkPos chunkPos = new ChunkPos(checkPos);
+                serverLevel.setChunkForced(chunkPos.x, chunkPos.z, true);
+                break;
+            }
+        }
+
+        if (!allChunksLoaded) {
+            chunkLoadWaitTicks++;
+
+            if (!hasNotifiedChunkLoading && chunkLoadWaitTicks == 1) {
+                hasNotifiedChunkLoading = true;
+                Component message = Component.translatable("message.simukraft.construction.chunk_loading", displayName)
+                    .withStyle(style -> style.withColor(0xFFFF00));
+                serverLevel.getServer().getPlayerList().broadcastSystemMessage(Objects.requireNonNull(message), false);
+            }
+
+            if (chunkLoadWaitTicks >= maxWaitTicks) {
+                chunkLoadWaitTicks = 0;
+            } else {
+                return false;
+            }
+        } else {
+            chunkLoadWaitTicks = 0;
+        }
+        return true;
+    }
+
+    /**
      * 修复：释放所有强制加载的区块
      */
     private void releaseForcedChunks() {
@@ -831,53 +856,12 @@ public class ConstructionTask {
         if (loadedChunkPos != null) {
             ChunkPos mainChunk = loadedChunkPos;
             serverLevel.setChunkForced(mainChunk.x, mainChunk.z, false);
-            Simukraft.LOGGER.info("[ConstructionTask] 释放主区块加载: " + mainChunk);
         }
         // 释放建筑盒周围的区块
         for (ChunkPos chunkPos : forcedChunks) {
             serverLevel.setChunkForced(chunkPos.x, chunkPos.z, false);
         }
-        if (!forcedChunks.isEmpty()) {
-            Simukraft.LOGGER.info("[ConstructionTask] 释放 " + forcedChunks.size() + " 个周围区块加载");
-        }
         forcedChunks.clear();
-    }
-
-    /**
-     * 修复：确保建筑盒周围的区块已加载
-     * 在退出重进游戏后，强制加载的区块可能会失效，需要重新加载
-     */
-    private void ensureChunksLoaded(ServerLevel serverLevel) {
-        if (!ServerConfig.isBuilderForceLoadChunks()) {
-            return;
-        }
-
-        // 重新加载主区块
-        ChunkPos mainChunk = loadedChunkPos;
-        if (mainChunk != null && !serverLevel.getChunkSource().hasChunk(mainChunk.x, mainChunk.z)) {
-            serverLevel.setChunkForced(mainChunk.x, mainChunk.z, true);
-            if (ServerConfig.isDebugLogEnabled()) {
-                Simukraft.LOGGER.debug("[ConstructionTask] 重新加载主区块: " + mainChunk);
-            }
-        }
-
-        // 重新加载建筑盒周围的区块
-        int chunkRadius = ServerConfig.getBuilderChunkLoadRadius();
-        ChunkPos buildBoxChunk = new ChunkPos(Objects.requireNonNull(buildBoxPos));
-        for (int x = -chunkRadius; x <= chunkRadius; x++) {
-            for (int z = -chunkRadius; z <= chunkRadius; z++) {
-                ChunkPos chunkPos = new ChunkPos(buildBoxChunk.x + x, buildBoxChunk.z + z);
-                if (!serverLevel.getChunkSource().hasChunk(chunkPos.x, chunkPos.z)) {
-                    serverLevel.setChunkForced(chunkPos.x, chunkPos.z, true);
-                    if (!forcedChunks.contains(chunkPos)) {
-                        forcedChunks.add(chunkPos);
-                    }
-                    if (ServerConfig.isDebugLogEnabled()) {
-                        Simukraft.LOGGER.debug("[ConstructionTask] 重新加载周围区块: " + chunkPos);
-                    }
-                }
-            }
-        }
     }
 
     public boolean isCompleted() {
@@ -893,6 +877,7 @@ public class ConstructionTask {
 
     /**
      * 从容器中尝试消耗材料（支持Container接口和IItemHandler Capability）
+     * 性能优化：使用直接查找并消耗的方法，避免复制整个容器内容
      * @param containerPos 容器位置
      * @param state 要放置的方块状态
      * @return 是否成功消耗材料
@@ -901,40 +886,8 @@ public class ConstructionTask {
         ServerLevel serverLevel = getRuntimeLevel();
         if (serverLevel == null) return false;
 
-        // 获取容器中的所有物品
-        List<ItemStack> items = ContainerUtils.getAllItems(serverLevel, containerPos);
-        
-        for (ItemStack stack : items) {
-            if (stack.isEmpty()) continue;
-
-            // 使用材料管理器检查物品是否可以使用
-            boolean canUse = com.xiaoliang.simukraft.utils.MaterialManager.canUseItemForBlock(stack, state);
-
-            if (canUse) {
-                // 消耗材料前再次确认容器存在
-                if (!ContainerUtils.isContainer(serverLevel, containerPos)) {
-                    // 容器在检查过程中被移除，发送提示
-                    long currentTime = System.currentTimeMillis();
-                    if (currentTime - lastWarningTime >= ServerConfig.getBuilderWarningCooldownMs()) {
-                        lastWarningTime = currentTime;
-                        // 使用工具类获取方块可翻译名称
-                        Component blockName = com.xiaoliang.simukraft.utils.BlockNameTranslator.getBlockComponent(state.getBlock());
-                        Component message = Component.translatable("message.simukraft.construction.container_removed", displayName, blockName);
-                        // 使用原版消息系统广播给所有玩家
-                        serverLevel.getServer().getPlayerList().broadcastSystemMessage(Objects.requireNonNull(message), false);
-                    }
-                    return false;
-                }
-
-                // 消耗1个物品
-                ItemStack toConsume = stack.copy();
-                toConsume.setCount(1);
-                if (ContainerUtils.consumeItem(serverLevel, containerPos, toConsume)) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        // 性能优化：直接查找并消耗建筑材料，避免复制整个容器内容
+        return ContainerUtils.findAndConsumeBuildingMaterial(serverLevel, containerPos, state);
     }
 
     public CustomEntity getBuilder() {
