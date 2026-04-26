@@ -44,7 +44,7 @@ public class NPCRestHandler {
 
     // 存储正在休息的NPC数据
     private static final Map<UUID, RestData> restingNPCs = new ConcurrentHashMap<>();
-    // 存储NPC上次上床时间（menglannnn: 用于上床冷却）
+    // 存储NPC上次上床时间（用于上床冷却）
     private static final Map<UUID, Long> npcLastBedTime = new ConcurrentHashMap<>();
     // 存储NPC的休息子状态
     private static final Map<UUID, WorkSubState> npcSubStates = new ConcurrentHashMap<>();
@@ -60,7 +60,7 @@ public class NPCRestHandler {
     // 存储NPC休息前的规划师任务ID（用于规划师恢复工作）
     private static final Map<UUID, UUID> npcPreviousPlanningTaskId = new ConcurrentHashMap<>();
 
-    // 存储NPC被玩家唤醒的时间（menglannnn: 防止立即重新开始休息）
+    // 存储NPC被玩家唤醒的时间（防止立即重新开始休息）
     private static final Map<UUID, Long> npcManualWakeUpTime = new ConcurrentHashMap<>();
 
     // 玩家唤醒后的冷却时间（tick）
@@ -92,7 +92,7 @@ public class NPCRestHandler {
         public boolean hasArrivedHome;
         public BlockPos bedPos;
         public long nextBedRetryTick;
-        public long lastWakeUpTime; // simukraft: 记录上次被唤醒时间（menglannnn: 防止立即重新睡觉）
+        public long lastWakeUpTime; // simukraft: 记录上次被唤醒时间（防止立即重新睡觉）
 
         public RestData(CustomEntity npc, ServerLevel level) {
             this.npc = npc;
@@ -355,7 +355,7 @@ public class NPCRestHandler {
     }
 
     /**
-     * 恢复NPC睡觉状态（menglannnn: 用于重新加载游戏后恢复正在睡觉的NPC）
+     * 恢复NPC睡觉状态（用于重新加载游戏后恢复正在睡觉的NPC）
      * @param npc NPC实体
      * @param level 服务器世界
      * @param bedPos 床位置（床头）
@@ -611,6 +611,23 @@ public class NPCRestHandler {
             npc.setWorking(false);
             // 清除状态标签
             npc.setStatusLabel(null);
+        }
+
+        // simukraft: 清除寻路层面的边界限制（menglannnn: 休息结束，恢复正常移动）
+        if (npc.getNavigation() instanceof com.xiaoliang.simukraft.entity.ai.RestrictedGroundPathNavigation nav) {
+            nav.disableRestriction();
+        }
+
+        // simukraft: 清除随机漫步的边界限制
+        com.xiaoliang.simukraft.entity.ai.RestrictedRandomStrollGoal strollGoal = npc.getRestrictedRandomStrollGoal();
+        if (strollGoal != null) {
+            strollGoal.disableRestriction();
+        }
+
+        // simukraft: 同时清除AI层面的边界限制
+        com.xiaoliang.simukraft.entity.ai.RestrictedAreaGoal areaGoal = npc.getRestrictedAreaGoal();
+        if (areaGoal != null) {
+            areaGoal.clearRestrictedArea();
         }
 
         // 发送起床提示消息
@@ -1237,7 +1254,7 @@ public class NPCRestHandler {
     }
 
     /**
-     * 更新在家状态（menglannnn: 限制在封闭空间内活动）
+     * 更新在家状态（限制在封闭空间内活动）
      */
     private static void updateAtHomeStatus(CustomEntity npc, RestData restData, ServerLevel level) {
         if (npc == null || restData == null || level == null) {
@@ -1246,6 +1263,23 @@ public class NPCRestHandler {
 
         // simukraft: 获取住宅边界，限制NPC移动范围
         BuildingBounds bounds = getResidenceBuildingBounds(level, restData.homePos, npc);
+
+        // simukraft: 启用寻路层面的边界限制（menglannnn: 在寻路时就阻止走向边界外）
+        if (npc.getNavigation() instanceof com.xiaoliang.simukraft.entity.ai.RestrictedGroundPathNavigation nav) {
+            nav.enableRestriction(restData.homePos);
+        }
+
+        // simukraft: 启用随机漫步的边界限制（menglannnn: 防止随机漫步Goal选择边界外的目标）
+        com.xiaoliang.simukraft.entity.ai.RestrictedRandomStrollGoal strollGoal = npc.getRestrictedRandomStrollGoal();
+        if (strollGoal != null) {
+            strollGoal.enableRestriction(restData.homePos);
+        }
+
+        // simukraft: 同时启用AI层面的边界限制作为后备（menglannnn: 传入控制盒位置用于查找建筑ID）
+        com.xiaoliang.simukraft.entity.ai.RestrictedAreaGoal areaGoal = npc.getRestrictedAreaGoal();
+        if (areaGoal != null && bounds != null) {
+            areaGoal.setRestrictedArea(bounds.center, bounds.rangeX, bounds.rangeZ, restData.homePos);
+        }
 
         if (!isBedStillValid(level, restData.bedPos)) {
             restData.bedPos = null;
@@ -1261,7 +1295,7 @@ public class NPCRestHandler {
             }
         }
 
-        // simukraft: NPC休息时自由移动或睡觉，不限制寻路，只限制目标范围
+        // simukraft: NPC休息时自由移动或睡觉
         npc.setNoAi(false);
         npc.setWorking(false);
 
@@ -1282,70 +1316,41 @@ public class NPCRestHandler {
         }
 
         // NPC自由移动：随机选择目标点（床或闲逛位置）
+        // simukraft: 使用RestrictedAreaGoal自动处理边界限制，这里只需要选择目标
         if (npc.getNavigation().isDone()) {
             BlockPos targetPos = chooseRestTarget(npc, restData, bounds, level);
             if (targetPos != null) {
-                // simukraft: 检查目标是否为封闭空间（至少3面墙）
-                if (isEnclosedSpace(level, targetPos)) {
-                    npc.getNavigation().moveTo(targetPos.getX() + 0.5, targetPos.getY(), targetPos.getZ() + 0.5, 0.8D);
-                }
-            }
-        }
-
-        // simukraft: 检查NPC当前位置，如果在封闭空间但正在前往开放式空间，停止寻路
-        BlockPos currentPos = npc.blockPosition();
-        if (isEnclosedSpace(level, currentPos)) {
-            // 获取当前寻路目标
-            net.minecraft.world.entity.ai.navigation.PathNavigation navigation = npc.getNavigation();
-            if (navigation.getPath() != null && navigation.getPath().getEndNode() != null) {
-                net.minecraft.world.level.pathfinder.Node endNode = navigation.getPath().getEndNode();
-                BlockPos targetPos = new BlockPos(endNode.x, endNode.y, endNode.z);
-
-                // 如果目标不是封闭空间，停止寻路（防止跑到开放式区域）
-                if (!isEnclosedSpace(level, targetPos)) {
-                    navigation.stop();
-                    LOGGER.debug("[NPCRestHandler] NPC {} 阻止前往开放式区域: {}", npc.getFullName(), targetPos);
-                }
+                // simukraft: 正常寻路，RestrictedAreaGoal会在NPC接近边界时自动阻止
+                npc.getNavigation().moveTo(targetPos.getX() + 0.5, targetPos.getY(), targetPos.getZ() + 0.5, 0.8D);
             }
         }
     }
 
     /**
-     * 选择休息时的目标点（menglannnn: 床或闲逛位置，必须在封闭空间内）
+     * 选择休息时的目标点（床或闲逛位置，优先封闭空间但开放空间也允许）
      */
     private static BlockPos chooseRestTarget(CustomEntity npc, RestData restData, BuildingBounds bounds, ServerLevel level) {
-        BlockPos currentPos = npc.blockPosition();
-        boolean currentIsEnclosed = isEnclosedSpace(level, currentPos);
-
-        // 30%概率尝试去床上睡觉（如果床存在且在范围内且在封闭空间）
-        if (restData.bedPos != null && Math.random() < 0.3) {
+        // 30%概率尝试去床上睡觉（如果床存在且在范围内）
+        if (restData.bedPos != null && Math.random() < 0.5) {
             // 检查床是否在范围内
             if (bounds == null || isPosInHomeArea(restData.bedPos, bounds)) {
                 BlockPos bedStandPos = findBedStandPos(level, restData.bedPos);
                 if (bedStandPos != null) {
-                    // simukraft: 检查床是否在封闭空间内（至少3面墙）
-                    if (isEnclosedSpace(level, bedStandPos)) {
-                        return bedStandPos;
-                    }
+                    return bedStandPos;
                 }
             }
         }
 
-        // 否则在范围内随机闲逛（只在封闭空间内）
+        // 否则在范围内随机闲逛
         if (bounds != null) {
-            BlockPos wanderPos = findWanderPosInHomeArea(npc, bounds);
-            // simukraft: 如果当前在封闭空间但找不到封闭的目标，留在原地
-            if (wanderPos == null && currentIsEnclosed) {
-                return null;
-            }
-            return wanderPos;
+            return findWanderPosInHomeArea(npc, bounds);
         }
 
         return null;
     }
 
     /**
-     * 检查位置是否在住宅范围内（menglannnn: 用于限制目标位置）
+     * 检查位置是否在住宅范围内（用于限制目标位置）
      */
     private static boolean isPosInHomeArea(BlockPos pos, BuildingBounds bounds) {
         if (pos == null || bounds == null) return false;
@@ -1355,7 +1360,7 @@ public class NPCRestHandler {
     }
 
     /**
-     * 在住宅范围内找一个随机闲逛位置（menglannnn: 只在封闭空间内活动，至少3面墙）
+     * 在住宅范围内找一个随机闲逛位置（menglannnn: 在建筑边界内自由移动）
      */
     private static BlockPos findWanderPosInHomeArea(CustomEntity npc, BuildingBounds bounds) {
         if (npc == null || bounds == null) return null;
@@ -1364,7 +1369,6 @@ public class NPCRestHandler {
         if (level == null) return null;
 
         BlockPos currentPos = npc.blockPosition();
-        boolean currentIsEnclosed = isEnclosedSpace(level, currentPos);
 
         // simukraft: 使用NPC当前Y坐标，避免跑到地下或屋顶
         int baseY = currentPos.getY();
@@ -1378,32 +1382,17 @@ public class NPCRestHandler {
 
             BlockPos pos = new BlockPos(x, y, z);
 
-            // 确保目标点在范围内、可以站立
+            // 确保目标点在范围内、可以站立、距离当前位置足够远
             if (isPosInHomeArea(pos, bounds) && canNpcStandAt(level, pos) && currentPos.distSqr(pos) > 4) {
-                boolean targetIsEnclosed = isEnclosedSpace(level, pos);
-
-                // simukraft: 如果当前在封闭空间，目标必须是封闭空间（防止跑到开放式区域）
-                if (currentIsEnclosed && !targetIsEnclosed) {
-                    continue; // 跳过开放式目标
-                }
-
-                // 目标必须是封闭空间（至少3面墙）
-                if (targetIsEnclosed) {
-                    return pos;
-                }
+                return pos;
             }
-        }
-
-        // 如果找不到封闭空间的目标，且当前在封闭空间，则留在原地
-        if (currentIsEnclosed) {
-            return null;
         }
 
         return null;
     }
 
     /**
-     * 检查位置是否在封闭空间内（menglannnn: 至少3面墙才算封闭）
+     * 检查位置是否在封闭空间内（至少3面墙才算封闭）
      */
     private static boolean isEnclosedSpace(ServerLevel level, BlockPos pos) {
         if (level == null || pos == null) return false;
@@ -1436,7 +1425,7 @@ public class NPCRestHandler {
     }
 
     /**
-     * 检查方块是否为固体方块（menglannnn: 辅助方法）
+     * 检查方块是否为固体方块（辅助方法）
      */
     private static boolean isSolidBlock(ServerLevel level, BlockPos pos) {
         if (level == null || pos == null) return false;
@@ -1510,22 +1499,53 @@ public class NPCRestHandler {
         // simukraft: 停止寻路，防止"躺着跑"
         npc.getNavigation().stop();
 
-        // simukraft: 计算床头位置（床尾朝向的反方向）
+        // simukraft: 计算床头位置和睡觉位置（根据床朝向调整）
         BlockPos headPos = getBedHeadPos(level, bedPos);
 
-        // simukraft: 将NPC传送到床头位置
-        npc.teleportTo(
-            headPos.getX() + 0.5,
-            headPos.getY() + 0.5625D,
-            headPos.getZ() + 0.5
-        );
+        // simukraft: 获取床的朝向，计算NPC应该躺下的精确位置
+        BlockState bedState = level.getBlockState(bedPos);
+        Direction bedFacing = Direction.NORTH;
+        if (bedState.getBlock() instanceof BedBlock && bedState.hasProperty(BedBlock.FACING)) {
+            bedFacing = bedState.getValue(BedBlock.FACING);
+        }
+
+        // simukraft: 根据床朝向计算NPC躺下位置（menglannnn: 原版风格，NPC身体与床方向对齐）
+        double sleepX, sleepZ;
+        switch (bedFacing) {
+            case NORTH:
+                // 床头朝北，NPC在床头位置向南躺下
+                sleepX = headPos.getX() + 0.5;
+                sleepZ = headPos.getZ() + 0.8;
+                break;
+            case SOUTH:
+                // 床头朝南，NPC在床头位置向北躺下
+                sleepX = headPos.getX() + 0.5;
+                sleepZ = headPos.getZ() + 0.2;
+                break;
+            case WEST:
+                // 床头朝西，NPC在床头位置向东躺下
+                sleepX = headPos.getX() + 0.8;
+                sleepZ = headPos.getZ() + 0.5;
+                break;
+            case EAST:
+                // 床头朝东，NPC在床头位置向西躺下
+                sleepX = headPos.getX() + 0.2;
+                sleepZ = headPos.getZ() + 0.5;
+                break;
+            default:
+                sleepX = headPos.getX() + 0.5;
+                sleepZ = headPos.getZ() + 0.5;
+        }
+
+        // simukraft: 将NPC传送到计算好的睡觉位置
+        npc.teleportTo(sleepX, headPos.getY() + 0.5625D, sleepZ);
 
         // simukraft: 使用床头位置开始睡觉
         npc.startSleeping(headPos);
     }
 
     /**
-     * 获取床头位置（menglannnn: 根据床尾位置计算床头位置）
+     * 获取床头位置（根据床尾位置计算床头位置）
      * @param level 世界
      * @param footPos 床尾位置
      * @return 床头位置
@@ -1559,7 +1579,7 @@ public class NPCRestHandler {
     }
 
     /**
-     * 玩家唤醒NPC（menglannnn: 原版风格，玩家右键床唤醒）
+     * 玩家唤醒NPC（原版风格，玩家右键床唤醒）
      * @param npc 正在睡觉的NPC
      * @param level 服务器世界
      */
@@ -1664,7 +1684,7 @@ public class NPCRestHandler {
     }
 
     /**
-     * 检查床是否被其他实体占用（menglannnn: 用于上床前检查）
+     * 检查床是否被其他实体占用（用于上床前检查）
      * @param level 世界
      * @param bedPos 床位置
      * @param npc 要上床的NPC（排除自己）
@@ -1733,7 +1753,7 @@ public class NPCRestHandler {
     }
 
     /**
-     * 在指定范围内搜索床（menglannnn: 辅助方法）
+     * 在指定范围内搜索床（辅助方法）
      */
     private static BlockPos findBedInRange(ServerLevel level, BlockPos center, int rangeX, int rangeY, int rangeZ) {
         BlockPos bestBedPos = null;
@@ -1773,7 +1793,7 @@ public class NPCRestHandler {
     }
 
     /**
-     * 建筑边界信息（menglannnn: 存储建筑的边界和中心点）
+     * 建筑边界信息（存储建筑的边界和中心点）
      */
     private static class BuildingBounds {
         final BlockPos center;  // 建筑中心
@@ -1790,13 +1810,73 @@ public class NPCRestHandler {
     }
 
     /**
-     * 获取住宅建筑边界（menglannnn: 从NBT文件读取实际建筑边界）
+     * 获取住宅建筑边界（优先从PlacedBuildingManager获取，失败则回退到NBT文件读取）
      * @param level 世界
      * @param homePos 住宅控制盒位置
      * @param npc NPC实体
      * @return 建筑边界信息，失败返回null
      */
     private static BuildingBounds getResidenceBuildingBounds(ServerLevel level, BlockPos homePos, CustomEntity npc) {
+        try {
+            // simukraft: 首先尝试从PlacedBuildingManager获取已放置的建筑数据（menglannnn: 更精确的边界）
+            com.xiaoliang.simukraft.building.PlacedBuildingManager.PlacedBuildingData placedBuilding =
+                com.xiaoliang.simukraft.building.PlacedBuildingManager.getBuildingByControlBox(homePos);
+
+            if (placedBuilding != null) {
+                // simukraft: 使用已放置建筑的方块列表计算精确边界（menglannnn: 正确处理相对坐标）
+                // 方块位置是相对于控制盒的，需要加上控制盒位置得到世界坐标
+                int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE;
+                int minY = Integer.MAX_VALUE, maxY = Integer.MIN_VALUE;
+                int minZ = Integer.MAX_VALUE, maxZ = Integer.MIN_VALUE;
+
+                for (com.xiaoliang.simukraft.building.PlacedBuildingManager.BlockEntry block : placedBuilding.blocks) {
+                    BlockPos worldPos = block.relativePos.offset(homePos);
+                    minX = Math.min(minX, worldPos.getX());
+                    maxX = Math.max(maxX, worldPos.getX());
+                    minY = Math.min(minY, worldPos.getY());
+                    maxY = Math.max(maxY, worldPos.getY());
+                    minZ = Math.min(minZ, worldPos.getZ());
+                    maxZ = Math.max(maxZ, worldPos.getZ());
+                }
+
+                // 如果没有方块，使用默认范围
+                if (minX == Integer.MAX_VALUE) {
+                    minX = homePos.getX() - 5;
+                    maxX = homePos.getX() + 5;
+                    minY = homePos.getY() - 2;
+                    maxY = homePos.getY() + 4;
+                    minZ = homePos.getZ() - 5;
+                    maxZ = homePos.getZ() + 5;
+                }
+
+                int centerX = (minX + maxX) / 2;
+                int centerY = (minY + maxY) / 2;
+                int centerZ = (minZ + maxZ) / 2;
+                BlockPos centerPos = new BlockPos(centerX, centerY, centerZ);
+
+                int rangeX = (maxX - minX) / 2 + 2;
+                int rangeY = (maxY - minY) / 2 + 3;
+                int rangeZ = (maxZ - minZ) / 2 + 2;
+
+                LOGGER.debug("[NPCRestHandler] NPC {} 住宅建筑边界(已放置): 控制盒={}, 中心={}, 范围: x={}, y={}, z={}",
+                    npc.getFullName(), homePos, centerPos, rangeX, rangeY, rangeZ);
+
+                return new BuildingBounds(centerPos, rangeX, rangeY, rangeZ);
+            }
+
+            // 回退：从NBT文件读取建筑边界（用于尚未注册的建筑）
+            return getBuildingBoundsFromNBT(level, homePos, npc);
+
+        } catch (Exception e) {
+            LOGGER.debug("[NPCRestHandler] 获取NPC {} 住宅建筑边界失败: {}", npc.getFullName(), e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 从NBT文件读取建筑边界（menglannnn: 用于尚未注册到PlacedBuildingManager的建筑）
+     */
+    private static BuildingBounds getBuildingBoundsFromNBT(ServerLevel level, BlockPos homePos, CustomEntity npc) {
         try {
             // 读取住宅控制盒数据获取建筑文件名
             com.xiaoliang.simukraft.building.ControlBoxDataManager.ControlBoxData controlBoxData =
@@ -1857,13 +1937,13 @@ public class NPCRestHandler {
             // 建筑中心 = 控制盒位置 + 中心偏移
             BlockPos centerPos = homePos.offset(centerOffsetX, centerOffsetY, centerOffsetZ);
 
-            LOGGER.debug("[NPCRestHandler] NPC {} 住宅建筑边界: 控制盒={}, 中心={}, 范围: x={}, y={}, z={}",
+            LOGGER.debug("[NPCRestHandler] NPC {} 住宅建筑边界(NBT): 控制盒={}, 中心={}, 范围: x={}, y={}, z={}",
                 npc.getFullName(), homePos, centerPos, rangeX, rangeY, rangeZ);
 
             return new BuildingBounds(centerPos, rangeX, rangeY, rangeZ);
 
         } catch (Exception e) {
-            LOGGER.debug("[NPCRestHandler] 获取NPC {} 住宅建筑边界失败: {}", npc.getFullName(), e.getMessage());
+            LOGGER.debug("[NPCRestHandler] 从NBT获取NPC {} 住宅建筑边界失败: {}", npc.getFullName(), e.getMessage());
             return null;
         }
     }

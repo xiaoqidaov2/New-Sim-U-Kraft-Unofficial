@@ -62,7 +62,7 @@ public class NPCInteractionHandler {
     }
 
     /**
-     * 尝试唤醒睡在床上的NPC（menglannnn: 玩家右键床唤醒）
+     * 尝试唤醒睡在床上的NPC（玩家右键床唤醒）
      * @param level 服务器世界
      * @param bedPos 床的位置
      * @param player 玩家
@@ -81,7 +81,7 @@ public class NPCInteractionHandler {
     }
 
     /**
-     * 查找睡在指定床上的NPC（menglannnn: 原版风格，检查床的两个部分）
+     * 查找睡在指定床上的NPC（原版风格，检查床的两个部分）
      * @param level 服务器世界
      * @param bedPos 床的位置（可以是床头或床尾）
      * @return 睡在该床上的NPC，如果没有返回null
@@ -156,7 +156,7 @@ public class NPCInteractionHandler {
     }
 
     /**
-     * 唤醒正在睡觉的NPC（menglannnn: 玩家右键唤醒）
+     * 唤醒正在睡觉的NPC（玩家右键唤醒）
      * @param npc 正在睡觉的NPC
      * @param player 唤醒NPC的玩家
      */

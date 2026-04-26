@@ -517,6 +517,9 @@ public class WorldEvents {
         // 服务器启动时加载NPC休息处理器的工作状态数据
         com.xiaoliang.simukraft.utils.NPCRestHandler.onServerStart(event.getServer());
 
+        // simukraft: 服务器启动时加载已放置的建筑结构数据（支持一键拆除和NPC识别）
+        com.xiaoliang.simukraft.building.PlacedBuildingManager.loadFromWorld(event.getServer());
+
         // 修复：延迟恢复建造盒雇佣状态，等待世界和实体完全加载
         // 使用BuilderDailyWorkHandler在服务器启动后持续尝试恢复建筑师状态
         scheduleBuildBoxHiredStatusRestore();
@@ -888,7 +891,10 @@ public class WorldEvents {
         com.xiaoliang.simukraft.utils.NPCTaskScheduler.invalidateCache();
         com.xiaoliang.simukraft.utils.NPCTaskScheduler.shutdown();
 
-        Simukraft.LOGGER.info("[WorldEvents] 动物生成数据、农田盒数据已保存，NPC任务调度器已关闭");
+        // simukraft: 服务器停止时保存已放置的建筑结构数据（支持一键拆除和NPC识别）
+        com.xiaoliang.simukraft.building.PlacedBuildingManager.saveToWorld(event.getServer());
+
+        Simukraft.LOGGER.info("[WorldEvents] 动物生成数据、农田盒数据、建筑结构数据已保存，NPC任务调度器已关闭");
     }
 
     /**

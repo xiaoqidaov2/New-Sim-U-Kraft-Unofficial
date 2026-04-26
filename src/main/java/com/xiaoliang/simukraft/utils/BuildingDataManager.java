@@ -6,6 +6,8 @@ import net.minecraft.network.chat.Component;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import javax.annotation.Nullable;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -386,7 +388,36 @@ public class BuildingDataManager {
         }
         return null;
     }
-    
+
+    /**
+     * 通过建筑显示名称获取文件名（menglannnn: 用于PlacedBuildingManager注册建筑时获取正确的NBT文件名）
+     * @param category 建筑类别
+     * @param displayName 建筑显示名称
+     * @return 文件名（不含扩展名），找不到返回null
+     */
+    @Nullable
+    public static String getFileNameByDisplayName(String category, String displayName) {
+        List<BuildingInfo> buildings = getBuildingsByCategory(category);
+        for (BuildingInfo building : buildings) {
+            if (building.getName().equals(displayName)) {
+                // 返回文件名（去掉.sk或.nbt扩展名）
+                String fileName = building.getFileName();
+                if (fileName != null) {
+                    // 去掉.sk扩展名
+                    if (fileName.endsWith(".sk")) {
+                        return fileName.substring(0, fileName.length() - 3);
+                    }
+                    // 去掉.nbt扩展名
+                    if (fileName.endsWith(".nbt")) {
+                        return fileName.substring(0, fileName.length() - 4);
+                    }
+                }
+                return fileName;
+            }
+        }
+        return null;
+    }
+
     /**
      * 清理建筑数据缓存
      */

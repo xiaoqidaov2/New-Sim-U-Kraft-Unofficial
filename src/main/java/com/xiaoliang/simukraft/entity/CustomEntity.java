@@ -3,6 +3,8 @@ package com.xiaoliang.simukraft.entity;
 import com.xiaoliang.simukraft.Simukraft;
 import com.xiaoliang.simukraft.config.ServerConfig;
 import com.xiaoliang.simukraft.entity.ai.HoldItemGoal;
+import com.xiaoliang.simukraft.entity.ai.RestrictedAreaGoal;
+import com.xiaoliang.simukraft.entity.ai.RestrictedGroundPathNavigation;
 import com.xiaoliang.simukraft.init.ModSoundEvents;
 import com.xiaoliang.simukraft.init.ModBlocks;
 import com.xiaoliang.simukraft.utils.NPCDataManager;
@@ -39,8 +41,7 @@ import net.minecraft.world.entity.ai.control.MoveControl;
 import net.minecraft.world.entity.ai.goal.FloatGoal;
 import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
 import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
-import net.minecraft.world.entity.ai.goal.WaterAvoidingRandomStrollGoal;
-import net.minecraft.world.entity.ai.navigation.GroundPathNavigation;
+
 import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.entity.animal.Animal;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -170,7 +171,7 @@ public class CustomEntity extends Animal {
     }
 
     /**
-     * 获取实体尺寸（menglannnn: 睡觉时扩大碰撞箱便于玩家右键唤醒）
+     * 获取实体尺寸（睡觉时扩大碰撞箱便于玩家右键唤醒）
      */
     @Override
     public net.minecraft.world.entity.EntityDimensions getDimensions(net.minecraft.world.entity.Pose pose) {
@@ -182,14 +183,41 @@ public class CustomEntity extends Animal {
         return super.getDimensions(pose);
     }
 
+    // simukraft: 限制活动范围的AI目标（menglannnn: 休息时使用，优先级最高）
+    private RestrictedAreaGoal restrictedAreaGoal;
+    // simukraft: 带边界限制的随机漫步Goal（menglannnn: 休息时只在建筑内随机移动）
+    private com.xiaoliang.simukraft.entity.ai.RestrictedRandomStrollGoal restrictedRandomStrollGoal;
+
     @Override
     protected void registerGoals() {
-        this.goalSelector.addGoal(0, new FloatGoal(this));
-        this.goalSelector.addGoal(1, new com.xiaoliang.simukraft.entity.ai.BuyFoodGoal(this));
-        this.goalSelector.addGoal(2, new LookAtPlayerGoal(this, Player.class, 8.0F));
-        this.goalSelector.addGoal(3, new WaterAvoidingRandomStrollGoal(this, 1.0D));
-        this.goalSelector.addGoal(4, new RandomLookAroundGoal(this));
-        this.goalSelector.addGoal(5, new HoldItemGoal(this));
+        // simukraft: 添加限制范围Goal，优先级设为最高（0），确保在休息时优先执行
+        this.restrictedAreaGoal = new RestrictedAreaGoal(this);
+        this.goalSelector.addGoal(0, this.restrictedAreaGoal);
+
+        this.goalSelector.addGoal(1, new FloatGoal(this));
+        this.goalSelector.addGoal(2, new com.xiaoliang.simukraft.entity.ai.BuyFoodGoal(this));
+        this.goalSelector.addGoal(3, new LookAtPlayerGoal(this, Player.class, 8.0F));
+        
+        // simukraft: 使用带边界限制的随机漫步Goal
+        this.restrictedRandomStrollGoal = new com.xiaoliang.simukraft.entity.ai.RestrictedRandomStrollGoal(this, 1.0D);
+        this.goalSelector.addGoal(4, this.restrictedRandomStrollGoal);
+        
+        this.goalSelector.addGoal(5, new RandomLookAroundGoal(this));
+        this.goalSelector.addGoal(6, new HoldItemGoal(this));
+    }
+
+    /**
+     * 获取限制范围Goal（menglannnn: 用于NPCRestHandler设置休息边界）
+     */
+    public RestrictedAreaGoal getRestrictedAreaGoal() {
+        return this.restrictedAreaGoal;
+    }
+
+    /**
+     * 获取带边界限制的随机漫步Goal（menglannnn: 用于NPCRestHandler设置休息边界）
+     */
+    public com.xiaoliang.simukraft.entity.ai.RestrictedRandomStrollGoal getRestrictedRandomStrollGoal() {
+        return this.restrictedRandomStrollGoal;
     }
 
     public static AttributeSupplier.Builder createAttributes() {
@@ -1330,14 +1358,29 @@ public class CustomEntity extends Animal {
         if (constructionTask != null) {
             com.xiaoliang.simukraft.building.ConstructionTask completedTask = constructionTask;
             String buildingName = completedTask.getBuildingName();
+            String category = completedTask.getCategory();
             BlockPos buildBoxPos = completedTask.getBuildBoxPos();
 
             completedTask.markCompleted();
 
+            // simukraft: 注册建筑整体结构（支持一键拆除和NPC识别）
             if (this.level() instanceof ServerLevel serverLevel) {
-                // 别jb乱弄这块，住宅控制盒必须在整栋建筑完工后统一激活，否则会提前入住。
+            // 别jb乱弄这块，住宅控制盒必须在整栋建筑完工后统一激活，否则会提前入住。
+                // simukraft: 获取已放置的方块列表（包含旋转后的正确坐标）
+                java.util.List<com.xiaoliang.simukraft.building.ConstructionTask.BlockInfo> placedBlocks = completedTask.getBlocksToPlace();
+
                 for (BlockPos controlBoxPos : completedTask.getControlBoxPositions()) {
+                    // 激活住宅控制盒
                     com.xiaoliang.simukraft.block.ResidentialControlBoxBlock.activatePendingResidence(serverLevel, controlBoxPos);
+
+                    // 注册建筑结构（使用实际放置的方块列表，包含旋转信息）
+                    com.xiaoliang.simukraft.building.PlacedBuildingManager.registerPlacedBuildingFromTask(
+                        controlBoxPos,
+                        buildingName,
+                        category,
+                        serverLevel.dimension().location().toString(),
+                        placedBlocks
+                    );
                 }
             }
 
@@ -1493,14 +1536,7 @@ public class CustomEntity extends Animal {
 
     @Override
     protected PathNavigation createNavigation(Level level) {
-        return new GroundPathNavigation(this, level) {
-            @Override
-            public void tick() {
-                if (!((CustomEntity)this.mob).isWorking && this.getPath() != null) {
-                    super.tick();
-                }
-            }
-        };
+        return new RestrictedGroundPathNavigation(this, level);
     }
 
     private static class CustomMoveControl extends MoveControl {
