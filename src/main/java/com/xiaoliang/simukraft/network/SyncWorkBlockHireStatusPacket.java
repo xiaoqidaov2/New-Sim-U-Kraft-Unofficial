@@ -97,7 +97,7 @@ public class SyncWorkBlockHireStatusPacket {
                     if (buildingFileName != null && !buildingFileName.isEmpty()) {
                         com.xiaoliang.simukraft.client.gui.IndustrialClientData.setBuildingFileName(workBlockPos, buildingFileName);
                     }
-                    if (minecraft.screen instanceof com.xiaoliang.simukraft.client.gui.IndustrialControlBoxScreen screen) {
+                    if (minecraft.screen instanceof com.xiaoliang.simukraft.client.gui.IndustrialControlBoxLDLibScreen screen) {
                         if (screen.getControlBoxPos().equals(workBlockPos)) {
                             screen.refreshButtonStates();
                         }

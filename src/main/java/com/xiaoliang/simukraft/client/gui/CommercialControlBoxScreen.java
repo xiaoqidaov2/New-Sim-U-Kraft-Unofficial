@@ -45,6 +45,14 @@ public class CommercialControlBoxScreen extends Screen {
                 .bounds(5, 5, 45, 20)
                 .build()));
 
+        // simukraft: 拆除按钮（右上角）
+        int demolishBtnWidth = 60;
+        this.addRenderableWidget(nn(Button.builder(
+                        nn(Component.translatable("gui.button.demolish")),
+                        button -> this.onDemolishClicked())
+                .bounds(this.width - demolishBtnWidth - 5, 5, demolishBtnWidth, 20)
+                .build()));
+
         // 优先从建筑配置文件读取职业类型（支持自定义职业）
         String jobType = readJobTypeFromBuildingFile();
         if (jobType == null) {
@@ -126,6 +134,18 @@ public class CommercialControlBoxScreen extends Screen {
                 updateButtonStates(true);  // 跳过数据同步，立即更新UI
             }
         }
+    }
+
+    /**
+     * 点击拆除按钮处理
+     */
+    private void onDemolishClicked() {
+        // 发送拆除请求到服务器
+        com.xiaoliang.simukraft.network.NetworkManager.INSTANCE.sendToServer(
+            new com.xiaoliang.simukraft.network.DemolishBuildingPacket(controlBoxPos)
+        );
+        // 关闭界面
+        this.onClose();
     }
 
     @Override

@@ -172,6 +172,13 @@ public class IndustrialControlBoxLDLibScreen extends ModularUIGuiContainer {
         super.onClose();
     }
 
+    /**
+     * 获取控制盒位置（menglannnn: 供外部调用）
+     */
+    public BlockPos getControlBoxPos() {
+        return controlBoxPos;
+    }
+
     // ==================== UI 创建 ====================
 
     private static ModularUI createUI(ControlBoxUIHolder holder) {
@@ -231,6 +238,37 @@ public class IndustrialControlBoxLDLibScreen extends ModularUIGuiContainer {
         ImageWidget statusWidget = new ImageWidget(0, statusY, windowWidth, 12, statusTexture);
         headerGroup.addWidget(statusWidget);
         holder.setStatusWidget(statusWidget);
+
+        // simukraft: 拆除按钮（右上角圆角矩形，拆除文字+X符号居中）
+        int demolishBtnWidth = (int)(50 * scaleFactor);
+        int demolishBtnHeight = (int)(30 * scaleFactor);
+        int demolishBtnX = windowWidth - demolishBtnWidth - (int)(5 * scaleFactor);
+        int demolishBtnY = (int)(5 * scaleFactor);
+
+        ButtonWidget demolishButton = new ButtonWidget();
+        demolishButton.setSelfPosition(demolishBtnX, demolishBtnY);
+        demolishButton.setSize(demolishBtnWidth, demolishBtnHeight);
+
+        // 两行文字：拆除 + ×
+        TextTexture demolishText = new TextTexture("拆除 §c×", COLOR_TEXT_NORMAL);
+        demolishText.setType(TextTexture.TextType.NORMAL);
+
+        demolishButton.setButtonTexture(
+                new GuiTextureGroup(
+                        new ColorRectTexture(COLOR_BUTTON_BG).setRadius(5),
+                        new ColorBorderTexture(1, COLOR_WINDOW_BORDER).setRadius(5)
+                ),
+                demolishText
+        );
+        demolishButton.setHoverTexture(
+                new GuiTextureGroup(
+                        new ColorRectTexture(COLOR_BUTTON_HOVER).setRadius(5),
+                        new ColorBorderTexture(1, COLOR_TEXT_HIGHLIGHT).setRadius(5)
+                ),
+                demolishText
+        );
+        demolishButton.setOnPressCallback(clickData -> holder.onDemolishClick());
+        headerGroup.addWidget(demolishButton);
 
         // 配方网格区域（仅多配方建筑显示）
         // simukraft: 增加顶部间距，使卡片区域位置更合理
@@ -888,6 +926,19 @@ public class IndustrialControlBoxLDLibScreen extends ModularUIGuiContainer {
                     nn(SimpleSoundInstance.forUI(nn(ModSoundEvents.BUILD_BOX_OPEN.get()), 1.0F)));
 
             // simukraft: 恢复原始缩放（setScreen(null)不会触发onClose）
+            GuiScaleManager.restore();
+
+            // 关闭界面
+            Minecraft.getInstance().setScreen(null);
+        }
+
+        public void onDemolishClick() {
+            // simukraft: 发送拆除请求到服务器
+            com.xiaoliang.simukraft.network.NetworkManager.INSTANCE.sendToServer(
+                new com.xiaoliang.simukraft.network.DemolishBuildingPacket(controlBoxPos)
+            );
+
+            // simukraft: 恢复原始缩放
             GuiScaleManager.restore();
 
             // 关闭界面

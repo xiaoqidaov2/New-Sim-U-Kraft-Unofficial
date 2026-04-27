@@ -95,12 +95,16 @@ minecraft {
             property 'mixin.env.remapRefMap', 'true'
             property 'mixin.env.refMapRemappingFile', "${projectDir}/build/createSrgToMcp/output.srg"
             args '--mixin', 'simukraft.mixins.json'
+            // simukraft: 设置编码为UTF-8，修复终端乱码
+            jvmArgs '-Dfile.encoding=UTF-8', '-Dsun.stdout.encoding=UTF-8', '-Dsun.stderr.encoding=UTF-8'
         }
 
         server {
             workingDirectory project.file('run/server')
             property 'forge.enabledGameTestNamespaces', mod_id
             args '--nogui'
+            // simukraft: 设置编码为UTF-8，修复终端乱码
+            jvmArgs '-Dfile.encoding=UTF-8', '-Dsun.stdout.encoding=UTF-8', '-Dsun.stderr.encoding=UTF-8'
         }
 
         // This run config launches GameTestServer and runs all registered gametests, then exits.

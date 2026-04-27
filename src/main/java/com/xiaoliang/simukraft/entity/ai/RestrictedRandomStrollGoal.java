@@ -13,6 +13,7 @@ import java.util.UUID;
 /**
  * 带边界限制的随机漫步Goal（menglannnn: 休息时只在建筑边界内随机移动）
  */
+@SuppressWarnings("null")
 public class RestrictedRandomStrollGoal extends RandomStrollGoal {
     private final CustomEntity npc;
     private UUID restrictedBuildingId = null;

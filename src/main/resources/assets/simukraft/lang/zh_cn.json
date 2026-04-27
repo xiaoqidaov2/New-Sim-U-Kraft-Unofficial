@@ -905,9 +905,15 @@
   "gui.building_preview.block_count": "方块数量: %d",
 
   "gui.button.done": "完成",
+  "gui.button.demolish": "拆除",
 
   "message.portable_city_core.no_city": "§c你还没有创建城市！",
   "message.portable_city_core.no_core": "§c无法找到城市核心位置！",
+
+  "message.demolish.no_building": "§c找不到建筑数据，无法拆除！",
+  "message.demolish.no_permission": "§c只有本城市的官员和市长才能拆除建筑！",
+  "message.demolish.success": "§a已成功拆除建筑：%s",
+  "message.demolish.failed": "§c拆除失败，请重试！",
 
   "gui.building_preview.hint.preview_move": "预览图移动: ↑ 前 | ↓ 后 | ← 左 | → 右 | + 上 | - 下 | R 旋转",
   "gui.building_preview.hint.camera": "自由相机: W/S 前后 | A/D 左右 | 空格 上升 | Shift 下降 | 鼠标 转向",
@@ -1485,6 +1491,12 @@
   "gui.configurable_list.cancel": "取消",
   "gui.control_panel.building.commercial_default": "商业建筑（默认）",
   "gui.residential_control_box.title": "住宅控制箱",
+  "gui.residential_control_box.show_building_bounds": "建筑界限: %s",
+  "gui.switch.on": "开",
+  "gui.switch.off": "关",
+  "gui.other_control_box.title": "其他控制箱",
+  "gui.other_control_box.panel_title": "其他建筑控制面板",
+  "gui.other_control_box.info": "类型：其他建筑类（可用建筑）",
   "gui.hire_industrial.title": "雇佣工业工人",
   "gui.industrial.recipe": "配方：",
   "gui.employee_info.job.warehouse_manager": "仓库管理员",

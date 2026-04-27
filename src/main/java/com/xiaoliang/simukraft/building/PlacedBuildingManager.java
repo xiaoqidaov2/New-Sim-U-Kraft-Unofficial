@@ -310,12 +310,20 @@ public class PlacedBuildingManager {
         });
 
         int removedCount = 0;
+        int skippedCount = 0;
         for (BlockEntry entry : sortedBlocks) {
             BlockPos worldPos = building.controlBoxPos.offset(entry.relativePos);
             BlockState currentState = level.getBlockState(worldPos);
 
             // 只移除非空气方块
             if (!currentState.isAir()) {
+                // simukraft: 检查该位置是否属于其他建筑（menglannnn: 避免拆除重叠部分）
+                if (isBlockInOtherBuilding(worldPos, building.buildingId)) {
+                    LOGGER.debug("[PlacedBuildingManager] 跳过与其他建筑重叠的方块: {}", worldPos);
+                    skippedCount++;
+                    continue;
+                }
+
                 level.removeBlock(worldPos, false);
                 removedCount++;
             }
@@ -324,14 +332,37 @@ public class PlacedBuildingManager {
         // 移除控制盒本身
         level.removeBlock(building.controlBoxPos, false);
 
-        LOGGER.info("[PlacedBuildingManager] 拆除完成: {}，移除了 {} 个方块",
-            building.buildingName, removedCount);
+        LOGGER.info("[PlacedBuildingManager] 拆除完成: {}，移除了 {} 个方块，跳过 {} 个重叠方块",
+            building.buildingName, removedCount, skippedCount);
 
         // 从存储中移除
         placedBuildings.remove(buildingId);
         controlBoxToBuilding.remove(building.controlBoxPos);
 
         return true;
+    }
+
+    /**
+     * 检查方块是否属于其他建筑（menglannnn: 用于拆除时跳过重叠部分）
+     * @param pos 方块位置
+     * @param excludeBuildingId 要排除的建筑ID（当前正在拆除的建筑）
+     * @return 是否属于其他建筑
+     */
+    private static boolean isBlockInOtherBuilding(BlockPos pos, UUID excludeBuildingId) {
+        for (PlacedBuildingData otherBuilding : placedBuildings.values()) {
+            if (otherBuilding.buildingId.equals(excludeBuildingId)) {
+                continue; // 跳过当前正在拆除的建筑
+            }
+
+            // 检查该方块是否在其他建筑的范围内
+            for (BlockEntry entry : otherBuilding.blocks) {
+                BlockPos otherWorldPos = otherBuilding.controlBoxPos.offset(entry.relativePos);
+                if (otherWorldPos.equals(pos)) {
+                    return true; // 找到重叠
+                }
+            }
+        }
+        return false;
     }
 
     /**

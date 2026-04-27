@@ -1391,49 +1391,6 @@ public class NPCRestHandler {
         return null;
     }
 
-    /**
-     * 检查位置是否在封闭空间内（至少3面墙才算封闭）
-     */
-    private static boolean isEnclosedSpace(ServerLevel level, BlockPos pos) {
-        if (level == null || pos == null) return false;
-
-        // 检查上方是否有天花板（2格范围内）
-        boolean hasCeiling = false;
-        for (int y = 1; y <= 2; y++) {
-            BlockPos checkPos = pos.above(y);
-            if (!level.isEmptyBlock(checkPos) && isSolidBlock(level, checkPos)) {
-                hasCeiling = true;
-                break;
-            }
-        }
-
-        // 检查下方是否有地板
-        BlockPos floorPos = pos.below();
-        boolean hasFloor = !level.isEmptyBlock(floorPos) && isSolidBlock(level, floorPos);
-
-        // 检查四周墙体数量（需要至少3面墙才算封闭）
-        int wallCount = 0;
-        for (Direction dir : Direction.Plane.HORIZONTAL) {
-            BlockPos wallPos = pos.relative(dir);
-            if (!level.isEmptyBlock(wallPos) && isSolidBlock(level, wallPos)) {
-                wallCount++;
-            }
-        }
-
-        // 封闭空间：有地板 + 有天花板 + 至少3面墙
-        return hasFloor && hasCeiling && wallCount >= 3;
-    }
-
-    /**
-     * 检查方块是否为固体方块（辅助方法）
-     */
-    private static boolean isSolidBlock(ServerLevel level, BlockPos pos) {
-        if (level == null || pos == null) return false;
-        BlockState state = level.getBlockState(pos);
-        // 使用isCollisionShapeFullBlock检查是否为固体方块
-        return state.isCollisionShapeFullBlock(level, pos);
-    }
-
     private static void updateSleepingStatus(CustomEntity npc, RestData restData, ServerLevel level) {
         if (npc == null || restData == null || level == null) {
             return;
@@ -1480,7 +1437,7 @@ public class NPCRestHandler {
 
         // simukraft: 检查床是否被占用
         if (isBedOccupiedByOther(level, bedPos, npc)) {
-            LOGGER.debug("[NPCRestHandler] NPC {} 尝试上床但床已被占用，位置: {}", npc.getFullName(), bedPos);
+        //    LOGGER.debug("[NPCRestHandler] NPC {} 尝试上床但床已被占用，位置: {}", npc.getFullName(), bedPos);
             return;
         }
 
@@ -1619,13 +1576,13 @@ public class NPCRestHandler {
             restData.lastWakeUpTime = level.getGameTime(); // 记录唤醒时间
             npc.setWorkSubState(WorkSubState.RESTING);
             npc.setStatusLabel("gui.npc.status.at_home");
-            LOGGER.info("[NPCRestHandler] NPC {} 被玩家唤醒，继续在家休息", npc.getFullName());
+            //    LOGGER.info("[NPCRestHandler] NPC {} 被玩家唤醒，继续在家休息", npc.getFullName());
         } else {
             // 不在休息流程中（异常情况），设置为空闲
             npc.setWorkStatus(WorkStatus.IDLE);
             npc.setWorkSubState(WorkSubState.NONE);
             npc.setStatusLabel("gui.npc.status.idle");
-            LOGGER.info("[NPCRestHandler] NPC {} 被玩家唤醒（不在休息流程中）", npc.getFullName());
+            //    LOGGER.info("[NPCRestHandler] NPC {} 被玩家唤醒（不在休息流程中）", npc.getFullName());
         }
     }
 
@@ -1858,8 +1815,8 @@ public class NPCRestHandler {
                 int rangeY = (maxY - minY) / 2 + 3;
                 int rangeZ = (maxZ - minZ) / 2 + 2;
 
-                LOGGER.debug("[NPCRestHandler] NPC {} 住宅建筑边界(已放置): 控制盒={}, 中心={}, 范围: x={}, y={}, z={}",
-                    npc.getFullName(), homePos, centerPos, rangeX, rangeY, rangeZ);
+                //    LOGGER.debug("[NPCRestHandler] NPC {} 住宅建筑边界(已放置): 控制盒={}, 中心={}, 范围: x={}, y={}, z={}",
+                //        npc.getFullName(), homePos, centerPos, rangeX, rangeY, rangeZ);
 
                 return new BuildingBounds(centerPos, rangeX, rangeY, rangeZ);
             }
@@ -1868,7 +1825,7 @@ public class NPCRestHandler {
             return getBuildingBoundsFromNBT(level, homePos, npc);
 
         } catch (Exception e) {
-            LOGGER.debug("[NPCRestHandler] 获取NPC {} 住宅建筑边界失败: {}", npc.getFullName(), e.getMessage());
+            //    LOGGER.error("[NPCRestHandler] 获取NPC {} 住宅建筑边界失败: {}", npc.getFullName(), e.getMessage());
             return null;
         }
     }
@@ -1899,7 +1856,7 @@ public class NPCRestHandler {
                 String resourcePath = "assets/simukraft/building/residential/" + controlBoxData.buildingFileName + ".nbt";
                 java.io.InputStream is = SchematicNBTLoader.class.getClassLoader().getResourceAsStream(resourcePath);
                 if (is == null) {
-                    LOGGER.debug("[NPCRestHandler] 找不到建筑NBT文件: {}", controlBoxData.buildingFileName);
+                    //    LOGGER.debug("[NPCRestHandler] 找不到建筑NBT文件: {}", controlBoxData.buildingFileName);
                     return null;
                 }
                 blocks = com.xiaoliang.simukraft.client.preview.SchematicNBTLoader.loadSchematicBlocksFromStream(is);
@@ -1937,13 +1894,13 @@ public class NPCRestHandler {
             // 建筑中心 = 控制盒位置 + 中心偏移
             BlockPos centerPos = homePos.offset(centerOffsetX, centerOffsetY, centerOffsetZ);
 
-            LOGGER.debug("[NPCRestHandler] NPC {} 住宅建筑边界(NBT): 控制盒={}, 中心={}, 范围: x={}, y={}, z={}",
-                npc.getFullName(), homePos, centerPos, rangeX, rangeY, rangeZ);
+            //    LOGGER.debug("[NPCRestHandler] NPC {} 住宅建筑边界(NBT): 控制盒={}, 中心={}, 范围: x={}, y={}, z={}",
+            //        npc.getFullName(), homePos, centerPos, rangeX, rangeY, rangeZ);
 
             return new BuildingBounds(centerPos, rangeX, rangeY, rangeZ);
 
         } catch (Exception e) {
-            LOGGER.debug("[NPCRestHandler] 从NBT获取NPC {} 住宅建筑边界失败: {}", npc.getFullName(), e.getMessage());
+            LOGGER.error("[NPCRestHandler] 从NBT获取NPC {} 住宅建筑边界失败: {}", npc.getFullName(), e.getMessage());
             return null;
         }
     }
@@ -2023,8 +1980,8 @@ public class NPCRestHandler {
             return;
         }
 
-        LOGGER.info("[NPCRestHandler] NPC {} 早上5点了，提前出发去工作岗位: {}，职业: {}",
-            npc.getFullName(), workPos, previousJob);
+            //    LOGGER.info("[NPCRestHandler] NPC {} 早上5点了，提前出发去工作岗位: {}，职业: {}",
+            //        npc.getFullName(), workPos, previousJob);
 
         // 从休息数据中移除（不再处于休息状态）
         clearRestWorkflowData(npcUuid, false);
@@ -2039,7 +1996,8 @@ public class NPCRestHandler {
 
         if (distance > 10.0) {
             // 距离太远，直接传送
-            LOGGER.info("[NPCRestHandler] NPC {} 距离工作岗位{}格，直接传送", npc.getFullName(), distance);
+            //    LOGGER.info("[NPCRestHandler] NPC {} 距离工作岗位{}格，直接传送", npc.getFullName(), distance);
+            //    LOGGER.info("[NPCRestHandler] NPC {} 距离工作岗位{}格，直接传送", npc.getFullName(), distance);
             spawnTeleportParticles(npc);
             npc.teleportTo(workPos.getX() + 0.5, workPos.getY() + 1, workPos.getZ() + 0.5);
             spawnTeleportParticles(npc);
@@ -2048,7 +2006,7 @@ public class NPCRestHandler {
             restoreWorkStatus(npc, npcUuid, previousWorkStatus, previousJob, level);
         } else {
             // 距离适中，开始寻路
-            LOGGER.info("[NPCRestHandler] NPC {} 距离工作岗位{}格，开始寻路去工作", npc.getFullName(), distance);
+            //    LOGGER.info("[NPCRestHandler] NPC {} 距离工作岗位{}格，开始寻路去工作", npc.getFullName(), distance);
 
             // 设置子状态为正在去工作
             npc.setWorkSubState(WorkSubState.RESTING);
@@ -2094,7 +2052,7 @@ public class NPCRestHandler {
         // 确保状态标签正确显示为"gui.npc.status.going_to_work"
         if (!"gui.npc.status.going_to_work".equals(npc.getStatusLabel())) {
             npc.setStatusLabel("gui.npc.status.going_to_work");
-            LOGGER.info("[NPCRestHandler] NPC {} status label updated to: gui.npc.status.going_to_work", npc.getFullName());
+            //    LOGGER.info("[NPCRestHandler] NPC {} status label updated to: gui.npc.status.going_to_work", npc.getFullName());
         }
 
         // 计算距离
@@ -2111,8 +2069,8 @@ public class NPCRestHandler {
         boolean hasArrived = distance < 2.0 && yDistance < 3.0;
 
         if (hasArrived) {
-            LOGGER.info("[NPCRestHandler] NPC {} 已到达工作位置: {}，水平距离: {}格，高度差: {}格，恢复工作状态",
-                npc.getFullName(), workPos, distance, yDistance);
+            //    LOGGER.info("[NPCRestHandler] NPC {} 已到达工作位置: {}，水平距离: {}格，高度差: {}格，恢复工作状态",
+            //    npc.getFullName(), workPos, distance, yDistance);
 
             // 停止移动
             npc.getNavigation().stop();

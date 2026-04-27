@@ -786,6 +786,20 @@ public class NetworkManager {
                 ReloadGuideBookPacket::encode,
                 buf -> new ReloadGuideBookPacket(),
                 ReloadGuideBookPacket::handle);
+
+        // 拆除建筑数据包（客户端->服务器）
+        INSTANCE.registerMessage(id++,
+                DemolishBuildingPacket.class,
+                DemolishBuildingPacket::encode,
+                DemolishBuildingPacket::new,
+                DemolishBuildingPacket::handle);
+
+        // 界限显示切换数据包（客户端->服务器）
+        INSTANCE.registerMessage(id++,
+                ToggleBoundsDisplayPacket.class,
+                ToggleBoundsDisplayPacket::encode,
+                ToggleBoundsDisplayPacket::new,
+                ToggleBoundsDisplayPacket::handle);
     }
 
     public static void sendToPlayer(SyncDayPacket packet, ServerPlayer player) {
