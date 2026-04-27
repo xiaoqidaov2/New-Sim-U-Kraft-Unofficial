@@ -558,12 +558,22 @@ public class NPCRestHandler {
                     LOGGER.info("[NPCRestHandler] NPC {} 距离工作岗位{}格，开始寻路去工作: {}",
                         npc.getFullName(), distance, workPos);
 
+                    // simukraft: 首先设置状态标签，让RestrictedAreaGoal知道NPC要去工作了
+                    npc.setStatusLabel("gui.npc.status.going_to_work");
+
+                    // 清理休息数据（但保留工作状态相关数据，等到达后再清理）
+                    // 这必须在开始寻路之前完成，防止休息界限阻挡NPC
+                    clearRestWorkflowData(npcUuid, false);
+
+                    // simukraft: 清除休息界限
+                    com.xiaoliang.simukraft.entity.ai.RestrictedAreaGoal areaGoal = npc.getRestrictedAreaGoal();
+                    if (areaGoal != null) {
+                        areaGoal.clearRestrictedArea();
+                    }
+
                     // 设置子状态为正在去工作
                     npc.setWorkSubState(WorkSubState.RESTING);
                     npcSubStates.put(npcUuid, WorkSubState.RESTING);
-
-                    // 清除之前的状态标签（如"gui.npc.status.at_home"），设置新的状态标签
-                    npc.setStatusLabel("gui.npc.status.going_to_work");
 
                     // 创建去工作数据
                     GoingToWorkData workData = new GoingToWorkData(npc, level, workPos, previousJob, previousWorkStatus);
@@ -574,9 +584,6 @@ public class NPCRestHandler {
 
                     // 发送起床提示消息
                     sendWakeUpMessage(npc, level.getServer());
-
-                    // 清理休息数据（但保留工作状态相关数据，等到达后再清理）
-                    clearRestWorkflowData(npcUuid, false);
 
                     LOGGER.info("NPC {} 结束休息，正在前往工作岗位: {}，职业: {}",
                         npc.getFullName(), workPos, previousJob);
@@ -1983,8 +1990,18 @@ public class NPCRestHandler {
             //    LOGGER.info("[NPCRestHandler] NPC {} 早上5点了，提前出发去工作岗位: {}，职业: {}",
             //        npc.getFullName(), workPos, previousJob);
 
+        // simukraft: 首先设置状态标签，让RestrictedAreaGoal知道NPC要去工作了
+        // 这必须在清除界限之前完成，防止tick过程中界限仍然生效
+        npc.setStatusLabel("gui.npc.status.going_to_work");
+
         // 从休息数据中移除（不再处于休息状态）
         clearRestWorkflowData(npcUuid, false);
+
+        // simukraft: 清除休息界限，防止NPC被限制在住宅范围内无法前往工作岗位
+        com.xiaoliang.simukraft.entity.ai.RestrictedAreaGoal areaGoal = npc.getRestrictedAreaGoal();
+        if (areaGoal != null) {
+            areaGoal.clearRestrictedArea();
+        }
 
         // 允许NPC移动
         npc.setNoAi(false);
@@ -2011,7 +2028,6 @@ public class NPCRestHandler {
             // 设置子状态为正在去工作
             npc.setWorkSubState(WorkSubState.RESTING);
             npcSubStates.put(npcUuid, WorkSubState.RESTING);
-            npc.setStatusLabel("gui.npc.status.going_to_work");
 
             // 创建去工作数据
             GoingToWorkData workData = new GoingToWorkData(npc, level, workPos, previousJob, previousWorkStatus);

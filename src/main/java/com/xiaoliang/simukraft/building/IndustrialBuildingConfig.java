@@ -31,6 +31,7 @@ public class IndustrialBuildingConfig {
     // 工作时间配置（tick）
     private int workStartTime = 0;       // 默认0tick（早上6:00）
     private int workEndTime = 12000;     // 默认12000tick（傍晚18:00），共12小时工作时间
+    private boolean hasLunchBreak = true; // menglannnn: 是否午休，默认true
     
     // 生物生成配置（附加项）
     private boolean spawnEntity = false; // 是否生成生物
@@ -276,7 +277,24 @@ public class IndustrialBuildingConfig {
     
     public int getWorkEndTime() { return workEndTime; }
     public void setWorkEndTime(int workEndTime) { this.workEndTime = workEndTime; }
-    
+
+    public boolean isHasLunchBreak() { return hasLunchBreak; }
+    public void setHasLunchBreak(boolean hasLunchBreak) { this.hasLunchBreak = hasLunchBreak; }
+
+    /**
+     * 获取指定配方或默认配置的是否午休
+     * @param recipeId 配方ID，如果为null则使用默认配置
+     */
+    public boolean isHasLunchBreakForRecipe(String recipeId) {
+        if (recipeId != null && multiRecipe) {
+            RecipeConfig recipe = getRecipeById(recipeId);
+            if (recipe != null) {
+                return recipe.isHasLunchBreak(hasLunchBreak);
+            }
+        }
+        return hasLunchBreak;
+    }
+
     public boolean isSpawnEntity() { return spawnEntity; }
     public void setSpawnEntity(boolean spawnEntity) { this.spawnEntity = spawnEntity; }
     

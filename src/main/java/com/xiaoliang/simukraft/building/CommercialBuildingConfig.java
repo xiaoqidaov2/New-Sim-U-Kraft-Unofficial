@@ -55,6 +55,7 @@ public class CommercialBuildingConfig {
     private int workStartTime = 0;
     private int workEndTime = 24000;
     private String workBlockHint; // 工作方块提示，用于雇佣系统
+    private boolean hasLunchBreak = true; // menglannnn: 是否午休，默认true
 
     // ==================== 原料需求配置 ====================
 
@@ -193,6 +194,14 @@ public class CommercialBuildingConfig {
 
     public void setWorkEndTime(int workEndTime) {
         this.workEndTime = workEndTime;
+    }
+
+    public boolean isHasLunchBreak() {
+        return hasLunchBreak;
+    }
+
+    public void setHasLunchBreak(boolean hasLunchBreak) {
+        this.hasLunchBreak = hasLunchBreak;
     }
 
     public List<MaterialRequirement> getMaterials() {

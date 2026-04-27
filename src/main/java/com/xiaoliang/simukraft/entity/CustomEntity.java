@@ -7,6 +7,7 @@ import com.xiaoliang.simukraft.entity.ai.RestrictedAreaGoal;
 import com.xiaoliang.simukraft.entity.ai.RestrictedGroundPathNavigation;
 import com.xiaoliang.simukraft.init.ModSoundEvents;
 import com.xiaoliang.simukraft.init.ModBlocks;
+import com.xiaoliang.simukraft.utils.LunchBreakManager;
 import com.xiaoliang.simukraft.utils.NPCDataManager;
 import com.xiaoliang.simukraft.utils.NameManager;
 import com.xiaoliang.simukraft.utils.ResidentManager;
@@ -651,24 +652,27 @@ public class CustomEntity extends Animal {
             boolean aliveAndActive = !this.isDeadOrDying() && !isDying;
             // 计算是否有活跃任务（用于同步到客户端）
             boolean hasActiveWork = false;
-            
-            // 建筑师：检查是否有未完成的建造任务
-            if ("builder".equals(currentJob) && constructionTask != null 
-                    && !constructionTask.isCompleted() && constructionTask.hasNextBlock()) {
-                hasActiveWork = true;
-            }
-            
-            // 规划师：检查是否有进行中的规划任务
-            if ("planner".equals(currentJob)) {
-                if (getOrCreatePlannerWorkHandler().hasActiveTask()) {
+
+            // simukraft: 午休状态下没有活跃任务（仿造休息中的写法）
+            if (getWorkSubState() != WorkSubState.LUNCH_BREAK) {
+                // 建筑师：检查是否有未完成的建造任务
+                if ("builder".equals(currentJob) && constructionTask != null
+                        && !constructionTask.isCompleted() && constructionTask.hasNextBlock()) {
                     hasActiveWork = true;
                 }
-            }
-            
-            // 牧羊人和屠夫：保持原有行为（工作时挥手）
-            if (("shepherd".equals(currentJob) || "butcher".equals(currentJob))
-                    && getWorkStatus() == WorkStatus.WORKING) {
-                hasActiveWork = true;
+
+                // 规划师：检查是否有进行中的规划任务
+                if ("planner".equals(currentJob)) {
+                    if (getOrCreatePlannerWorkHandler().hasActiveTask()) {
+                        hasActiveWork = true;
+                    }
+                }
+
+                // 牧羊人和屠夫：保持原有行为（工作时挥手）
+                if (("shepherd".equals(currentJob) || "butcher".equals(currentJob))
+                        && getWorkStatus() == WorkStatus.WORKING) {
+                    hasActiveWork = true;
+                }
             }
             
             // 同步活跃任务状态到客户端
@@ -783,10 +787,15 @@ public class CustomEntity extends Animal {
 
         // 处理建造任务
         if (!this.level().isClientSide && workStatus == WorkStatus.WORKING && constructionTask != null) {
+            // simukraft: 午休状态暂停建造（仿造休息中的写法）
+            if (getWorkSubState() == WorkSubState.LUNCH_BREAK) {
+                return; // 午休期间不建造
+            }
+
             if (!constructionTask.isCompleted() && constructionTask.hasNextBlock()) {
                 // 根据等级计算建造速度（tick间隔）
                 int buildSpeed = getBuildSpeedByLevel();
-                
+
                 // 使用独立的冷却计时器，避免多个建筑师共享tickCount导致的同步问题
                 buildCooldownTicks++;
                 if (buildCooldownTicks >= buildSpeed) {
@@ -1636,6 +1645,11 @@ public class CustomEntity extends Animal {
             return Component.translatable("work_sub_state.resting");
         }
 
+        // simukraft: 午休状态下显示"午休中"
+        if (currentSubState == WorkSubState.LUNCH_BREAK) {
+            return Component.translatable("gui.npc.status.lunch_break");
+        }
+
         // 工作中状态优先显示，不受饥饿状态标签影响
         if (currentWorkStatus == WorkStatus.WORKING) {
             return Component.translatable("work_status.working");
@@ -1739,7 +1753,8 @@ public class CustomEntity extends Animal {
                 || "gui.npc.status.sowing".equals(current)
                 || "gui.npc.status.visiting_farm".equals(current)
                 || "gui.npc.status.visiting_shop".equals(current)
-                || "gui.npc.status.visiting_factory".equals(current);
+                || "gui.npc.status.visiting_factory".equals(current)
+                || "gui.npc.status.lunch_break".equals(current);  // simukraft: 午休状态不应被动态标签覆盖
     }
 
     private String resolveDynamicStatusLabel(boolean hasActiveWork) {
@@ -1868,7 +1883,12 @@ public class CustomEntity extends Animal {
         if (getWorkSubState() == WorkSubState.RESTING) {
             return 0.0f;
         }
-        
+
+        // simukraft: 午休时不挥动手部
+        if (getWorkSubState() == WorkSubState.LUNCH_BREAK) {
+            return 0.0f;
+        }
+
         // 使用服务器同步的活跃任务状态（客户端无法直接访问constructionTask和plannerWorkHandler）
         // 注意：这里只返回姿势值，不触发挥手动作。挥手动作由服务器端的 swing() 方法触发
         if (this.entityData.get(DATA_HAS_ACTIVE_TASK)) {

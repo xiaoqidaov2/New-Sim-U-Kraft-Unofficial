@@ -50,6 +50,11 @@ public class PlannerWorkHandler {
     public void tick(Level level) {
         if (!(level instanceof ServerLevel serverLevel)) return;
 
+        // simukraft: 午休时间暂停工作
+        if (LunchBreakManager.isLunchBreakTime(serverLevel.getDayTime())) {
+            return;
+        }
+
         // 检查并恢复NPC工作状态（学习FarmerDailyWorkHandler的模式）
         restorePlannerWorkState();
 

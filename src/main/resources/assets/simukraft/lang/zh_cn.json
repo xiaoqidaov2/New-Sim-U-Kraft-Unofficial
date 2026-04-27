@@ -304,6 +304,7 @@
   "work_sub_state.none": "无",
   "work_sub_state.working": "工作中",
   "work_sub_state.resting": "休息中",
+  "work_sub_state.lunch_break": "午休中",
 
   "weekday.sunday": "周日",
   "weekday.monday": "周一",
@@ -832,6 +833,7 @@
   "gui.npc.status.going_home": "下班回家",
   "gui.npc.status.at_home": "在家休息",
   "gui.npc.status.going_to_work": "去上班",
+  "gui.npc.status.lunch_break": "午休中",
   "gui.npc.status.hungry": "需要进食",
   "gui.npc.status.working_task": "工作中",
   "gui.npc.status.selling": "售货中",

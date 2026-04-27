@@ -31,7 +31,8 @@ public class BuyFoodGoal extends Goal {
     public boolean canUse() {
         if (npc.level().isClientSide) return false;
         if (npc.tickCount < nextStartTick) return false;
-        if (npc.getWorkStatus() == WorkStatus.WORKING) return false;
+        // simukraft: 工作中不能买食物，但午休时可以
+        if (npc.getWorkStatus() == WorkStatus.WORKING && npc.getWorkSubState() != WorkSubState.LUNCH_BREAK) return false;
         if (npc.getWorkSubState() == WorkSubState.RESTING) return false;
         if (npc.isSleeping()) return false; // simukraft: 睡觉时不能去买食物
         if (npc.getHunger() > START_THRESHOLD) return false;
@@ -60,7 +61,8 @@ public class BuyFoodGoal extends Goal {
         if (npc.level().isClientSide) return false;
         if (targetPos == null || plan == null) return false;
         if (npc.getHunger() >= STOP_THRESHOLD) return false;
-        if (npc.getWorkStatus() == WorkStatus.WORKING) return false;
+        // simukraft: 工作中停止购买，但午休时可以继续
+        if (npc.getWorkStatus() == WorkStatus.WORKING && npc.getWorkSubState() != WorkSubState.LUNCH_BREAK) return false;
         if (npc.isSleeping()) return false; // simukraft: 睡觉时停止购买
         return !npc.getNavigation().isDone();
     }

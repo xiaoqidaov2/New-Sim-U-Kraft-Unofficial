@@ -7,7 +7,8 @@ package com.xiaoliang.simukraft.entity;
 public enum WorkSubState {
     NONE("work_sub_state.none"),
     WORKING("work_sub_state.working"),
-    RESTING("work_sub_state.resting");
+    RESTING("work_sub_state.resting"),
+    LUNCH_BREAK("work_sub_state.lunch_break"); // menglannnn: 午休状态，中午6000-8000tick
 
     private final String displayName;
 
@@ -23,6 +24,7 @@ public enum WorkSubState {
         if (status == null) return NONE;
         if (status.equals("work_sub_state.working") || status.equals("工作中")) return WORKING;
         if (status.equals("work_sub_state.resting") || status.equals("休息中")) return RESTING;
+        if (status.equals("work_sub_state.lunch_break") || status.equals("午休中")) return LUNCH_BREAK;
         return NONE;
     }
 }

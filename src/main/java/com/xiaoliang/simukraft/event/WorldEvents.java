@@ -67,6 +67,9 @@ public class WorldEvents {
         // 物流传输引擎
         com.xiaoliang.simukraft.utils.LogisticsWorkHandler.onServerTick(serverLevel);
 
+        // simukraft: 处理NPC午休逻辑
+        com.xiaoliang.simukraft.utils.LunchBreakManager.handleLunchBreak(serverLevel);
+
         // 处理延迟的收钱音效和房租收集
         processPendingMoneySounds(serverLevel);
 

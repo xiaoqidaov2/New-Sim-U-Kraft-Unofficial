@@ -136,6 +136,16 @@ public class RestrictedAreaGoal extends Goal {
         if (npc.isSleeping()) {
             return false;
         }
+        // simukraft: 午休期间禁用此Goal，让NPC可以自由活动
+        if (npc.getWorkSubState() == com.xiaoliang.simukraft.entity.WorkSubState.LUNCH_BREAK) {
+            return false;
+        }
+        // simukraft: 去工作/回家途中禁用此Goal，防止阻挡NPC移动
+        String statusLabel = npc.getStatusLabel();
+        if ("gui.npc.status.going_to_work".equals(statusLabel) ||
+            "gui.npc.status.going_home".equals(statusLabel)) {
+            return false;
+        }
         // simukraft: 只要启用了限制就持续检查（预防性阻止）
         return enabled;
     }
@@ -144,6 +154,16 @@ public class RestrictedAreaGoal extends Goal {
     public boolean canContinueToUse() {
         // simukraft: 睡觉时禁用此Goal，防止"躺着跑"
         if (npc.isSleeping()) {
+            return false;
+        }
+        // simukraft: 午休期间禁用此Goal，让NPC可以自由活动
+        if (npc.getWorkSubState() == com.xiaoliang.simukraft.entity.WorkSubState.LUNCH_BREAK) {
+            return false;
+        }
+        // simukraft: 去工作/回家途中禁用此Goal，防止阻挡NPC移动
+        String statusLabel = npc.getStatusLabel();
+        if ("gui.npc.status.going_to_work".equals(statusLabel) ||
+            "gui.npc.status.going_home".equals(statusLabel)) {
             return false;
         }
         // simukraft: 只要启用了限制就持续检查

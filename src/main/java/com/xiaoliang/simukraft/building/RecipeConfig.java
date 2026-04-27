@@ -21,6 +21,7 @@ public class RecipeConfig {
     // 工作时间配置（可选，覆盖建筑默认）
     private Integer workStartTime;     // 开始时间（tick）
     private Integer workEndTime;       // 结束时间（tick）
+    private Boolean hasLunchBreak;     // menglannnn: 是否午休（可选，覆盖建筑默认）
     
     public RecipeConfig(String recipeId, String recipeName) {
         this.recipeId = recipeId;
@@ -83,7 +84,18 @@ public class RecipeConfig {
     public String getEffectiveHeldItem(String defaultHeldItem) {
         return heldItem != null && !heldItem.isEmpty() ? heldItem : defaultHeldItem;
     }
-    
+
+    /**
+     * 获取实际是否午休（优先使用配方配置，否则使用默认值）
+     * menglannnn: 支持配方级别的午休配置
+     */
+    public boolean isHasLunchBreak(boolean defaultHasLunchBreak) {
+        return hasLunchBreak != null ? hasLunchBreak : defaultHasLunchBreak;
+    }
+
+    public Boolean getHasLunchBreak() { return hasLunchBreak; }
+    public void setHasLunchBreak(Boolean hasLunchBreak) { this.hasLunchBreak = hasLunchBreak; }
+
     @Override
     public String toString() {
         return "RecipeConfig{" +

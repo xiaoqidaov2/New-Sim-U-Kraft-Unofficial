@@ -112,7 +112,13 @@ public class IndustrialWorkHandler {
             if (npc != null && npc.isAlive()) {
                 // 计算当前时间（currentDay已在方法开头定义）
                 long timeOfDay = gameTime % 24000;
-                
+
+                // simukraft: 检查是否应该午休（根据配置文件）
+                if (LunchBreakManager.shouldHaveLunchBreak(npc) && LunchBreakManager.isLunchBreakTime(gameTime)) {
+                    // 午休时间暂停工作，让NPC自由活动
+                    continue;
+                }
+
                 // 获取当前选择的配方ID
                 String selectedRecipeId = ControlBoxDataManager.getSelectedRecipe(level.getServer(), buildingPos);
 
