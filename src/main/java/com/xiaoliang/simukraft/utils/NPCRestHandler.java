@@ -392,8 +392,8 @@ public class NPCRestHandler {
         npc.setStatusLabel("gui.npc.status.at_home");
         npc.setNoAi(true);
 
-        LOGGER.info("[NPCRestHandler] NPC {} 重新加载后恢复睡觉状态，床位置: {}",
-            npc.getFullName(), bedPos);
+        //LOGGER.info("[NPCRestHandler] NPC {} 重新加载后恢复睡觉状态，床位置: {}",
+        //    npc.getFullName(), bedPos);
     }
 
     /**
@@ -415,9 +415,9 @@ public class NPCRestHandler {
         if (homePos == null) {
             // 如果NPC没有住宅，使用NPC当前位置作为休息位置（原地休息）
             homePos = npc.blockPosition();
-            LOGGER.info("[NPCRestHandler] NPC {} 没有住宅，将在当前位置休息: {}", npc.getFullName(), homePos);
+            //LOGGER.info("[NPCRestHandler] NPC {} 没有住宅，将在当前位置休息: {}", npc.getFullName(), homePos);
         } else {
-            LOGGER.info("[NPCRestHandler] NPC {} 找到住宅位置: {}", npc.getFullName(), homePos);
+            //LOGGER.info("[NPCRestHandler] NPC {} 找到住宅位置: {}", npc.getFullName(), homePos);
         }
 
         // 保存NPC休息前的职业，并推导早上应恢复的目标状态。
@@ -1291,7 +1291,7 @@ public class NPCRestHandler {
             restData.bedPos = findNearbyBed(level, restData.homePos, npc);
             restData.nextBedRetryTick = gameTime + BED_REPATH_INTERVAL_TICKS;
             if (restData.bedPos != null) {
-                LOGGER.info("[NPCRestHandler] NPC {} 在住宅附近找到床位: {}", npc.getFullName(), restData.bedPos);
+                //LOGGER.info("[NPCRestHandler] NPC {} 在住宅附近找到床位: {}", npc.getFullName(), restData.bedPos);
             }
         }
 
