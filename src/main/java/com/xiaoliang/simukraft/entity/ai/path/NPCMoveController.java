@@ -24,7 +24,10 @@ public class NPCMoveController {
     
     // 移动参数
     private static final double ARRIVAL_DISTANCE = 0.5; // 到达节点的距离阈值
-    private static final double MAX_MOVE_SPEED = 0.22;
+    private static final double WALK_MOVE_SPEED = 0.14D;
+    private static final double RUN_MOVE_SPEED = 0.22D;
+    private static final double RUN_REMAINING_DISTANCE = 8.0D;
+    private static final double RUN_DIRECT_DISTANCE = 4.0D;
     private static final double TURN_SPEED = 0.15;
     
     // 当前路径
@@ -243,6 +246,7 @@ public class NPCMoveController {
         resetCrowdState();
 
         // 执行移动
+        currentSpeed = calculateSpeed(targetPos);
         moveTowards(targetPos);
         syncFacingToCurrentMotion(0.8F);
         
@@ -1151,16 +1155,26 @@ public class NPCMoveController {
      * 计算移动速度
      */
     private double calculateSpeed() {
-        // 从属性获取基础速度
+        return calculateSpeed(null);
+    }
+
+    private double calculateSpeed(Vec3 targetPos) {
         double baseSpeed = npc.getAttributeValue(Attributes.MOVEMENT_SPEED);
-        
-        // 根据NPC状态调整
         if (npc.isSleeping()) {
             return 0;
         }
-        
-        // 限制最大速度
-        return Math.min(baseSpeed, MAX_MOVE_SPEED);
+        double targetSpeed = shouldRunToTarget(targetPos) ? RUN_MOVE_SPEED : WALK_MOVE_SPEED;
+        return Math.min(baseSpeed, targetSpeed);
+    }
+
+    private boolean shouldRunToTarget(Vec3 targetPos) {
+        if (currentPath == null) {
+            return false;
+        }
+        if (targetPos != null && npc.position().distanceTo(targetPos) >= RUN_DIRECT_DISTANCE) {
+            return true;
+        }
+        return currentPath.getRemainingLength() >= RUN_REMAINING_DISTANCE;
     }
     
     /**
