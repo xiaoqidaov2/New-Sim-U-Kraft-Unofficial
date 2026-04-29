@@ -2,6 +2,7 @@ package com.xiaoliang.simukraft.entity.ai.path;
 
 import com.xiaoliang.simukraft.Simukraft;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -270,6 +271,10 @@ public class NPCPathFinder {
         BlockState landingState = level.getBlockState(landingPos);
         BlockState landingHeadState = level.getBlockState(landingHeadPos);
 
+        if (isVanillaStepBlock(obstacleState, obstaclePos)) {
+            return false;
+        }
+
         boolean obstacleBlocksFeet = !obstacleState.getCollisionShape(level, obstaclePos).isEmpty();
         boolean landingClear = landingState.getCollisionShape(level, landingPos).isEmpty();
         boolean landingHeadClear = landingHeadState.getCollisionShape(level, landingHeadPos).isEmpty();
@@ -308,6 +313,23 @@ public class NPCPathFinder {
                block instanceof FenceGateBlock ||
                block instanceof StairBlock ||
                block instanceof SlabBlock;
+    }
+
+    private boolean isVanillaStepBlock(BlockState state, BlockPos pos) {
+        Block block = state.getBlock();
+        if (block instanceof SlabBlock || block instanceof StairBlock) {
+            return true;
+        }
+        return getCollisionHeight(state, pos) > 0.0D && getCollisionHeight(state, pos) <= 1.0D
+                && !state.isFaceSturdy(level, pos, Direction.UP);
+    }
+
+    private double getCollisionHeight(BlockState state, BlockPos pos) {
+        var shape = state.getCollisionShape(level, pos);
+        if (shape.isEmpty()) {
+            return 0.0D;
+        }
+        return shape.max(Direction.Axis.Y);
     }
     
     /**
