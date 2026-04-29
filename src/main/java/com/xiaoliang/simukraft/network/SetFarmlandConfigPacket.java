@@ -1,6 +1,7 @@
 package com.xiaoliang.simukraft.network;
 
 import com.xiaoliang.simukraft.Simukraft;
+import com.xiaoliang.simukraft.farmland.FarmlandPlot;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
@@ -17,15 +18,23 @@ public class SetFarmlandConfigPacket {
     private final BlockPos farmlandBoxPos;
     private final String crop;
     private final int areaSize;
+    private final FarmlandPlot plot;
     private final boolean hasCrop;
     private final boolean hasArea;
+    private final boolean hasPlot;
 
     public SetFarmlandConfigPacket(BlockPos farmlandBoxPos, String crop, int areaSize) {
+        this(farmlandBoxPos, crop, areaSize, null);
+    }
+
+    public SetFarmlandConfigPacket(BlockPos farmlandBoxPos, String crop, int areaSize, FarmlandPlot plot) {
         this.farmlandBoxPos = farmlandBoxPos;
         this.crop = crop;
         this.areaSize = areaSize;
+        this.plot = plot;
         this.hasCrop = crop != null;
         this.hasArea = areaSize > 0;
+        this.hasPlot = plot != null;
     }
 
     public SetFarmlandConfigPacket(FriendlyByteBuf buf) {
@@ -34,6 +43,8 @@ public class SetFarmlandConfigPacket {
         this.crop = hasCrop ? Objects.requireNonNull(buf.readUtf()) : null;
         this.hasArea = buf.readBoolean();
         this.areaSize = hasArea ? buf.readInt() : 0;
+        this.hasPlot = buf.readBoolean();
+        this.plot = hasPlot ? new FarmlandPlot(Objects.requireNonNull(buf.readBlockPos()), Objects.requireNonNull(buf.readBlockPos())) : null;
     }
 
     public void encode(FriendlyByteBuf buf) {
@@ -45,6 +56,11 @@ public class SetFarmlandConfigPacket {
         buf.writeBoolean(hasArea);
         if (hasArea) {
             buf.writeInt(areaSize);
+        }
+        buf.writeBoolean(hasPlot);
+        if (hasPlot) {
+            buf.writeBlockPos(Objects.requireNonNull(plot).minPos());
+            buf.writeBlockPos(Objects.requireNonNull(plot).maxPos());
         }
     }
 
@@ -65,6 +81,9 @@ public class SetFarmlandConfigPacket {
                 }
                 if (packet.hasArea) {
                     com.xiaoliang.simukraft.world.FarmlandHiredData.setSelectedArea(packet.farmlandBoxPos, packet.areaSize);
+                }
+                if (packet.hasPlot) {
+                    com.xiaoliang.simukraft.world.FarmlandHiredData.setSelectedPlot(packet.farmlandBoxPos, packet.plot);
                 }
 
                 // 立即保存到文件

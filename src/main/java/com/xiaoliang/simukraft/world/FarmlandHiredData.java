@@ -7,6 +7,7 @@ import com.xiaoliang.simukraft.employment.bridge.EmploymentLegacyBridge;
 import com.xiaoliang.simukraft.employment.domain.JobType;
 import com.xiaoliang.simukraft.employment.domain.WorkBlockType;
 import com.xiaoliang.simukraft.entity.CustomEntity;
+import com.xiaoliang.simukraft.farmland.FarmlandPlot;
 import com.xiaoliang.simukraft.utils.FileUtils;
 import com.xiaoliang.simukraft.utils.NPCTaskScheduler;
 import net.minecraft.core.BlockPos;
@@ -26,6 +27,7 @@ public class FarmlandHiredData {
     private static final Gson gson = new Gson();
     private static final String FARMLAND_CROP_DATA_FILE = "farmland_selected_crops.json";
     private static final String FARMLAND_AREA_DATA_FILE = "farmland_selected_areas.json";
+    private static final String FARMLAND_PLOT_DATA_FILE = "farmland_selected_plots.json";
     private static final String FARMLAND_CHEST_BINDING_FILE = "farmland_bound_chests.json";
     
     // 存储农田盒的雇佣农民数据
@@ -34,6 +36,8 @@ public class FarmlandHiredData {
     private static final Map<BlockPos, String> selectedCrops = new ConcurrentHashMap<>();
     // 存储农田盒的选中区域大小数据
     private static final Map<BlockPos, Integer> selectedAreas = new ConcurrentHashMap<>();
+    // 存储农田盒的真实矩形地块数据
+    private static final Map<BlockPos, FarmlandPlot> selectedPlots = new ConcurrentHashMap<>();
     // 存储农田盒绑定的箱子坐标
     private static final Map<BlockPos, BlockPos> boundChests = new ConcurrentHashMap<>();
     
@@ -136,6 +140,72 @@ public class FarmlandHiredData {
             }
         } catch (Exception e) {
             Simukraft.LOGGER.error("Failed to save farmland selected areas: {}", e.getMessage());
+        }
+    }
+
+    // 保存绑定箱子数据
+    public static void saveSelectedPlots(MinecraftServer server) {
+        JsonObject data = new JsonObject();
+
+        for (Map.Entry<BlockPos, FarmlandPlot> entry : selectedPlots.entrySet()) {
+            JsonObject plotData = new JsonObject();
+            FarmlandPlot plot = entry.getValue();
+            plotData.addProperty("min", plot.minPos().toString());
+            plotData.addProperty("max", plot.maxPos().toString());
+            data.add(entry.getKey().toString(), plotData);
+        }
+
+        try {
+            Path worldDir = getWorldPath(server);
+            Path simukraftDir = worldDir.resolve(FileUtils.MODE_DIR);
+            Path dataFile = simukraftDir.resolve(FARMLAND_PLOT_DATA_FILE);
+
+            if (!Files.exists(simukraftDir)) {
+                Files.createDirectories(simukraftDir);
+            }
+
+            try (java.io.Writer writer = Files.newBufferedWriter(dataFile, StandardCharsets.UTF_8)) {
+                gson.toJson(data, writer);
+            }
+        } catch (Exception e) {
+            Simukraft.LOGGER.error("Failed to save farmland selected plots: {}", e.getMessage());
+        }
+    }
+
+    public static void loadSelectedPlots(MinecraftServer server) {
+        selectedPlots.clear();
+
+        try {
+            Path worldDir = getWorldPath(server);
+            Path simukraftDir = worldDir.resolve(FileUtils.MODE_DIR);
+            Path dataFile = simukraftDir.resolve(FARMLAND_PLOT_DATA_FILE);
+
+            if (!Files.exists(dataFile)) {
+                return;
+            }
+
+            JsonObject data;
+            try (java.io.Reader reader = Files.newBufferedReader(dataFile, StandardCharsets.UTF_8)) {
+                data = gson.fromJson(reader, JsonObject.class);
+            }
+
+            if (data != null) {
+                for (Map.Entry<String, com.google.gson.JsonElement> entry : data.entrySet()) {
+                    try {
+                        BlockPos farmlandPos = parseBlockPos(entry.getKey());
+                        JsonObject plotData = entry.getValue().getAsJsonObject();
+                        BlockPos minPos = parseBlockPos(plotData.get("min").getAsString());
+                        BlockPos maxPos = parseBlockPos(plotData.get("max").getAsString());
+                        if (farmlandPos != null && minPos != null && maxPos != null) {
+                            selectedPlots.put(farmlandPos, new FarmlandPlot(minPos, maxPos));
+                        }
+                    } catch (Exception e) {
+                        Simukraft.LOGGER.warn("Failed to parse farmland plot data entry: {}", entry.getKey());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Simukraft.LOGGER.error("Failed to load farmland selected plots: {}", e.getMessage());
         }
     }
 
@@ -290,6 +360,28 @@ public class FarmlandHiredData {
         selectedAreas.remove(farmlandBoxPos);
     }
 
+    public static Map<BlockPos, FarmlandPlot> getSelectedPlots() {
+        return new HashMap<>(selectedPlots);
+    }
+
+    public static boolean hasSelectedPlot(BlockPos farmlandBoxPos) {
+        return selectedPlots.containsKey(farmlandBoxPos);
+    }
+
+    public static FarmlandPlot getSelectedPlot(BlockPos farmlandBoxPos) {
+        return selectedPlots.get(farmlandBoxPos);
+    }
+
+    public static void setSelectedPlot(BlockPos farmlandBoxPos, FarmlandPlot plot) {
+        if (plot != null) {
+            selectedPlots.put(farmlandBoxPos, plot);
+        }
+    }
+
+    public static void clearSelectedPlot(BlockPos farmlandBoxPos) {
+        selectedPlots.remove(farmlandBoxPos);
+    }
+
     // 获取绑定箱子数据
     public static BlockPos getBoundChest(BlockPos farmlandBoxPos) {
         return boundChests.get(farmlandBoxPos);
@@ -320,6 +412,7 @@ public class FarmlandHiredData {
         saveHiredFarmers(server);
         saveSelectedCrops(server);
         saveSelectedAreas(server);
+        saveSelectedPlots(server);
         saveBoundChests(server);
     }
     
@@ -328,6 +421,7 @@ public class FarmlandHiredData {
         loadHiredFarmers(server);
         loadSelectedCrops(server);
         loadSelectedAreas(server);
+        loadSelectedPlots(server);
         loadBoundChests(server);
     }
     

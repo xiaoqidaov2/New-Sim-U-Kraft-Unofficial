@@ -15,9 +15,9 @@ import net.minecraftforge.network.NetworkDirection;
 import net.minecraftforge.network.NetworkEvent;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -83,6 +83,7 @@ public record CitizenListRequestPacket(BlockPos cityCorePos) {
 
             // 收集NPC信息
             List<CitizenListResponsePacket.CitizenInfo> citizenInfos = new ArrayList<>();
+            Set<UUID> addedNpcUuids = new HashSet<>();
 
             // 使用final变量存储targetCityId以便在lambda中使用
             final UUID finalCityId = targetCityId;
@@ -127,9 +128,49 @@ public record CitizenListRequestPacket(BlockPos cityCorePos) {
                                 npcLevel,
                                 npcXp
                             ));
+                            addedNpcUuids.add(npcUuid);
                         }
                     }
                 }
+            }
+
+            for (UUID npcUuid : NPCDataManager.getAllNPCUuids(server)) {
+                if (addedNpcUuids.contains(npcUuid)) {
+                    continue;
+                }
+
+                String npcCityIdStr = NPCDataManager.getNPCCityId(server, npcUuid);
+                boolean isCitizen = finalCitizenIds.contains(npcUuid);
+                if (!isCitizen && npcCityIdStr != null && !npcCityIdStr.isEmpty()) {
+                    try {
+                        isCitizen = UUID.fromString(npcCityIdStr).equals(finalCityId);
+                    } catch (IllegalArgumentException ignored) {
+                        isCitizen = false;
+                    }
+                }
+                if (!isCitizen) {
+                    continue;
+                }
+
+                String npcName = NPCDataManager.getNPCName(server, npcUuid);
+                if (npcName == null || npcName.isEmpty()) {
+                    continue;
+                }
+                String job = getJobFromV2Storage(server, npcUuid);
+                if (job == null || job.isEmpty()) {
+                    job = "unemployed";
+                }
+                citizenInfos.add(new CitizenListResponsePacket.CitizenInfo(
+                        npcUuid,
+                        npcName,
+                        Math.abs(npcUuid.hashCode()),
+                        ResidentManager.hasResidenceAssigned(server, npcUuid),
+                        job,
+                        NPCDataManager.getNPCSkinPath(server, npcUuid),
+                        NPCDataManager.getNPCLevel(server, npcUuid),
+                        NPCDataManager.getNPCXp(server, npcUuid)
+                ));
+                addedNpcUuids.add(npcUuid);
             }
 
             // 发送响应包

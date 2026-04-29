@@ -1,6 +1,7 @@
 package com.xiaoliang.simukraft.client.gui;
 
 import com.xiaoliang.simukraft.entity.CustomEntity;
+import com.xiaoliang.simukraft.farmland.FarmlandPlot;
 import com.xiaoliang.simukraft.world.FarmlandHiredData;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
@@ -14,6 +15,7 @@ public class FarmlandData {
     private static final Map<BlockPos, CustomEntity> hiredFarmers = new HashMap<>();
     private static final Map<BlockPos, String> selectedCrops = new HashMap<>();
     private static final Map<BlockPos, Integer> selectedAreas = new HashMap<>();
+    private static final Map<BlockPos, FarmlandPlot> selectedPlots = new HashMap<>();
     
     // 添加UUID相关的数据结构
     private static final Map<BlockPos, UUID> hiredFarmerUuids = new HashMap<>();
@@ -34,6 +36,7 @@ public class FarmlandData {
         hiredFarmers.clear();
         selectedCrops.clear();
         selectedAreas.clear();
+        selectedPlots.clear();
         hiredFarmerUuids.clear();
         npcNames.clear();
 
@@ -44,10 +47,12 @@ public class FarmlandData {
         Map<BlockPos, UUID> savedHiredFarmers = FarmlandHiredData.getHiredFarmers();
         Map<BlockPos, String> savedSelectedCrops = FarmlandHiredData.getSelectedCrops();
         Map<BlockPos, Integer> savedSelectedAreas = FarmlandHiredData.getSelectedAreas();
+        Map<BlockPos, FarmlandPlot> savedSelectedPlots = FarmlandHiredData.getSelectedPlots();
 
         hiredFarmerUuids.putAll(savedHiredFarmers);
         selectedCrops.putAll(savedSelectedCrops);
         selectedAreas.putAll(savedSelectedAreas);
+        selectedPlots.putAll(savedSelectedPlots);
 
         // 尝试加载NPC实体
         for (Map.Entry<BlockPos, UUID> entry : savedHiredFarmers.entrySet()) {
@@ -275,6 +280,45 @@ public class FarmlandData {
         FarmlandHiredData.clearSelectedArea(farmlandBoxPos);
     }
 
+    public static boolean hasSelectedPlot(BlockPos farmlandBoxPos) {
+        return selectedPlots.containsKey(farmlandBoxPos);
+    }
+
+    public static FarmlandPlot getSelectedPlot(BlockPos farmlandBoxPos) {
+        return selectedPlots.get(farmlandBoxPos);
+    }
+
+    public static void setSelectedPlot(BlockPos farmlandBoxPos, FarmlandPlot plot) {
+        if (plot == null) {
+            return;
+        }
+        selectedPlots.put(farmlandBoxPos, plot);
+        selectedAreas.put(farmlandBoxPos, Math.max(plot.widthX(), plot.depthZ()));
+
+        if (Minecraft.getInstance().getSingleplayerServer() != null) {
+            syncClientDataToServer(Minecraft.getInstance().getSingleplayerServer());
+        } else {
+            String crop = selectedCrops.get(farmlandBoxPos);
+            int areaSize = selectedAreas.getOrDefault(farmlandBoxPos, 0);
+            com.xiaoliang.simukraft.network.NetworkManager.INSTANCE.sendToServer(
+                    new com.xiaoliang.simukraft.network.SetFarmlandConfigPacket(farmlandBoxPos, crop, areaSize, plot));
+        }
+    }
+
+    public static void setSelectedPlotFromServer(BlockPos farmlandBoxPos, FarmlandPlot plot) {
+        if (plot != null) {
+            selectedPlots.put(farmlandBoxPos, plot);
+            selectedAreas.put(farmlandBoxPos, Math.max(plot.widthX(), plot.depthZ()));
+        } else {
+            selectedPlots.remove(farmlandBoxPos);
+        }
+    }
+
+    public static void clearSelectedPlot(BlockPos farmlandBoxPos) {
+        selectedPlots.remove(farmlandBoxPos);
+        FarmlandHiredData.clearSelectedPlot(farmlandBoxPos);
+    }
+
     // ==================== 服务器数据同步方法 ====================
 
     /**
@@ -333,6 +377,10 @@ public class FarmlandData {
         // 同步区域数据
         for (Map.Entry<BlockPos, Integer> entry : selectedAreas.entrySet()) {
             FarmlandHiredData.setSelectedArea(entry.getKey(), entry.getValue());
+        }
+        // 同步真实地块数据
+        for (Map.Entry<BlockPos, FarmlandPlot> entry : selectedPlots.entrySet()) {
+            FarmlandHiredData.setSelectedPlot(entry.getKey(), entry.getValue());
         }
         // 保存到文件
         FarmlandHiredData.saveAllFarmlandData(server);

@@ -1005,6 +1005,7 @@
   "gui.area_selection.mode.replace": "替换方块",
   "gui.area_selection.mode.fill": "填充方块",
   "gui.area_selection.mode.remove": "拆除方块",
+  "gui.area_selection.mode.farmland": "农田选区",
   "gui.area_selection.point1.set": "§c点一: X=%d Y=%d Z=%d",
   "gui.area_selection.point1.not_set": "§c点一: §7未设置",
   "gui.area_selection.point2.set": "§e点二: X=%d Y=%d Z=%d",

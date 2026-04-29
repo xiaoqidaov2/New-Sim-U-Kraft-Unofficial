@@ -8,13 +8,11 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
 
 import java.util.Objects;
-import java.util.Set;
 import java.util.function.Supplier;
 
 public class StartFarmingPacket {
     private static final int MIN_AREA_SIZE = 1;
     private static final int MAX_AREA_SIZE = 64;
-    private static final Set<String> SUPPORTED_CROPS = Set.of("wheat", "potato", "carrot", "melon", "pumpkin");
     private final BlockPos farmlandBoxPos;
     private final String crop;
     private final int areaSize;
@@ -47,7 +45,7 @@ public class StartFarmingPacket {
                 
                 Simukraft.LOGGER.debug("[StartFarmingPacket] Delegating farming request to FarmlandManager, player={}", player.getName().getString());
                 
-                if (areaSize < MIN_AREA_SIZE || areaSize > MAX_AREA_SIZE || !SUPPORTED_CROPS.contains(crop)) {
+                if (areaSize < MIN_AREA_SIZE || areaSize > MAX_AREA_SIZE || !com.xiaoliang.simukraft.farmland.CropRegistry.isSupported(crop)) {
                     player.displayClientMessage(
                             Objects.requireNonNull(net.minecraft.network.chat.Component.translatable("message.simukraft.farming.failed").withStyle(style -> style.withColor(0xFF5555))),
                             false

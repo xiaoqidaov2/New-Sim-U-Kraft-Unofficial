@@ -1,6 +1,7 @@
 package com.xiaoliang.simukraft.network;
 
 import com.xiaoliang.simukraft.Simukraft;
+import com.xiaoliang.simukraft.farmland.FarmlandPlot;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
@@ -47,10 +48,12 @@ public class SyncFarmlandDataPacket {
                     Map<BlockPos, UUID> allHiredFarmers = com.xiaoliang.simukraft.world.FarmlandHiredData.getHiredFarmers();
                     Map<BlockPos, String> allSelectedCrops = com.xiaoliang.simukraft.world.FarmlandHiredData.getSelectedCrops();
                     Map<BlockPos, Integer> allSelectedAreas = com.xiaoliang.simukraft.world.FarmlandHiredData.getSelectedAreas();
+                    Map<BlockPos, FarmlandPlot> allSelectedPlots = com.xiaoliang.simukraft.world.FarmlandHiredData.getSelectedPlots();
 
                     UUID hiredFarmerUuid = allHiredFarmers.get(packet.farmlandBoxPos);
                     String selectedCrop = allSelectedCrops.get(packet.farmlandBoxPos);
                     Integer selectedArea = allSelectedAreas.get(packet.farmlandBoxPos);
+                    FarmlandPlot selectedPlot = allSelectedPlots.get(packet.farmlandBoxPos);
 
                     // 获取NPC名称（如果存在）
                     String npcName = null;
@@ -65,7 +68,8 @@ public class SyncFarmlandDataPacket {
                             hiredFarmerUuid,
                             npcName,
                             selectedCrop,
-                            selectedArea != null ? selectedArea : 0
+                            selectedArea != null ? selectedArea : 0,
+                            selectedPlot
                     );
                     NetworkManager.INSTANCE.sendTo(response, player.connection.connection, NetworkDirection.PLAY_TO_CLIENT);
                     Simukraft.LOGGER.debug("[SyncFarmlandDataPacket.Request] sync response for {} - Farmer: {}, Crop: {}, Area: {}",
@@ -83,13 +87,19 @@ public class SyncFarmlandDataPacket {
         private final String npcName;
         private final String selectedCrop;
         private final int selectedArea;
+        private final FarmlandPlot selectedPlot;
 
         public Response(BlockPos farmlandBoxPos, UUID hiredFarmerUuid, String npcName, String selectedCrop, int selectedArea) {
+            this(farmlandBoxPos, hiredFarmerUuid, npcName, selectedCrop, selectedArea, null);
+        }
+
+        public Response(BlockPos farmlandBoxPos, UUID hiredFarmerUuid, String npcName, String selectedCrop, int selectedArea, FarmlandPlot selectedPlot) {
             this.farmlandBoxPos = farmlandBoxPos;
             this.hiredFarmerUuid = hiredFarmerUuid;
             this.npcName = npcName;
             this.selectedCrop = selectedCrop;
             this.selectedArea = selectedArea;
+            this.selectedPlot = selectedPlot;
         }
 
         public Response(FriendlyByteBuf buf) {
@@ -101,6 +111,8 @@ public class SyncFarmlandDataPacket {
             boolean hasCrop = buf.readBoolean();
             this.selectedCrop = hasCrop ? Objects.requireNonNull(buf.readUtf()) : null;
             this.selectedArea = buf.readInt();
+            boolean hasPlot = buf.readBoolean();
+            this.selectedPlot = hasPlot ? new FarmlandPlot(Objects.requireNonNull(buf.readBlockPos()), Objects.requireNonNull(buf.readBlockPos())) : null;
         }
 
         public void encode(FriendlyByteBuf buf) {
@@ -118,6 +130,11 @@ public class SyncFarmlandDataPacket {
                 buf.writeUtf(selectedCrop);
             }
             buf.writeInt(selectedArea);
+            buf.writeBoolean(selectedPlot != null);
+            if (selectedPlot != null) {
+                buf.writeBlockPos(selectedPlot.minPos());
+                buf.writeBlockPos(selectedPlot.maxPos());
+            }
         }
 
         public static void handle(Response packet, Supplier<NetworkEvent.Context> supplier) {
@@ -139,6 +156,10 @@ public class SyncFarmlandDataPacket {
                 com.xiaoliang.simukraft.client.gui.FarmlandData.setSelectedAreaFromServer(
                         packet.farmlandBoxPos,
                         packet.selectedArea
+                );
+                com.xiaoliang.simukraft.client.gui.FarmlandData.setSelectedPlotFromServer(
+                        packet.farmlandBoxPos,
+                        packet.selectedPlot
                 );
             });
             context.setPacketHandled(true);

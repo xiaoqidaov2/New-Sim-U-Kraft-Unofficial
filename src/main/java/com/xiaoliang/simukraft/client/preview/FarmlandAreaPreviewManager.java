@@ -1,6 +1,7 @@
 package com.xiaoliang.simukraft.client.preview;
 
 import com.xiaoliang.simukraft.Simukraft;
+import com.xiaoliang.simukraft.farmland.FarmlandPlot;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
@@ -21,6 +22,7 @@ public class FarmlandAreaPreviewManager {
     private static BlockPos farmlandBoxPos = BlockPos.ZERO;
     private static int previewAreaSize = 0;
     private static Direction playerFacing = Direction.NORTH; // 玩家朝向
+    private static FarmlandPlot previewPlot = null;
     private static boolean isPreviewActive = false;
 
     /**
@@ -33,6 +35,7 @@ public class FarmlandAreaPreviewManager {
         farmlandBoxPos = boxPos;
         previewAreaSize = areaSize;
         playerFacing = facing != null ? facing : Direction.NORTH;
+        previewPlot = null;
         isPreviewActive = true;
         loadPreviewBlocks();
         Simukraft.LOGGER.info(Component.translatable("message.preview.farmland.start", boxPos, areaSize, areaSize, playerFacing).getString());
@@ -45,6 +48,14 @@ public class FarmlandAreaPreviewManager {
      */
     public static void startPreview(BlockPos boxPos, int areaSize) {
         startPreview(boxPos, areaSize, Direction.NORTH);
+    }
+
+    public static void startPreview(BlockPos boxPos, FarmlandPlot plot) {
+        farmlandBoxPos = boxPos;
+        previewPlot = plot;
+        previewAreaSize = plot != null ? Math.max(plot.widthX(), plot.depthZ()) : 0;
+        isPreviewActive = plot != null;
+        loadPreviewBlocks();
     }
 
     /**
@@ -76,6 +87,7 @@ public class FarmlandAreaPreviewManager {
         isPreviewActive = false;
         previewBlocks.clear();
         previewAreaSize = 0;
+        previewPlot = null;
         playerFacing = Direction.NORTH;
         Simukraft.LOGGER.info(Component.translatable("message.preview.farmland.stop").getString());
     }
@@ -99,6 +111,11 @@ public class FarmlandAreaPreviewManager {
      */
     private static void loadPreviewBlocks() {
         previewBlocks.clear();
+
+        if (previewPlot != null) {
+            loadPlotPreviewBlocks();
+            return;
+        }
 
         if (previewAreaSize <= 0 || farmlandBoxPos == null) return;
 
@@ -148,6 +165,29 @@ public class FarmlandAreaPreviewManager {
         }
 
         Simukraft.LOGGER.info(Component.translatable("message.preview.farmland.loaded", previewBlocks.size(), playerFacing).getString());
+    }
+
+    private static void loadPlotPreviewBlocks() {
+        if (previewPlot == null) {
+            return;
+        }
+
+        BlockState farmlandBlock = Blocks.YELLOW_STAINED_GLASS.defaultBlockState();
+        BlockState cornerBlock = Blocks.RED_STAINED_GLASS.defaultBlockState();
+        BlockState insideBlock = Blocks.LIGHT_BLUE_STAINED_GLASS.defaultBlockState();
+        BlockPos min = previewPlot.minPos();
+        BlockPos max = previewPlot.maxPos();
+
+        previewPlot.forEach(pos -> {
+            boolean corner = (pos.getX() == min.getX() || pos.getX() == max.getX())
+                    && (pos.getY() == min.getY() || pos.getY() == max.getY())
+                    && (pos.getZ() == min.getZ() || pos.getZ() == max.getZ());
+            boolean edge = pos.getX() == min.getX() || pos.getX() == max.getX()
+                    || pos.getY() == min.getY() || pos.getY() == max.getY()
+                    || pos.getZ() == min.getZ() || pos.getZ() == max.getZ();
+            BlockState state = corner ? cornerBlock : edge ? farmlandBlock : insideBlock;
+            previewBlocks.add(new SchematicBlockData(pos, state, 15728880, true));
+        });
     }
 
     /**

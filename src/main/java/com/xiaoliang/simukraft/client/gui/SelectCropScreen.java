@@ -1,5 +1,7 @@
 package com.xiaoliang.simukraft.client.gui;
 
+import com.xiaoliang.simukraft.farmland.CropDefinition;
+import com.xiaoliang.simukraft.farmland.CropRegistry;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -9,16 +11,17 @@ import net.minecraft.network.chat.Component;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.util.List;
 import java.util.Objects;
 
 public class SelectCropScreen extends Screen {
+    private static final int PAGE_SIZE = 8;
     private final BlockPos farmlandBoxPos;
-    private Button wheatButton;
-    private Button potatoButton;
-    private Button carrotButton;
-    private Button melonButton;
-    private Button pumpkinButton;
-    
+    private List<CropDefinition> crops = List.of();
+    private int page = 0;
+    private Button previousButton;
+    private Button nextButton;
+
     public SelectCropScreen(BlockPos pos) {
         super(Component.translatable("gui.select_crop.title"));
         this.farmlandBoxPos = pos;
@@ -29,131 +32,96 @@ public class SelectCropScreen extends Screen {
         return Objects.requireNonNull(value);
     }
 
-    @Nonnull
-    private static String safeString(@Nullable String value) {
-        return nn(value);
-    }
-
     @Override
     protected void init() {
         super.init();
+        crops = CropRegistry.getSelectableCrops();
 
-        // 返回按钮
         this.addRenderableWidget(nn(Button.builder(
                         nn(Component.translatable("gui.button.back")),
                         button -> this.onClose())
                 .bounds(5, 5, 45, 20)
                 .build()));
 
+        int totalPages = Math.max(1, (int) Math.ceil(crops.size() / (double) PAGE_SIZE));
+        page = Math.max(0, Math.min(page, totalPages - 1));
+        int start = page * PAGE_SIZE;
+        int end = Math.min(start + PAGE_SIZE, crops.size());
         int centerX = this.width / 2;
-        int centerY = this.height / 2;
-        
-        // 小麦按钮
-        wheatButton = this.addRenderableWidget(nn(Button.builder(
-                        nn(Component.translatable("gui.crop.wheat")),
-                        button -> selectCrop("wheat"))
-                .bounds(centerX - 100, centerY - 40, 80, 20)
-                .build()));
+        int startY = Math.max(70, this.height / 2 - 80);
 
-        // 马铃薯按钮
-        potatoButton = this.addRenderableWidget(nn(Button.builder(
-                        nn(Component.translatable("gui.crop.potato")),
-                        button -> selectCrop("potato"))
-                .bounds(centerX - 100, centerY - 10, 80, 20)
-                .build()));
-
-        // 胡萝卜按钮
-        carrotButton = this.addRenderableWidget(nn(Button.builder(
-                        nn(Component.translatable("gui.crop.carrot")),
-                        button -> selectCrop("carrot"))
-                .bounds(centerX - 100, centerY + 20, 80, 20)
-                .build()));
-
-        // 西瓜按钮
-        melonButton = this.addRenderableWidget(nn(Button.builder(
-                        nn(Component.translatable("gui.crop.melon")),
-                        button -> selectCrop("melon"))
-                .bounds(centerX - 100, centerY + 50, 80, 20)
-                .build()));
-
-        // 南瓜按钮
-        pumpkinButton = this.addRenderableWidget(nn(Button.builder(
-                        nn(Component.translatable("gui.crop.pumpkin")),
-                        button -> selectCrop("pumpkin"))
-                .bounds(centerX + 20, centerY - 40, 80, 20)
-                .build()));
-
-        // 更新按钮状态
-        updateButtonStates();
-    }
-
-    private void updateButtonStates() {
-        String selectedCrop = FarmlandData.getSelectedCrop(farmlandBoxPos);
-
-        // 重置所有按钮颜色
-        wheatButton.setMessage(nn(Component.translatable("gui.crop.wheat").withStyle(style -> style.withColor(0xFFFFFF))));
-        potatoButton.setMessage(nn(Component.translatable("gui.crop.potato").withStyle(style -> style.withColor(0xFFFFFF))));
-        carrotButton.setMessage(nn(Component.translatable("gui.crop.carrot").withStyle(style -> style.withColor(0xFFFFFF))));
-        melonButton.setMessage(nn(Component.translatable("gui.crop.melon").withStyle(style -> style.withColor(0xFFFFFF))));
-        pumpkinButton.setMessage(nn(Component.translatable("gui.crop.pumpkin").withStyle(style -> style.withColor(0xFFFFFF))));
-
-        // 高亮已选择的作物
-        if ("wheat".equals(selectedCrop)) {
-            wheatButton.setMessage(nn(Component.translatable("gui.crop.wheat.selected").withStyle(style -> style.withColor(0x55FF55))));
-        } else if ("potato".equals(selectedCrop)) {
-            potatoButton.setMessage(nn(Component.translatable("gui.crop.potato.selected").withStyle(style -> style.withColor(0x55FF55))));
-        } else if ("carrot".equals(selectedCrop)) {
-            carrotButton.setMessage(nn(Component.translatable("gui.crop.carrot.selected").withStyle(style -> style.withColor(0x55FF55))));
-        } else if ("melon".equals(selectedCrop)) {
-            melonButton.setMessage(nn(Component.translatable("gui.crop.melon.selected").withStyle(style -> style.withColor(0x55FF55))));
-        } else if ("pumpkin".equals(selectedCrop)) {
-            pumpkinButton.setMessage(nn(Component.translatable("gui.crop.pumpkin.selected").withStyle(style -> style.withColor(0x55FF55))));
+        for (int i = start; i < end; i++) {
+            CropDefinition crop = crops.get(i);
+            int index = i - start;
+            int column = index % 2;
+            int row = index / 2;
+            this.addRenderableWidget(nn(Button.builder(
+                            cropButtonText(crop),
+                            button -> selectCrop(crop))
+                    .bounds(centerX - 125 + column * 130, startY + row * 28, 120, 20)
+                    .build()));
         }
+
+        previousButton = this.addRenderableWidget(nn(Button.builder(
+                        nn(Component.translatable("gui.pagination.previous")),
+                        button -> changePage(-1))
+                .bounds(centerX - 100, this.height - 35, 80, 20)
+                .build()));
+        nextButton = this.addRenderableWidget(nn(Button.builder(
+                        nn(Component.translatable("gui.pagination.next")),
+                        button -> changePage(1))
+                .bounds(centerX + 20, this.height - 35, 80, 20)
+                .build()));
+
+        previousButton.active = page > 0;
+        nextButton.active = page < totalPages - 1;
     }
 
-    private void selectCrop(String crop) {
-        FarmlandData.setSelectedCrop(farmlandBoxPos, crop);
-        updateButtonStates();
+    private Component cropButtonText(CropDefinition crop) {
+        String selectedCrop = CropRegistry.normalizeSelectionId(FarmlandData.getSelectedCrop(farmlandBoxPos));
+        Component name = crop.displayName();
+        if (crop.selectionId().equals(selectedCrop)) {
+            return Component.literal("✓ ").append(name).withStyle(style -> style.withColor(0x55FF55));
+        }
+        return name.copy().withStyle(style -> style.withColor(0xFFFFFF));
+    }
+
+    private void changePage(int delta) {
+        page += delta;
+        rebuildWidgets();
+    }
+
+    private void selectCrop(CropDefinition crop) {
+        FarmlandData.setSelectedCrop(farmlandBoxPos, crop.selectionId());
 
         var player = Minecraft.getInstance().player;
         if (player != null) {
             player.displayClientMessage(
-                    nn(Component.translatable("message.simukraft.crop.selected", getCropDisplayName(crop))
+                    nn(Component.translatable("message.simukraft.crop.selected", crop.displayName().getString())
                             .withStyle(style -> style.withColor(0x55FF55))),
                     false
             );
         }
 
-        // 自动返回主界面
         this.onClose();
-    }
-
-    private String getCropDisplayName(String crop) {
-        return switch (crop) {
-            case "wheat" -> safeString(Component.translatable("gui.crop.wheat").getString());
-            case "potato" -> safeString(Component.translatable("gui.crop.potato").getString());
-            case "carrot" -> safeString(Component.translatable("gui.crop.carrot").getString());
-            case "melon" -> safeString(Component.translatable("gui.crop.melon").getString());
-            case "pumpkin" -> safeString(Component.translatable("gui.crop.pumpkin").getString());
-            default -> safeString(crop);
-        };
     }
 
     @Override
     public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTicks) {
-        // 黑色半透明背景
         guiGraphics.fillGradient(0, 0, this.width, this.height, 0xC8000000, 0xC8000000);
-        
-        // 白色标题
+
         int titleColor = 0xFFFFFF;
         Component title = Component.translatable("gui.select_crop.title").withStyle(style -> style.withColor(titleColor));
         guiGraphics.drawCenteredString(nn(this.font), nn(title), this.width / 2, 30, titleColor);
 
-        // 提示文字
         int textColor = 0xFFF5F5A0;
         Component hint = Component.translatable("gui.select_crop.hint").withStyle(style -> style.withColor(textColor));
         guiGraphics.drawCenteredString(nn(this.font), nn(hint), this.width / 2, 50, textColor);
-        
+
+        int totalPages = Math.max(1, (int) Math.ceil(crops.size() / (double) PAGE_SIZE));
+        Component pageText = Component.literal((page + 1) + " / " + totalPages).withStyle(style -> style.withColor(0xAAAAAA));
+        guiGraphics.drawCenteredString(nn(this.font), pageText, this.width / 2, this.height - 50, 0xAAAAAA);
+
         super.render(guiGraphics, mouseX, mouseY, partialTicks);
     }
 

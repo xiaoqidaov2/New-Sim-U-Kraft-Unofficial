@@ -1,7 +1,10 @@
 package com.xiaoliang.simukraft.client.gui;
 
+import com.xiaoliang.simukraft.client.preview.AreaSelectionManager;
 import com.xiaoliang.simukraft.client.preview.FarmlandAreaPreviewManager;
 import com.xiaoliang.simukraft.entity.CustomEntity;
+import com.xiaoliang.simukraft.farmland.CropDefinition;
+import com.xiaoliang.simukraft.farmland.CropRegistry;
 import com.xiaoliang.simukraft.init.ModSoundEvents;
 import com.xiaoliang.simukraft.network.EmploymentCommandPacket;
 import com.xiaoliang.simukraft.network.NetworkManager;
@@ -52,9 +55,13 @@ public class FarmlandBoxScreen extends Screen {
         }
 
         // 启动区域预览（如果已选择区域）
-        int currentAreaSize = FarmlandData.getSelectedAreaSize(farmlandBoxPos);
-        if (currentAreaSize > 0) {
-            FarmlandAreaPreviewManager.startPreview(farmlandBoxPos, currentAreaSize, lastPlayerFacing);
+        if (FarmlandData.hasSelectedPlot(farmlandBoxPos)) {
+            FarmlandAreaPreviewManager.startPreview(farmlandBoxPos, FarmlandData.getSelectedPlot(farmlandBoxPos));
+        } else {
+            int currentAreaSize = FarmlandData.getSelectedAreaSize(farmlandBoxPos);
+            if (currentAreaSize > 0) {
+                FarmlandAreaPreviewManager.startPreview(farmlandBoxPos, currentAreaSize, lastPlayerFacing);
+            }
         }
     }
 
@@ -126,8 +133,7 @@ public class FarmlandBoxScreen extends Screen {
         selectAreaButton = nn(Button.builder(
                         nn(Component.translatable("gui.farmland.select_area")),
                         button -> {
-                            // 切换到区域选择界面
-                            Minecraft.getInstance().setScreen(new SelectAreaScreen(farmlandBoxPos));
+                            Minecraft.getInstance().setScreen(new AreaSelectionScreen(farmlandBoxPos, this, AreaSelectionManager.SelectionMode.FARMLAND));
                         })
                 .bounds(this.width - 85, this.height - 60, 80, 20)
                 .build());
@@ -150,7 +156,7 @@ public class FarmlandBoxScreen extends Screen {
     private void updateButtonStates() {
         boolean hasHiredFarmer = FarmlandData.hasHiredFarmer(farmlandBoxPos);
         boolean hasSelectedCrop = FarmlandData.hasSelectedCrop(farmlandBoxPos);
-        boolean hasSelectedArea = FarmlandData.hasSelectedArea(farmlandBoxPos);
+        boolean hasSelectedArea = FarmlandData.hasSelectedArea(farmlandBoxPos) || FarmlandData.hasSelectedPlot(farmlandBoxPos);
 
         // 设置按钮激活状态
         nn(hireFarmerButton).active = !hasHiredFarmer;
@@ -183,15 +189,19 @@ public class FarmlandBoxScreen extends Screen {
         }
 
         if (hasSelectedCrop) {
-            String cropName = FarmlandData.getSelectedCrop(farmlandBoxPos);
-            nn(selectCropButton).setMessage(nn(Component.translatable("gui.farmland.crop").append(safeString(cropName))));
+            nn(selectCropButton).setMessage(nn(Component.translatable("gui.farmland.crop").append(getSelectedCropDisplayName())));
         } else {
             nn(selectCropButton).setMessage(nn(Component.translatable("gui.farmland.select_crop")));
         }
 
         if (hasSelectedArea) {
-            int areaSize = FarmlandData.getSelectedAreaSize(farmlandBoxPos);
-            nn(selectAreaButton).setMessage(nn(Component.translatable("gui.farmland.area.size", areaSize, areaSize)));
+            if (FarmlandData.hasSelectedPlot(farmlandBoxPos)) {
+                var plot = FarmlandData.getSelectedPlot(farmlandBoxPos);
+                nn(selectAreaButton).setMessage(nn(Component.translatable("gui.farmland.area.size", plot.widthX(), plot.depthZ())));
+            } else {
+                int areaSize = FarmlandData.getSelectedAreaSize(farmlandBoxPos);
+                nn(selectAreaButton).setMessage(nn(Component.translatable("gui.farmland.area.size", areaSize, areaSize)));
+            }
         } else {
             nn(selectAreaButton).setMessage(nn(Component.translatable("gui.farmland.select_area")));
         }
@@ -214,7 +224,7 @@ public class FarmlandBoxScreen extends Screen {
     private void handleStartFarming() {
         if (FarmlandData.hasHiredFarmer(farmlandBoxPos) && 
             FarmlandData.hasSelectedCrop(farmlandBoxPos) && 
-            FarmlandData.hasSelectedArea(farmlandBoxPos)) {
+            (FarmlandData.hasSelectedArea(farmlandBoxPos) || FarmlandData.hasSelectedPlot(farmlandBoxPos))) {
             
             // 发送开始耕种的数据包
             NetworkManager.INSTANCE.sendToServer(
@@ -246,7 +256,7 @@ public class FarmlandBoxScreen extends Screen {
         // 获取当前玩家朝向并更新预览
         Direction currentFacing = Minecraft.getInstance().player != null ?
             nn(Minecraft.getInstance().player).getDirection() : Direction.NORTH;
-        if (currentFacing != lastPlayerFacing && FarmlandData.hasSelectedArea(farmlandBoxPos)) {
+        if (currentFacing != lastPlayerFacing && FarmlandData.hasSelectedArea(farmlandBoxPos) && !FarmlandData.hasSelectedPlot(farmlandBoxPos)) {
             lastPlayerFacing = currentFacing;
             FarmlandAreaPreviewManager.startPreview(farmlandBoxPos,
                 FarmlandData.getSelectedAreaSize(farmlandBoxPos), lastPlayerFacing);
@@ -299,7 +309,7 @@ public class FarmlandBoxScreen extends Screen {
         // 第四行：作物状态
         Component line4;
         if (FarmlandData.hasSelectedCrop(farmlandBoxPos)) {
-            line4 = nn(Component.translatable("gui.farmland.crop").append(safeString(FarmlandData.getSelectedCrop(farmlandBoxPos))).withStyle(style -> style.withColor(textColor)));
+            line4 = nn(Component.translatable("gui.farmland.crop").append(getSelectedCropDisplayName()).withStyle(style -> style.withColor(textColor)));
         } else {
             line4 = nn(Component.translatable("gui.farmland.crop.none").withStyle(style -> style.withColor(textColor)));
         }
@@ -307,9 +317,14 @@ public class FarmlandBoxScreen extends Screen {
 
         // 第五行：区域状态
         Component line5;
-        if (FarmlandData.hasSelectedArea(farmlandBoxPos)) {
-            int areaSize = FarmlandData.getSelectedAreaSize(farmlandBoxPos);
-            line5 = nn(Component.translatable("gui.farmland.area.size", areaSize, areaSize).withStyle(style -> style.withColor(textColor)));
+        if (FarmlandData.hasSelectedArea(farmlandBoxPos) || FarmlandData.hasSelectedPlot(farmlandBoxPos)) {
+            if (FarmlandData.hasSelectedPlot(farmlandBoxPos)) {
+                var plot = FarmlandData.getSelectedPlot(farmlandBoxPos);
+                line5 = nn(Component.translatable("gui.farmland.area.size", plot.widthX(), plot.depthZ()).withStyle(style -> style.withColor(textColor)));
+            } else {
+                int areaSize = FarmlandData.getSelectedAreaSize(farmlandBoxPos);
+                line5 = nn(Component.translatable("gui.farmland.area.size", areaSize, areaSize).withStyle(style -> style.withColor(textColor)));
+            }
         } else {
             line5 = nn(Component.translatable("gui.farmland.area.none").withStyle(style -> style.withColor(textColor)));
         }
@@ -326,6 +341,16 @@ public class FarmlandBoxScreen extends Screen {
     /**
      * 获取方向的本地化名称
      */
+    private Component getSelectedCropDisplayName() {
+        String selectedCrop = FarmlandData.getSelectedCrop(farmlandBoxPos);
+        CropDefinition definition = CropRegistry.resolve(selectedCrop).orElse(null);
+        if (definition != null) {
+            return definition.displayName();
+        }
+        String normalized = CropRegistry.normalizeSelectionId(selectedCrop);
+        return Component.literal(normalized != null ? normalized : "");
+    }
+
     private String getDirectionName(Direction direction) {
         return switch (direction) {
             case NORTH -> Component.translatable("direction.north").getString();

@@ -23,7 +23,8 @@ public class AreaSelectionManager {
         REPLACE,    // 替换方块
         FILL,       // 填充方块
         REMOVE,     // 拆除方块
-        LOGISTICS   // 物流系统选区（选箱子/木桶）
+        LOGISTICS,  // 物流系统选区（选箱子/木桶）
+        FARMLAND    // 农田盒自由矩形选区
     }
 
     /**

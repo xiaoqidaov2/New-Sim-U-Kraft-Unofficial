@@ -2,6 +2,8 @@ package com.xiaoliang.simukraft.client.gui;
 
 import com.xiaoliang.simukraft.client.freecamera.FreeCameraManager;
 import com.xiaoliang.simukraft.client.preview.AreaSelectionManager;
+import com.xiaoliang.simukraft.client.preview.FarmlandAreaPreviewManager;
+import com.xiaoliang.simukraft.farmland.FarmlandPlot;
 import com.xiaoliang.simukraft.init.ModSoundEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -77,6 +79,7 @@ public class AreaSelectionScreen extends Screen {
             case REPLACE -> "gui.area_selection.mode.replace";
             case FILL -> "gui.area_selection.mode.fill";
             case REMOVE -> "gui.area_selection.mode.remove";
+            case FARMLAND -> "gui.area_selection.mode.farmland";
             default -> "";
         };
 
@@ -190,6 +193,7 @@ public class AreaSelectionScreen extends Screen {
                 // 打开方块填充界面，需要选择一个箱子
                 openBlockFillScreen(p1, p2);
             }
+            case FARMLAND -> confirmFarmlandSelection(p1, p2);
             case LOGISTICS, NONE -> {
                 return;
             }
@@ -237,6 +241,25 @@ public class AreaSelectionScreen extends Screen {
         // 打开箱子选择界面（填充模式），在建筑盒六个面紧贴范围内搜索箱子
         minecraft.setScreen(new BlockReplacementChestSelectScreen(p1, p2, buildBoxPos, parent,
                 BlockReplacementChestSelectScreen.Mode.FILL));
+    }
+
+    private void confirmFarmlandSelection(BlockPos p1, BlockPos p2) {
+        Minecraft minecraft = this.minecraft;
+        if (minecraft == null) {
+            return;
+        }
+
+        FarmlandPlot plot = FarmlandPlot.fromCorners(p1, p2);
+        FarmlandData.setSelectedPlot(buildBoxPos, plot);
+        FarmlandAreaPreviewManager.startPreview(buildBoxPos, plot);
+
+        if (mouseGrabbed) {
+            minecraft.mouseHandler.releaseMouse();
+            mouseGrabbed = false;
+        }
+        FreeCameraManager.deactivate();
+        AreaSelectionManager.endSelection();
+        minecraft.setScreen(parent instanceof FarmlandBoxScreen ? parent : new FarmlandBoxScreen(buildBoxPos));
     }
 
     @Override

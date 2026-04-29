@@ -988,6 +988,7 @@
   "gui.area_selection.mode.replace": "Replace Blocks",
   "gui.area_selection.mode.fill": "Fill Blocks",
   "gui.area_selection.mode.remove": "Remove Blocks",
+  "gui.area_selection.mode.farmland": "Farmland Selection",
   "gui.area_selection.point1.set": "§cPoint 1: X=%d Y=%d Z=%d",
   "gui.area_selection.point1.not_set": "§cPoint 1: §7Not Set",
   "gui.area_selection.point2.set": "§ePoint 2: X=%d Y=%d Z=%d",

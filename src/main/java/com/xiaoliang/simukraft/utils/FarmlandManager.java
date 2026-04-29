@@ -4,6 +4,9 @@ import com.xiaoliang.simukraft.Simukraft;
 import com.xiaoliang.simukraft.entity.CustomEntity;
 import com.xiaoliang.simukraft.entity.WorkStatus;
 import com.xiaoliang.simukraft.entity.WorkSubState;
+import com.xiaoliang.simukraft.farmland.CropDefinition;
+import com.xiaoliang.simukraft.farmland.CropRegistry;
+import com.xiaoliang.simukraft.farmland.FarmlandPlot;
 import com.xiaoliang.simukraft.network.EmploymentStateChangedPacket;
 import com.xiaoliang.simukraft.network.NPCWorkStatusPacket;
 import com.xiaoliang.simukraft.network.NetworkManager;
@@ -152,8 +155,23 @@ public final class FarmlandManager {
         }
 
         // 3. 种子校验
-        ItemStack seeds = getSeedsForCrop(crop);
-        int requiredSeeds = countPlannedPlantingSlots(areaSize, crop);
+        CropDefinition cropDefinition = CropRegistry.resolve(crop).orElse(null);
+        if (cropDefinition == null) {
+            player.displayClientMessage(
+                    Objects.requireNonNull(
+                            Component.translatable("message.simukraft.farming.failed").withStyle(s -> s.withColor(0xFF5555))
+                    ),
+                    false
+            );
+            return false;
+        }
+        Direction facing = Objects.requireNonNull(player.getDirection());
+        FarmlandPlot plot = FarmlandHiredData.getSelectedPlot(boxPos);
+        if (plot == null) {
+            plot = FarmlandPlot.fromLegacy(boxPos, facing, areaSize);
+        }
+        ItemStack seeds = new ItemStack(cropDefinition.seedItem());
+        int requiredSeeds = plot.countPlantingSlots(cropDefinition.layoutType());
         int totalSeeds = ContainerUtils.countItem(level, chestPos, seeds);
         if (totalSeeds < requiredSeeds) {
             player.displayClientMessage(
@@ -166,11 +184,8 @@ public final class FarmlandManager {
             return false;
         }
 
-        // 4. 执行物理种植逻辑 (原有 StartFarmingPacket 逻辑)
-        Direction facing = Objects.requireNonNull(player.getDirection());
-        BlockPos startPos = Objects.requireNonNull(boxPos.relative(facing).below());
-        
-        if (!checkAndClearArea(level, startPos, facing, areaSize)) {
+        // 4. 执行物理种植逻辑
+        if (!checkAndClearPlot(level, plot)) {
             player.displayClientMessage(
                     Objects.requireNonNull(
                             Component.translatable("message.simukraft.farming.failed").withStyle(s -> s.withColor(0xFF5555))
@@ -180,11 +195,12 @@ public final class FarmlandManager {
             return false;
         }
 
-        boolean planted = executeInitialPlanting(level, startPos, facing, areaSize, crop, chestPos, seeds);
+        boolean planted = executeInitialPlanting(level, plot, cropDefinition, chestPos, seeds);
         if (planted) {
             // 更新持久化配置
-            FarmlandHiredData.setSelectedCrop(boxPos, crop);
+            FarmlandHiredData.setSelectedCrop(boxPos, CropRegistry.normalizeSelectionId(crop));
             FarmlandHiredData.setSelectedArea(boxPos, areaSize);
+            FarmlandHiredData.setSelectedPlot(boxPos, plot);
             FarmlandHiredData.saveAllFarmlandData(server);
             
             // 恢复NPC状态
@@ -239,6 +255,7 @@ public final class FarmlandManager {
         FarmlandHiredData.clearHiredFarmer(boxPos);
         FarmlandHiredData.clearSelectedCrop(boxPos);
         FarmlandHiredData.clearSelectedArea(boxPos);
+        FarmlandHiredData.clearSelectedPlot(boxPos);
         FarmlandHiredData.clearBoundChest(boxPos);
         FarmerDailyWorkHandler.clearTimers(boxPos);
         FarmlandHiredData.saveAllFarmlandData(server);
@@ -251,6 +268,48 @@ public final class FarmlandManager {
     }
 
     // --- 内部辅助方法 (从 Packet 迁移) ---
+
+    private static boolean checkAndClearPlot(ServerLevel level, FarmlandPlot plot) {
+        for (BlockPos p : plot.positions()) {
+            if (!canBeFarmland(level, p)) return false;
+            BlockPos above = Objects.requireNonNull(p.above());
+            if (!level.isEmptyBlock(above) && !isReplaceable(level.getBlockState(above))) return false;
+        }
+
+        for (BlockPos p : plot.positions()) {
+            level.setBlock(p, Objects.requireNonNull(Blocks.DIRT.defaultBlockState()), 3);
+            for (int y = p.getY() + 1; y < level.getMaxBuildHeight(); y++) {
+                BlockPos cp = Objects.requireNonNull(new BlockPos(p.getX(), y, p.getZ()));
+                if (level.isEmptyBlock(cp)) break;
+                level.destroyBlock(cp, true);
+            }
+        }
+        return true;
+    }
+
+    private static boolean executeInitialPlanting(ServerLevel level, FarmlandPlot plot, CropDefinition cropDefinition, BlockPos chestPos, ItemStack seeds) {
+        int planted = 0;
+
+        for (BlockPos p : plot.positions()) {
+            level.setBlock(
+                    p,
+                    Objects.requireNonNull(
+                            Objects.requireNonNull(Blocks.FARMLAND.defaultBlockState())
+                                    .setValue(Objects.requireNonNull(FarmBlock.MOISTURE), 7)
+                    ),
+                    3
+            );
+
+            if (plot.shouldPlantAt(p, cropDefinition.layoutType())) {
+                BlockPos cp = Objects.requireNonNull(p.above());
+                if (ContainerUtils.consumeItem(level, chestPos, seeds)) {
+                    level.setBlock(cp, Objects.requireNonNull(cropDefinition.cropBlock().defaultBlockState()), 3);
+                    planted++;
+                }
+            }
+        }
+        return planted > 0;
+    }
 
     private static boolean checkAndClearArea(ServerLevel level, BlockPos startPos, Direction facing, int areaSize) {
         Direction safeFacing = Objects.requireNonNull(facing);
