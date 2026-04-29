@@ -38,6 +38,8 @@ public class NPCMoveController {
     private static final double CLIMB_HORIZONTAL_EPSILON = 0.12D;
     private static final double CLIMB_TOP_EXIT_HEIGHT = 0.82D;
     private static final double CLIMB_SPEED = 0.16D;
+    private static final double WALK_STEP_HEIGHT = 12.0D / 16.0D;
+    private static final double MAX_ASCEND_HEIGHT = 19.0D / 16.0D;
     private static final double TURN_SPEED = 0.15;
     
     // 当前路径
@@ -146,7 +148,7 @@ public class NPCMoveController {
             return false;
         }
         NPCPathNode currentNode = currentPath.getCurrentNode();
-        if (currentNode == null || currentNode.type != NPCPathNode.NodeType.STEP_UP) {
+        if (currentNode == null || currentNode.action != NPCPathNode.MovementAction.ASCEND) {
             return false;
         }
         return stepUpPhase != StepUpPhase.NONE || stepUpLockTicks > 0 || stepUpAirTicks > 0 || !npc.onGround();
@@ -183,20 +185,51 @@ public class NPCMoveController {
         // 检查是否到达当前节点
         Vec3 targetPos = currentPath.getCurrentTarget();
         double distanceToTarget = npc.position().distanceTo(targetPos);
-        boolean climbTraversal = targetNode.type == NPCPathNode.NodeType.CLIMB;
-        boolean requiresVerticalTraversal = targetNode.type == NPCPathNode.NodeType.STEP_UP || targetNode.type == NPCPathNode.NodeType.JUMP;
-        double targetHeight = targetNode.y;
+        boolean climbTraversal = targetNode.action == NPCPathNode.MovementAction.CLIMB;
+        boolean requiresVerticalTraversal = targetNode.action == NPCPathNode.MovementAction.ASCEND;
+        double targetHeight = targetNode.standY;
         boolean reachedTraversalHeight = npc.getY() >= targetHeight - 0.15D;
         double horizontalDistanceToTarget = horizontalDistance(npc.position(), targetPos);
+        boolean traverseNode = targetNode.action == NPCPathNode.MovementAction.TRAVERSE;
+        boolean stairOrSlabTraversal = isStairOrSlabTraversal(targetNode);
+        if (stairOrSlabTraversal) {
+            resetStepUpState();
+            movementBlocked = false;
+        }
+        if (stairOrSlabTraversal && targetNode.standY - npc.getY() > 0.5D + 0.05D) {
+            stopVanillaMovement();
+            movementBlocked = true;
+            return;
+        }
+        if (traverseNode && targetNode.standY - npc.getY() > WALK_STEP_HEIGHT + 0.05D) {
+            stopVanillaMovement();
+            movementBlocked = true;
+            return;
+        }
+        if (targetNode.action == NPCPathNode.MovementAction.ASCEND && targetNode.standY - npc.getY() >= MAX_ASCEND_HEIGHT) {
+            stopVanillaMovement();
+            movementBlocked = true;
+            return;
+        }
+        double traverseArrivalDistance = stairOrSlabTraversal ? 0.18D : ARRIVAL_DISTANCE;
+        boolean reachedTraverseNode = traverseNode && horizontalDistanceToTarget <= traverseArrivalDistance
+                && (!stairOrSlabTraversal || Math.abs(npc.getY() - targetNode.standY) <= 0.18D || npc.getY() >= targetNode.standY - 0.08D);
         boolean reachedClimbNode = climbTraversal && horizontalDistanceToTarget <= 0.45D && Math.abs(npc.getY() - targetHeight) <= 0.35D;
+        boolean reachedFallNode = (targetNode.action == NPCPathNode.MovementAction.FALL || targetNode.action == NPCPathNode.MovementAction.DESCEND)
+                && horizontalDistanceToTarget <= 0.55D && Math.abs(npc.getY() - targetHeight) <= 0.65D;
         
-        if ((distanceToTarget <= ARRIVAL_DISTANCE && (!requiresVerticalTraversal || reachedTraversalHeight)) || reachedClimbNode) {
+        if (reachedTraverseNode || (!traverseNode && distanceToTarget <= ARRIVAL_DISTANCE && (!requiresVerticalTraversal || reachedTraversalHeight)) || reachedClimbNode || reachedFallNode) {
             // 到达节点，前进到下一个
             handleNodeArrival(targetNode);
             return;
         }
 
-        if (targetNode.type == NPCPathNode.NodeType.CLIMB && tryClimbTowardNode(targetNode, targetPos)) {
+        if (targetNode.action == NPCPathNode.MovementAction.CLIMB && tryClimbTowardNode(targetNode, targetPos)) {
+            movementBlocked = false;
+            return;
+        }
+
+        if ((targetNode.action == NPCPathNode.MovementAction.FALL || targetNode.action == NPCPathNode.MovementAction.DESCEND) && executeFallAction(targetNode, targetPos)) {
             movementBlocked = false;
             return;
         }
@@ -211,36 +244,29 @@ public class NPCMoveController {
         
         // 检查是否卡住
         if (checkStuck()) {
-            handleStuck();
-            return;
+            if (stairOrSlabTraversal) {
+                stuckTicks = 0;
+            } else {
+                handleStuck();
+                return;
+            }
         }
 
-        if (stepUpPhase != StepUpPhase.NONE && continueStepUpPhase(targetNode, targetPos)) {
+        if (!stairOrSlabTraversal && stepUpPhase != StepUpPhase.NONE && continueStepUpPhase(targetNode, targetPos)) {
             movementBlocked = false;
             return;
         }
         resetStepUpState();
 
-        if (tryJumpTowardHigherNode(targetNode, targetPos)) {
-            movementBlocked = false;
-            return;
-        }
-
-        if (tryStepTowardHigherNode(targetNode, targetPos)) {
+        if (!stairOrSlabTraversal && tryAscendTowardNode(targetNode, targetPos)) {
             movementBlocked = false;
             return;
         }
 
         resetStepUpState();
-
-        if (tryJumpOutOfPit(targetNode, targetPos)) {
-            movementBlocked = false;
-            currentObstacleType = ObstacleType.NONE;
-            return;
-        }
         
         // 执行移动前检查前方是否被阻挡
-        if (isMovementBlocked(targetPos)) {
+        if (!stairOrSlabTraversal && isMovementBlocked(targetPos)) {
             movementBlocked = true;
             if (currentObstacleType == ObstacleType.DOOR_CLOSED) {
                 handleDoorInteraction();
@@ -248,14 +274,11 @@ public class NPCMoveController {
             if (tryResolveCrowdedPath(targetPos)) {
                 return;
             }
-            if (tryStepOverObstacle(targetPos)) {
-                return;
-            }
             if (tryBypassObstacle(targetPos)) {
                 return;
             }
             if (npc.onGround()) {
-                npc.setDeltaMovement(Vec3.ZERO);
+                stopVanillaMovement();
             }
             return;
         }
@@ -265,7 +288,12 @@ public class NPCMoveController {
 
         // 执行移动
         currentSpeed = calculateSpeed(targetPos);
-        moveTowards(targetPos);
+        if (stairOrSlabTraversal) {
+            moveHorizontallyWithoutJump(targetPos, targetNode);
+        } else {
+            Vec3 moveTarget = traverseNode ? new Vec3(targetPos.x, npc.getY(), targetPos.z) : targetPos;
+            moveTowards(moveTarget);
+        }
         syncFacingToCurrentMotion(0.8F);
         
         // 处理门交互
@@ -282,12 +310,11 @@ public class NPCMoveController {
      */
     private void handleNodeArrival(NPCPathNode node) {
         // 根据节点类型执行特殊操作
-        switch (node.type) {
+        switch (node.action) {
             case DOOR:
                 interactWithDoor(node.pos);
                 break;
-            case STEP_UP:
-            case JUMP:
+            case ASCEND:
                 resetStepUpState();
                 releaseAirTraversalControl();
                 break;
@@ -345,71 +372,18 @@ public class NPCMoveController {
         }
     }
     
-    private boolean shouldTriggerStepJump(double horizontalDist, double heightDelta) {
-        return horizontalDist <= 0.24D && heightDelta >= 0.55D;
-    }
-
-    private boolean shouldTriggerHighJump(double horizontalDist, double heightDelta) {
-        return horizontalDist <= 0.22D && heightDelta >= 1.0D;
-    }
-
-    private boolean tryJumpTowardHigherNode(NPCPathNode targetNode, Vec3 targetPos) {
+    private boolean tryAscendTowardNode(NPCPathNode targetNode, Vec3 targetPos) {
+        if (targetNode == null || targetNode.action != NPCPathNode.MovementAction.ASCEND || isVanillaAutoStepNear(targetNode.pos) || isOnVanillaAutoStepBlock()) {
+            return false;
+        }
         if (!npc.onGround()) {
-            return false;
-        }
-        if (targetNode == null || targetNode.type != NPCPathNode.NodeType.JUMP) {
-            return false;
-        }
-
-        double currentY = npc.blockPosition().getY();
-        double targetY = targetNode.y;
-        double heightDelta = targetY - currentY;
-        if (heightDelta <= 1.0D || heightDelta > 1.25D) {
-            return false;
-        }
-
-        Vec3 direction = targetPos.subtract(npc.position());
-        double horizontalDist = Math.sqrt(direction.x * direction.x + direction.z * direction.z);
-        if (horizontalDist < 0.05D) {
-            return false;
-        }
-
-        double dx = direction.x / horizontalDist;
-        double dz = direction.z / horizontalDist;
-        BlockPos landingPos = targetNode.pos;
-        BlockPos landingHeadPos = landingPos.above();
-
-        if (!level.getBlockState(landingPos).getCollisionShape(level, landingPos).isEmpty()) {
-            return false;
-        }
-        if (!level.getBlockState(landingHeadPos).getCollisionShape(level, landingHeadPos).isEmpty()) {
-            return false;
-        }
-
-        faceMovementDirection(dx, dz, 0.85F);
-        if (shouldTriggerHighJump(horizontalDist, heightDelta)) {
-            npc.doJump();
+            releaseAirTraversalControl();
             stepUpPhase = StepUpPhase.LAND;
-            stepUpAirTicks = 0;
             return true;
         }
-        moveTowards(targetPos);
-        return true;
-    }
 
-    private boolean tryStepTowardHigherNode(NPCPathNode targetNode, Vec3 targetPos) {
-        boolean continuingStepUp = targetNode != null && targetNode.type == NPCPathNode.NodeType.STEP_UP && (stepUpLockTicks > 0 || stepUpAirTicks > 0 || stepUpPhase != StepUpPhase.NONE);
-        if (!npc.onGround() && !continuingStepUp) {
-            return false;
-        }
-        if (targetNode == null || (targetNode.type != NPCPathNode.NodeType.STEP_UP && targetNode.type != NPCPathNode.NodeType.JUMP)) {
-            return false;
-        }
-
-        double currentY = npc.getY();
-        double targetY = targetNode.y;
-        double heightDelta = targetY - currentY;
-        if (heightDelta < 0.45D || heightDelta > 1.25D) {
+        double heightDelta = targetNode.standY - npc.getY();
+        if (heightDelta <= 0.75D || heightDelta >= 1.1875D) {
             return false;
         }
 
@@ -422,56 +396,27 @@ public class NPCMoveController {
 
         double dx = direction.x / horizontalDist;
         double dz = direction.z / horizontalDist;
-        BlockPos frontFootPos = BlockPos.containing(currentPos.x + dx * 0.6D, currentPos.y, currentPos.z + dz * 0.6D);
-        BlockPos frontHeadPos = frontFootPos.above();
-        BlockPos upperFrontPos = frontHeadPos.above();
         BlockPos landingPos = targetNode.pos;
         BlockPos landingHeadPos = landingPos.above();
-
-        boolean clearForward = level.getBlockState(frontHeadPos).getCollisionShape(level, frontHeadPos).isEmpty()
-                && level.getBlockState(upperFrontPos).getCollisionShape(level, upperFrontPos).isEmpty();
-        boolean clearLanding = level.getBlockState(landingPos).getCollisionShape(level, landingPos).isEmpty()
-                && level.getBlockState(landingHeadPos).getCollisionShape(level, landingHeadPos).isEmpty();
-        if (!clearForward || !clearLanding) {
+        if (!level.getBlockState(landingPos).getCollisionShape(level, landingPos).isEmpty()) {
+            return false;
+        }
+        if (!level.getBlockState(landingHeadPos).getCollisionShape(level, landingHeadPos).isEmpty()) {
             return false;
         }
 
-        if (targetNode.type == NPCPathNode.NodeType.STEP_UP) {
-            if (stepUpPhase == StepUpPhase.NONE) {
-                stepUpPhase = StepUpPhase.APPROACH;
-            }
-        } else {
-            stepUpPhase = StepUpPhase.NONE;
-        }
-
-        faceMovementDirection(dx, dz, 0.65F);
-
-        boolean shouldJump = npc.onGround() && (targetNode.type == NPCPathNode.NodeType.JUMP
-                ? shouldTriggerHighJump(horizontalDist, heightDelta)
-                : shouldTriggerStepJump(horizontalDist, heightDelta));
-
-        if (shouldJump) {
-            npc.doJump();
-            if (targetNode.type == NPCPathNode.NodeType.STEP_UP) {
-                stepUpLockTicks = 0;
-                stepUpAirTicks = 0;
-                stepUpPhase = StepUpPhase.LAND;
-            }
-            return true;
-        }
-
+        faceMovementDirection(dx, dz, 0.7F);
         moveTowards(targetPos);
-
-        if (targetNode.type == NPCPathNode.NodeType.STEP_UP) {
-            stepUpLockTicks = 7;
-            stepUpAirTicks = 0;
-            stepUpPhase = StepUpPhase.APPROACH;
+        stepUpPhase = StepUpPhase.APPROACH;
+        if (horizontalDist <= 0.35D && targetNode.standY - npc.getY() > 0.75D) {
+            npc.getJumpControl().jump();
+            stepUpPhase = StepUpPhase.LAND;
         }
         return true;
     }
 
     private boolean continueStepUpPhase(NPCPathNode targetNode, Vec3 targetPos) {
-        if (targetNode == null || targetNode.type != NPCPathNode.NodeType.STEP_UP) {
+        if (targetNode == null || targetNode.action != NPCPathNode.MovementAction.ASCEND) {
             return false;
         }
 
@@ -483,7 +428,7 @@ public class NPCMoveController {
                     releaseAirTraversalControl();
                     return true;
                 }
-                if (!tryStepTowardHigherNode(targetNode, targetPos)) {
+                if (!tryAscendTowardNode(targetNode, targetPos)) {
                     return false;
                 }
                 if (stepUpLockTicks > 0) {
@@ -495,7 +440,7 @@ public class NPCMoveController {
                     releaseAirTraversalControl();
                     return true;
                 }
-                double remainingHeight = targetNode.y - npc.getY();
+                double remainingHeight = targetNode.standY - npc.getY();
                 if (remainingHeight > 0.12D && stepUpLockTicks > 0) {
                     stepUpPhase = StepUpPhase.APPROACH;
                     return true;
@@ -515,15 +460,37 @@ public class NPCMoveController {
         stepUpAirTicks = 0;
     }
 
-    private void releaseAirTraversalControl() {
+    private void stopVanillaMovement() {
         npc.getMoveControl().setWantedPosition(npc.getX(), npc.getY(), npc.getZ(), 0.0D);
         npc.setSpeed(0.0F);
         npc.setZza(0.0F);
         npc.setXxa(0.0F);
     }
 
+    private void releaseAirTraversalControl() {
+        stopVanillaMovement();
+    }
+
+    private boolean executeFallAction(NPCPathNode targetNode, Vec3 targetPos) {
+        if (targetNode == null) {
+            return false;
+        }
+        currentSpeed = WALK_MOVE_SPEED;
+        double horizontalDist = horizontalDistance(npc.position(), targetPos);
+        if (horizontalDist > 0.45D) {
+            moveTowards(new Vec3(targetPos.x, npc.getY(), targetPos.z));
+            return true;
+        }
+        if (!npc.onGround()) {
+            releaseAirTraversalControl();
+            return true;
+        }
+        moveTowards(targetPos);
+        return true;
+    }
+
     private boolean tryClimbTowardNode(NPCPathNode targetNode, Vec3 targetPos) {
-        if (targetNode == null || targetNode.type != NPCPathNode.NodeType.CLIMB) {
+        if (targetNode == null || targetNode.action != NPCPathNode.MovementAction.CLIMB) {
             return false;
         }
 
@@ -552,7 +519,7 @@ public class NPCMoveController {
             npc.setXxa(0.0F);
         }
 
-        double verticalDelta = targetNode.y - npc.getY();
+        double verticalDelta = targetNode.standY - npc.getY();
         if (verticalDelta > -0.2D && shouldExitClimbToPlatform(targetNode)) {
             Vec3 exitTarget = getClimbExitTarget(targetBlockPos, targetState);
             currentSpeed = WALK_MOVE_SPEED;
@@ -590,13 +557,13 @@ public class NPCMoveController {
             return false;
         }
         NPCPathNode nextNode = currentPath.getNextNode();
-        if (nextNode == null || nextNode.type == NPCPathNode.NodeType.CLIMB) {
+        if (nextNode == null || nextNode.action == NPCPathNode.MovementAction.CLIMB) {
             return false;
         }
-        if (nextNode.y < targetNode.y) {
+        if (nextNode.standY < targetNode.standY) {
             return false;
         }
-        if (npc.getY() < targetNode.y + CLIMB_TOP_EXIT_HEIGHT) {
+        if (npc.getY() < targetNode.standY + CLIMB_TOP_EXIT_HEIGHT) {
             return false;
         }
         BlockPos nextFootPos = nextNode.pos;
@@ -614,7 +581,7 @@ public class NPCMoveController {
     private Vec3 getClimbExitTarget(BlockPos climbPos, BlockState climbState) {
         NPCPathNode nextNode = currentPath != null ? currentPath.getNextNode() : null;
         if (nextNode != null) {
-            return new Vec3(nextNode.x + 0.5D, nextNode.y, nextNode.z + 0.5D);
+            return new Vec3(nextNode.x + 0.5D, nextNode.standY, nextNode.z + 0.5D);
         }
         return getClimbCenter(climbPos, climbState);
     }
@@ -658,55 +625,6 @@ public class NPCMoveController {
         return false;
     }
 
-    private boolean tryJumpOutOfPit(NPCPathNode targetNode, Vec3 targetPos) {
-        if (!npc.onGround()) {
-            return false;
-        }
-        if (targetNode == null) {
-            return false;
-        }
-
-        double currentY = npc.blockPosition().getY();
-        double targetY = targetNode.y;
-        double heightDelta = targetY - currentY;
-        if (heightDelta < 1.0D || heightDelta > 1.25D) {
-            return false;
-        }
-
-        Vec3 direction = targetPos.subtract(npc.position());
-        double horizontalDist = Math.sqrt(direction.x * direction.x + direction.z * direction.z);
-        if (horizontalDist < 0.1D) {
-            return false;
-        }
-
-        double dx = direction.x / horizontalDist;
-        double dz = direction.z / horizontalDist;
-
-        BlockPos frontFootPos = BlockPos.containing(npc.getX() + dx * 0.6D, npc.getY(), npc.getZ() + dz * 0.6D);
-        BlockPos frontHeadPos = frontFootPos.above();
-        BlockPos upperFrontPos = frontHeadPos.above();
-        BlockPos landingPos = targetNode.pos;
-        BlockPos landingHeadPos = landingPos.above();
-
-        boolean blockedAhead = !level.getBlockState(frontHeadPos).getCollisionShape(level, frontHeadPos).isEmpty()
-                || !level.getBlockState(upperFrontPos).getCollisionShape(level, upperFrontPos).isEmpty();
-        if (blockedAhead) {
-            return false;
-        }
-
-        if (!level.getBlockState(landingPos).getCollisionShape(level, landingPos).isEmpty()) {
-            return false;
-        }
-        if (!level.getBlockState(landingHeadPos).getCollisionShape(level, landingHeadPos).isEmpty()) {
-            return false;
-        }
-
-        faceMovementDirection(dx, dz, 0.85F);
-        moveTowards(targetPos);
-        npc.doJump();
-        return true;
-    }
-
     /**
      * 检查前往目标的移动是否被阻挡
      */
@@ -736,6 +654,11 @@ public class NPCMoveController {
         }
 
         if (isClimbableBlock(footState) || isClimbableBlock(headState)) {
+            currentObstacleType = ObstacleType.NONE;
+            return false;
+        }
+
+        if (isVanillaAutoStepNear(footPos)) {
             currentObstacleType = ObstacleType.NONE;
             return false;
         }
@@ -803,7 +726,7 @@ public class NPCMoveController {
         if (shouldYieldInTightPassage(nearestBlocker, targetPos)) {
             narrowPassWaitTicks++;
             if (narrowPassWaitTicks <= 12) {
-                npc.setDeltaMovement(Vec3.ZERO);
+                stopVanillaMovement();
                 return true;
             }
         } else {
@@ -811,7 +734,7 @@ public class NPCMoveController {
         }
 
         if (crowdWaitTicks <= 8) {
-            npc.setDeltaMovement(Vec3.ZERO);
+            stopVanillaMovement();
             return true;
         }
 
@@ -821,7 +744,7 @@ public class NPCMoveController {
         }
 
         if (crowdWaitTicks <= 16) {
-            npc.setDeltaMovement(Vec3.ZERO);
+            stopVanillaMovement();
             return true;
         }
 
@@ -956,51 +879,6 @@ public class NPCMoveController {
         lastCrowdBlockerPos = null;
     }
 
-    private boolean tryStepOverObstacle(Vec3 target) {
-        if (!npc.onGround()) {
-            return false;
-        }
-
-        Vec3 currentPos = npc.position();
-        Vec3 direction = target.subtract(currentPos);
-        double horizontalDist = Math.sqrt(direction.x * direction.x + direction.z * direction.z);
-        if (horizontalDist < 0.01) {
-            return false;
-        }
-
-        double dx = direction.x / horizontalDist;
-        double dz = direction.z / horizontalDist;
-        BlockPos frontFootPos = BlockPos.containing(currentPos.x + dx * 0.75D, currentPos.y, currentPos.z + dz * 0.75D);
-        BlockPos frontHeadPos = frontFootPos.above();
-        BlockPos topPos = frontHeadPos.above();
-
-        BlockState frontFootState = level.getBlockState(frontFootPos);
-        BlockState frontHeadState = level.getBlockState(frontHeadPos);
-        BlockState topState = level.getBlockState(topPos);
-        if (isClimbableBlock(frontFootState) || isClimbableBlock(frontHeadState)) {
-            return false;
-        }
-        double obstacleHeight = getCollisionHeight(frontFootState, frontFootPos);
-
-        boolean clearAbove = frontHeadState.getCollisionShape(level, frontHeadPos).isEmpty()
-                && topState.getCollisionShape(level, topPos).isEmpty();
-        if (!clearAbove) {
-            return false;
-        }
-
-        if (obstacleHeight > 0.0D && obstacleHeight < 0.9D && isVanillaStepBlock(frontFootState, frontFootPos)) {
-            moveTowards(target);
-            return true;
-        }
-
-        if (obstacleHeight >= 0.9D && obstacleHeight <= 1.0D && !isVanillaStepBlock(frontFootState, frontFootPos)) {
-            moveTowards(target);
-            return true;
-        }
-
-        return false;
-    }
-
     private boolean tryBypassObstacle(Vec3 target) {
         Vec3 currentPos = npc.position();
         Vec3 direction = target.subtract(currentPos);
@@ -1073,12 +951,30 @@ public class NPCMoveController {
     }
 
     private boolean isVanillaStepBlock(BlockState state, BlockPos pos) {
-        Block block = state.getBlock();
-        if (block instanceof SlabBlock || block instanceof StairBlock) {
+        if (isVanillaAutoStepBlock(state)) {
             return true;
         }
         double collisionHeight = getCollisionHeight(state, pos);
         return collisionHeight > 0.0D && collisionHeight <= npc.maxUpStep();
+    }
+
+    private boolean isVanillaAutoStepBlock(BlockState state) {
+        Block block = state.getBlock();
+        return block instanceof SlabBlock || block instanceof StairBlock;
+    }
+
+    private boolean isVanillaAutoStepNear(BlockPos footPos) {
+        return isVanillaAutoStepBlock(level.getBlockState(footPos))
+                || isVanillaAutoStepBlock(level.getBlockState(footPos.below()))
+                || isVanillaAutoStepBlock(level.getBlockState(footPos.above()))
+                || isVanillaAutoStepBlock(level.getBlockState(BlockPos.containing(footPos.getX() + 0.5D, npc.getY() - 0.05D, footPos.getZ() + 0.5D)));
+    }
+
+    private boolean isOnVanillaAutoStepBlock() {
+        BlockPos feet = npc.blockPosition();
+        return isVanillaAutoStepBlock(level.getBlockState(feet))
+                || isVanillaAutoStepBlock(level.getBlockState(feet.below()))
+                || isVanillaAutoStepBlock(level.getBlockState(BlockPos.containing(npc.getX(), npc.getY() - 0.1D, npc.getZ())));
     }
 
     private boolean isClosedDoorBlock(BlockState state) {
@@ -1120,7 +1016,36 @@ public class NPCMoveController {
         if (shape.isEmpty()) {
             return 0.0D;
         }
-        return shape.max(net.minecraft.core.Direction.Axis.Y);
+        double height = 0.0D;
+        for (AABB box : shape.toAabbs()) {
+            height = Math.max(height, box.maxY);
+        }
+        return height;
+    }
+
+    private boolean isStairOrSlabTraversal(NPCPathNode node) {
+        if (node == null || node.action != NPCPathNode.MovementAction.TRAVERSE) {
+            return false;
+        }
+        return isVanillaAutoStepNear(node.pos) || isOnVanillaAutoStepBlock();
+    }
+
+    private void moveHorizontallyWithoutJump(Vec3 target, NPCPathNode targetNode) {
+        Vec3 currentPos = npc.position();
+        Vec3 direction = target.subtract(currentPos);
+        double horizontalDist = Math.sqrt(direction.x * direction.x + direction.z * direction.z);
+        if (horizontalDist < 0.01D) {
+            stopVanillaMovement();
+            return;
+        }
+        double heightDelta = targetNode.standY - npc.getY();
+        if (heightDelta > 0.03D && heightDelta <= 0.55D && horizontalDist <= 0.42D) {
+            double lift = Math.min(0.08D, heightDelta);
+            Vec3 motion = npc.getDeltaMovement();
+            npc.setDeltaMovement(motion.x, Math.max(motion.y, lift), motion.z);
+        }
+        double horizontalTargetY = npc.getY();
+        npc.getMoveControl().setWantedPosition(target.x, horizontalTargetY, target.z, Math.max(0.6D, currentSpeed));
     }
 
     /**
@@ -1208,12 +1133,17 @@ public class NPCMoveController {
             return;
         }
         NPCPathNode currentNode = currentPath.getCurrentNode();
-        if (currentNode != null && (currentNode.type == NPCPathNode.NodeType.STEP_UP || currentNode.type == NPCPathNode.NodeType.JUMP)) {
+        if (currentNode != null && currentNode.action == NPCPathNode.MovementAction.ASCEND) {
+            return;
+        }
+        if (currentNode != null && currentNode.action == NPCPathNode.MovementAction.TRAVERSE && (isOnVanillaAutoStepBlock() || isVanillaAutoStepNear(currentNode.pos))) {
+            stopVanillaMovement();
+            stuckTicks = 0;
             return;
         }
 
         if (npc.onGround()) {
-            npc.doJump();
+            npc.getJumpControl().jump();
         }
         
         // 如果卡住太久，放弃当前路径

@@ -2,8 +2,8 @@ package com.xiaoliang.simukraft.network;
 
 import com.xiaoliang.simukraft.Simukraft;
 import com.xiaoliang.simukraft.client.gui.NPCPathDebugClientCache;
-import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.network.NetworkEvent;
 
 import java.util.ArrayList;
@@ -18,12 +18,12 @@ import java.util.function.Supplier;
 public class SyncNPCPathDebugPacket {
     private final UUID npcUuid;
     private final int currentIndex;
-    private final List<BlockPos> nodes;
+    private final List<Vec3> nodes;
     private final List<String> nodeTypes;
     private final boolean clear;
     private final boolean blocked;
 
-    public SyncNPCPathDebugPacket(UUID npcUuid, int currentIndex, List<BlockPos> nodes, List<String> nodeTypes, boolean clear, boolean blocked) {
+    public SyncNPCPathDebugPacket(UUID npcUuid, int currentIndex, List<Vec3> nodes, List<String> nodeTypes, boolean clear, boolean blocked) {
         this.npcUuid = npcUuid;
         this.currentIndex = currentIndex;
         this.nodes = nodes;
@@ -40,7 +40,7 @@ public class SyncNPCPathDebugPacket {
         int size = buf.readVarInt();
         this.nodes = new ArrayList<>(size);
         for (int i = 0; i < size; i++) {
-            this.nodes.add(buf.readBlockPos());
+            this.nodes.add(new Vec3(buf.readDouble(), buf.readDouble(), buf.readDouble()));
         }
         int typeSize = buf.readVarInt();
         this.nodeTypes = new ArrayList<>(typeSize);
@@ -55,8 +55,10 @@ public class SyncNPCPathDebugPacket {
         buf.writeBoolean(clear);
         buf.writeBoolean(blocked);
         buf.writeVarInt(nodes.size());
-        for (BlockPos pos : nodes) {
-            buf.writeBlockPos(pos);
+        for (Vec3 pos : nodes) {
+            buf.writeDouble(pos.x);
+            buf.writeDouble(pos.y);
+            buf.writeDouble(pos.z);
         }
         buf.writeVarInt(nodeTypes.size());
         for (String nodeType : nodeTypes) {

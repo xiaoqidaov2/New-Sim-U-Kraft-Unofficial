@@ -32,7 +32,6 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageTypes;
-import net.minecraft.world.entity.AgeableMob;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
@@ -44,7 +43,7 @@ import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
 import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
 
 import net.minecraft.world.entity.ai.navigation.PathNavigation;
-import net.minecraft.world.entity.animal.Animal;
+import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.food.FoodProperties;
@@ -70,7 +69,7 @@ import java.util.List;
 import java.util.UUID;
 
 @SuppressWarnings({"null", "deprecation"})
-public class CustomEntity extends Animal {
+public class CustomEntity extends PathfinderMob {
     private static final EntityDataAccessor<String> DATA_NAME = SynchedEntityData.defineId(CustomEntity.class, EntityDataSerializers.STRING);
     private static final EntityDataAccessor<String> DATA_GENDER = SynchedEntityData.defineId(CustomEntity.class, EntityDataSerializers.STRING);
     private static final EntityDataAccessor<String> DATA_SKIN_PATH = SynchedEntityData.defineId(CustomEntity.class, EntityDataSerializers.STRING);
@@ -132,7 +131,7 @@ public class CustomEntity extends Animal {
     private static final int VISIT_STATUS_RADIUS = 4;
 
 
-    public CustomEntity(EntityType<? extends Animal> type, Level level) {
+    public CustomEntity(EntityType<? extends PathfinderMob> type, Level level) {
         super(type, level);
         this.moveControl = new CustomMoveControl(this);
         this.setMaxUpStep(1.0F);
@@ -164,17 +163,6 @@ public class CustomEntity extends Animal {
         this.entityData.define(DATA_HUNGER, 20);
         this.entityData.define(DATA_IS_HOMELESS, false);
         this.entityData.define(DATA_WORK_NEED_DETAIL, "");
-    }
-
-    @Nullable
-    @Override
-    public AgeableMob getBreedOffspring(@NotNull ServerLevel level, @NotNull AgeableMob otherParent) {
-        return null;
-    }
-
-    @Override
-    public boolean canBreed() {
-        return false;
     }
 
     /**
@@ -2089,7 +2077,7 @@ public class CustomEntity extends Animal {
             return;
         }
 
-        java.util.List<net.minecraft.core.BlockPos> nodePositions = new java.util.ArrayList<>();
+        java.util.List<net.minecraft.world.phys.Vec3> nodePositions = new java.util.ArrayList<>();
         java.util.List<String> nodeTypes = new java.util.ArrayList<>();
         int currentIndex = 0;
         boolean clear = true;
@@ -2099,14 +2087,14 @@ public class CustomEntity extends Animal {
             blocked = npcPathNavigator.isBlockedByObstacle();
             net.minecraft.world.phys.Vec3 debugTargetPos = npcPathNavigator.getDebugDisplayTargetPos();
             if (debugTargetPos != null) {
-                nodePositions.add(net.minecraft.core.BlockPos.containing(debugTargetPos));
+                nodePositions.add(debugTargetPos);
                 nodeTypes.add("TARGET");
             }
             com.xiaoliang.simukraft.entity.ai.path.NPCPath currentPath = npcPathNavigator.getCurrentPath();
             if (currentPath != null && !currentPath.isEmpty()) {
                 currentIndex = currentPath.getCurrentIndex();
                 for (com.xiaoliang.simukraft.entity.ai.path.NPCPathNode node : currentPath.getNodes()) {
-                    nodePositions.add(node.pos);
+                    nodePositions.add(new net.minecraft.world.phys.Vec3(node.standX, node.standY, node.standZ));
                     nodeTypes.add(node.type.name());
                 }
                 clear = false;

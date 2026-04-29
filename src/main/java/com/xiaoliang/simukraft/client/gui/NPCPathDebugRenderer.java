@@ -9,7 +9,6 @@ import com.mojang.blaze3d.vertex.VertexFormat;
 import com.xiaoliang.simukraft.Simukraft;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
-import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -84,7 +83,7 @@ public class NPCPathDebugRenderer {
     }
 
     private static void renderPath(PoseStack poseStack, Vec3 cameraPos, NPCPathDebugClientCache.DebugPathData pathData) {
-        List<BlockPos> nodes = pathData.nodes();
+        List<Vec3> nodes = pathData.nodes();
         List<String> nodeTypes = pathData.nodeTypes();
         if (nodes.isEmpty()) {
             return;
@@ -118,7 +117,7 @@ public class NPCPathDebugRenderer {
         return COLOR_NODE;
     }
 
-    private static void renderPathLines(PoseStack poseStack, Vec3 cameraPos, List<BlockPos> nodes, int color) {
+    private static void renderPathLines(PoseStack poseStack, Vec3 cameraPos, List<Vec3> nodes, int color) {
         RenderSystem.enableDepthTest();
         RenderSystem.disableCull();
         RenderSystem.enableBlend();
@@ -136,8 +135,8 @@ public class NPCPathDebugRenderer {
         float alpha = ((color >> 24) & 0xFF) / 255.0f;
 
         for (int i = 0; i < nodes.size() - 1; i++) {
-            Vec3 from = centerOf(nodes.get(i));
-            Vec3 to = centerOf(nodes.get(i + 1));
+            Vec3 from = nodes.get(i).add(0.0D, 0.05D, 0.0D);
+            Vec3 to = nodes.get(i + 1).add(0.0D, 0.05D, 0.0D);
             drawLine(buffer, matrix,
                     from.x - cameraPos.x, from.y - cameraPos.y, from.z - cameraPos.z,
                     to.x - cameraPos.x, to.y - cameraPos.y, to.z - cameraPos.z,
@@ -149,10 +148,10 @@ public class NPCPathDebugRenderer {
         RenderSystem.disableBlend();
     }
 
-    private static void renderNodeBox(PoseStack poseStack, Vec3 cameraPos, BlockPos pos, int color) {
+    private static void renderNodeBox(PoseStack poseStack, Vec3 cameraPos, Vec3 pos, int color) {
         AABB box = new AABB(
-                pos.getX() + 0.2D, pos.getY() + 0.05D, pos.getZ() + 0.2D,
-                pos.getX() + 0.8D, pos.getY() + 0.65D, pos.getZ() + 0.8D
+                pos.x - 0.3D, pos.y + 0.02D, pos.z - 0.3D,
+                pos.x + 0.3D, pos.y + 0.62D, pos.z + 0.3D
         );
         renderBoxOutline(poseStack, cameraPos, box, color);
     }
@@ -202,9 +201,6 @@ public class NPCPathDebugRenderer {
         RenderSystem.disableBlend();
     }
 
-    private static Vec3 centerOf(BlockPos pos) {
-        return new Vec3(pos.getX() + 0.5D, pos.getY() + 0.35D, pos.getZ() + 0.5D);
-    }
 
     private static void drawLine(BufferBuilder buffer, Matrix4f matrix,
                                  double x1, double y1, double z1,

@@ -2,7 +2,10 @@ package com.xiaoliang.simukraft.entity.ai.path;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.SlabBlock;
+import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -202,7 +205,7 @@ public class NPCPath {
     public Vec3 getCurrentTarget() {
         NPCPathNode node = getCurrentNode();
         if (node != null) {
-            return new Vec3(node.x + 0.5, node.y, node.z + 0.5);
+            return new Vec3(node.standX, node.standY, node.standZ);
         }
         return null;
     }
@@ -213,7 +216,7 @@ public class NPCPath {
     public Vec3 getNextTarget() {
         NPCPathNode node = getNextNode();
         if (node != null) {
-            return new Vec3(node.x + 0.5, node.y, node.z + 0.5);
+            return new Vec3(node.standX, node.standY, node.standZ);
         }
         return null;
     }
@@ -279,14 +282,19 @@ public class NPCPath {
     
     private boolean containsSpecialTraversalNode() {
         for (NPCPathNode node : nodes) {
-            if (node.type == NPCPathNode.NodeType.STEP_UP
-                    || node.type == NPCPathNode.NodeType.JUMP
-                    || node.type == NPCPathNode.NodeType.FALL
-                    || node.type == NPCPathNode.NodeType.CLIMB) {
+            if (node.action != NPCPathNode.MovementAction.TRAVERSE || isHeightSensitiveNode(node)) {
                 return true;
             }
         }
         return false;
+    }
+
+    private boolean isHeightSensitiveNode(NPCPathNode node) {
+        if (Math.abs(node.standY - node.y) > 1.0E-4D) {
+            return true;
+        }
+        return isVanillaStepBlock(level.getBlockState(node.pos), node.pos)
+                || isVanillaStepBlock(level.getBlockState(node.pos.below()), node.pos.below());
     }
 
     /**
@@ -295,6 +303,9 @@ public class NPCPath {
     private boolean canWalkDirectly(NPCPathNode start, NPCPathNode end) {
         if (level == null) return false;
         if (Math.abs(start.y - end.y) > 1) return false;
+
+        if (Math.abs(start.standY - end.standY) > 1.0E-4D) return false;
+        if (isHeightSensitiveNode(start) || isHeightSensitiveNode(end)) return false;
 
         double distance = start.distanceTo(end);
         if (distance > 5.0) return false;
@@ -310,25 +321,88 @@ public class NPCPath {
             double sampleZ = startVec.z + (endVec.z - startVec.z) * t;
 
             BlockPos footPos = BlockPos.containing(sampleX, sampleY, sampleZ);
-            BlockPos headPos = footPos.above();
-            BlockPos groundPos = footPos.below();
+            double standY = getStandY(footPos, sampleX, sampleZ);
 
-            BlockState footState = level.getBlockState(footPos);
-            BlockState headState = level.getBlockState(headPos);
-            BlockState groundState = level.getBlockState(groundPos);
-
-            if (!footState.getCollisionShape(level, footPos).isEmpty()) {
+            if (!hasHeadroomAt(footPos, standY)) {
                 return false;
             }
-            if (!headState.getCollisionShape(level, headPos).isEmpty()) {
-                return false;
-            }
-            if (groundState.getCollisionShape(level, groundPos).isEmpty()) {
+            if (Math.abs(standY - sampleY) > 0.75D) {
                 return false;
             }
         }
 
         return true;
+    }
+
+    private boolean isPassableForPath(BlockState state, BlockPos pos) {
+        return state.getCollisionShape(level, pos).isEmpty() || isVanillaStepBlock(state, pos);
+    }
+
+    private boolean isVanillaStepBlock(BlockState state, BlockPos pos) {
+        if (state.getBlock() instanceof SlabBlock || state.getBlock() instanceof StairBlock) {
+            return true;
+        }
+        double height = getCollisionHeight(state, pos);
+        return height > 0.0D && height <= 12.0D / 16.0D;
+    }
+
+    private double getStandY(BlockPos pos, double worldX, double worldZ) {
+        double top = getHighestCollisionTopAt(pos, worldX, worldZ);
+        if (top > pos.getY() + 1.0E-5D) {
+            return top;
+        }
+        double belowTop = getHighestCollisionTopAt(pos.below(), worldX, worldZ);
+        if (belowTop > pos.getY() - 1.0D + 1.0E-5D) {
+            return belowTop;
+        }
+        return pos.getY();
+    }
+
+    private double getHighestCollisionTopAt(BlockPos blockPos, double worldX, double worldZ) {
+        BlockState state = level.getBlockState(blockPos);
+        if (state.getCollisionShape(level, blockPos).isEmpty()) {
+            return Double.NEGATIVE_INFINITY;
+        }
+        double localX = worldX - blockPos.getX();
+        double localZ = worldZ - blockPos.getZ();
+        double highest = Double.NEGATIVE_INFINITY;
+        for (AABB box : state.getCollisionShape(level, blockPos).toAabbs()) {
+            if (localX >= box.minX - 0.31D && localX <= box.maxX + 0.31D
+                    && localZ >= box.minZ - 0.31D && localZ <= box.maxZ + 0.31D) {
+                highest = Math.max(highest, blockPos.getY() + box.maxY);
+            }
+        }
+        return highest;
+    }
+
+    private boolean hasHeadroomAt(BlockPos pos, double standY) {
+        int minY = (int) Math.floor(standY + 1.0E-5D);
+        int maxY = (int) Math.floor(standY + 1.8D - 1.0E-5D);
+        for (int y = minY; y <= maxY; y++) {
+            BlockPos checkPos = new BlockPos(pos.getX(), y, pos.getZ());
+            BlockState state = level.getBlockState(checkPos);
+            if (state.getCollisionShape(level, checkPos).isEmpty()) {
+                continue;
+            }
+            double localMinY = standY - checkPos.getY() + 1.0E-5D;
+            for (AABB box : state.getCollisionShape(level, checkPos).toAabbs()) {
+                if (box.maxY > localMinY) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private double getCollisionHeight(BlockState state, BlockPos pos) {
+        if (state.getCollisionShape(level, pos).isEmpty()) {
+            return 0.0D;
+        }
+        double height = 0.0D;
+        for (AABB box : state.getCollisionShape(level, pos).toAabbs()) {
+            height = Math.max(height, box.maxY);
+        }
+        return height;
     }
 
     private boolean isDiagonalSegment(NPCPathNode start, NPCPathNode end) {
@@ -359,7 +433,8 @@ public class NPCPath {
                     }
                     BlockPos checkPos = centerPos.offset(dx, 0, dz);
                     BlockPos headPos = checkPos.above();
-                    if (!level.getBlockState(checkPos).getCollisionShape(level, checkPos).isEmpty()
+                    BlockState checkState = level.getBlockState(checkPos);
+                    if (!isPassableForPath(checkState, checkPos)
                             || !level.getBlockState(headPos).getCollisionShape(level, headPos).isEmpty()) {
                         return true;
                     }

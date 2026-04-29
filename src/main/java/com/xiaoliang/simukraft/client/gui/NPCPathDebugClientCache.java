@@ -1,6 +1,6 @@
 package com.xiaoliang.simukraft.client.gui;
 
-import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 public class NPCPathDebugClientCache {
     private static final Map<UUID, DebugPathData> PATHS = new ConcurrentHashMap<>();
 
-    public static void updatePath(UUID npcUuid, int currentIndex, List<BlockPos> nodes, List<String> nodeTypes, boolean blocked) {
+    public static void updatePath(UUID npcUuid, int currentIndex, List<Vec3> nodes, List<String> nodeTypes, boolean blocked) {
         List<String> normalizedNodeTypes = new ArrayList<>(nodeTypes);
         while (normalizedNodeTypes.size() < nodes.size()) {
             normalizedNodeTypes.add("WALKABLE");
@@ -38,6 +38,6 @@ public class NPCPathDebugClientCache {
         PATHS.clear();
     }
 
-    public record DebugPathData(int currentIndex, List<BlockPos> nodes, List<String> nodeTypes, boolean blocked) {
+    public record DebugPathData(int currentIndex, List<Vec3> nodes, List<String> nodeTypes, boolean blocked) {
     }
 }

@@ -192,10 +192,18 @@ public class NPCPathNavigator {
             return false;
         }
         
-        BlockPos startPos = npc.blockPosition();
+        BlockPos startPos = getNavigationStartPos();
+        if (startPos == null) {
+            handlePathFail();
+            return false;
+        }
+        BlockPos normalizedTarget = pathFinder.normalizeTargetPosition(targetPos);
+        if (normalizedTarget == null) {
+            handlePathFail();
+            return false;
+        }
         
-        // 同步寻路（简单路径）
-        NPCPath path = pathFinder.findPath(startPos, targetPos);
+        NPCPath path = pathFinder.findPath(startPos, normalizedTarget);
         
         if (path.isFailed()) {
             handlePathFail();
@@ -214,9 +222,15 @@ public class NPCPathNavigator {
         
         pathRecalculateCooldown = PATH_RECALCULATE_INTERVAL;
         
-        // 从当前位置重新寻路
-        BlockPos currentPos = npc.blockPosition();
-        NPCPath newPath = pathFinder.findPath(currentPos, targetPos);
+        BlockPos currentPos = getNavigationStartPos();
+        if (currentPos == null) {
+            return;
+        }
+        BlockPos normalizedTarget = pathFinder.normalizeTargetPosition(targetPos);
+        if (normalizedTarget == null) {
+            return;
+        }
+        NPCPath newPath = pathFinder.findPath(currentPos, normalizedTarget);
         
         if (!newPath.isFailed()) {
             moveController.setPath(newPath);
@@ -238,22 +252,33 @@ public class NPCPathNavigator {
         }
 
         pathRecalculateCooldown = PATH_RECALCULATE_INTERVAL;
-        BlockPos currentPos = npc.blockPosition();
-        NPCPath directPath = pathFinder.findPath(currentPos, targetPos);
+        BlockPos currentPos = getNavigationStartPos();
+        if (currentPos == null) {
+            return;
+        }
+        BlockPos normalizedTarget = pathFinder.normalizeTargetPosition(targetPos);
+        if (normalizedTarget == null) {
+            return;
+        }
+        NPCPath directPath = pathFinder.findPath(currentPos, normalizedTarget);
         if (!directPath.isFailed()) {
             usingTemporaryBypassTarget = false;
             moveController.setPath(directPath);
             return;
         }
 
-        List<BlockPos> candidateTargets = buildLocalBypassTargets(currentPos, targetPos);
+        List<BlockPos> candidateTargets = buildLocalBypassTargets(currentPos, normalizedTarget);
         for (BlockPos candidate : candidateTargets) {
-            NPCPath toCandidatePath = pathFinder.findPath(currentPos, candidate);
+            BlockPos normalizedCandidate = pathFinder.normalizeTargetPosition(candidate);
+            if (normalizedCandidate == null) {
+                continue;
+            }
+            NPCPath toCandidatePath = pathFinder.findPath(currentPos, normalizedCandidate);
             if (toCandidatePath.isFailed()) {
                 continue;
             }
 
-            NPCPath candidateToFinal = pathFinder.findPath(candidate, targetPos);
+            NPCPath candidateToFinal = pathFinder.findPath(normalizedCandidate, normalizedTarget);
             if (candidateToFinal.isFailed()) {
                 continue;
             }
@@ -263,7 +288,7 @@ public class NPCPathNavigator {
             return;
         }
 
-        BlockPos alternativeTarget = pathFinder.findAlternativeTargetNear(targetPos, 8);
+        BlockPos alternativeTarget = pathFinder.findAlternativeTargetNear(normalizedTarget, 8);
         if (alternativeTarget != null) {
             NPCPath alternativePath = pathFinder.findPath(currentPos, alternativeTarget);
             if (!alternativePath.isFailed()) {
@@ -357,6 +382,15 @@ public class NPCPathNavigator {
         }
     }
     
+    private BlockPos getNavigationStartPos() {
+        BlockPos fromFeet = BlockPos.containing(npc.getX(), npc.getY(), npc.getZ());
+        BlockPos normalized = pathFinder.normalizeStartPosition(fromFeet);
+        if (normalized != null) {
+            return normalized;
+        }
+        return pathFinder.normalizeStartPosition(npc.blockPosition());
+    }
+
     /**
      * 处理路径失败
      */
