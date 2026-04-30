@@ -89,9 +89,16 @@ public class GuiScaleManager {
      */
     public static void setScale(int scale) {
         Minecraft mc = Minecraft.getInstance();
+        if (mc == null) {
+            return;
+        }
         Window window = mc.getWindow();
-        mc.options.guiScale().set(scale);
-        window.setGuiScale(scale);
+        if (window == null) {
+            return;
+        }
+        int optionScale = Math.max(0, scale);
+        mc.options.guiScale().set(optionScale);
+        window.setGuiScale(window.calculateScale(optionScale, mc.isEnforceUnicode()));
     }
 
     public static int getCurrentScale() {
@@ -99,14 +106,15 @@ public class GuiScaleManager {
         if (minecraft == null) {
             return 2;
         }
-        return minecraft.options.guiScale().get();
+        return Math.max(0, minecraft.options.guiScale().get());
     }
 
     public static boolean setScaleIfNeeded(int scale) {
-        if (getCurrentScale() == scale) {
+        int optionScale = Math.max(0, scale);
+        if (getCurrentScale() == optionScale) {
             return false;
         }
-        setScale(scale);
+        setScale(optionScale);
         return true;
     }
 

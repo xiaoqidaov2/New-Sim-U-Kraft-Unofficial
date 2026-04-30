@@ -2,7 +2,6 @@ package com.xiaoliang.simukraft.client.gui;
 
 import com.lowdragmc.lowdraglib.gui.modular.IUIHolder;
 import com.lowdragmc.lowdraglib.gui.modular.ModularUI;
-import com.lowdragmc.lowdraglib.gui.modular.ModularUIGuiContainer;
 import com.lowdragmc.lowdraglib.gui.texture.ColorBorderTexture;
 import com.lowdragmc.lowdraglib.gui.texture.GuiTextureGroup;
 import com.lowdragmc.lowdraglib.gui.texture.ResourceTexture;
@@ -12,6 +11,7 @@ import com.lowdragmc.lowdraglib.gui.widget.ButtonWidget;
 import com.lowdragmc.lowdraglib.gui.widget.ImageWidget;
 import com.lowdragmc.lowdraglib.gui.widget.WidgetGroup;
 import com.lowdragmc.lowdraglib.utils.Size;
+import com.xiaoliang.simukraft.client.gui.ldlib.LDLibMenuScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.BlockPos;
@@ -23,7 +23,7 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 import javax.annotation.Nonnull;
 
 @OnlyIn(Dist.CLIENT)
-public class SelectBuildingScreen extends ModularUIGuiContainer {
+public class SelectBuildingScreen extends LDLibMenuScreen {
     private static final int HEIGHT = 200;
     private static final int BUTTON_WIDTH = 110;
     private static final int BUTTON_HEIGHT = 20;
@@ -34,9 +34,32 @@ public class SelectBuildingScreen extends ModularUIGuiContainer {
 
     private static final String LONG_BUTTON_TEXTURE = "simukraft:textures/gui/long_button.png";
     private static final String BUTTON_TEXTURE = "simukraft:textures/gui/button.png";
+
+    private final BlockPos buildBoxPos;
     
     public SelectBuildingScreen(BlockPos buildBoxPos) {
-        super(createModularUI(buildBoxPos), 0);
+        super(Component.translatable("gui.select_building.title"), null);
+        this.buildBoxPos = buildBoxPos;
+    }
+
+    @Override
+    protected int getUIWidth() {
+        return Minecraft.getInstance().getWindow().getGuiScaledWidth();
+    }
+
+    @Override
+    protected int getUIHeight() {
+        return Minecraft.getInstance().getWindow().getGuiScaledHeight();
+    }
+
+    @Override
+    protected boolean enableAutoScale() {
+        return false;
+    }
+
+    @Override
+    protected ModularUI createModularUI() {
+        return createModularUI(buildBoxPos);
     }
 
     private static ModularUI createModularUI(BlockPos buildBoxPos) {
@@ -50,6 +73,7 @@ public class SelectBuildingScreen extends ModularUIGuiContainer {
         ModularUI modularUI = new ModularUI(new Size(screenWidth, screenHeight), holder, player);
 
         WidgetGroup rootGroup = new WidgetGroup();
+        rootGroup.setSelfPosition(0, 0);
         rootGroup.setSize(screenWidth, screenHeight);
 
         TextTexture titleTexture = new TextTexture("gui.select_building.title");

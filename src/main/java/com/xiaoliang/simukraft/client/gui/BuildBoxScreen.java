@@ -2,7 +2,6 @@ package com.xiaoliang.simukraft.client.gui;
 
 import com.lowdragmc.lowdraglib.gui.modular.IUIHolder;
 import com.lowdragmc.lowdraglib.gui.modular.ModularUI;
-import com.lowdragmc.lowdraglib.gui.modular.ModularUIGuiContainer;
 import com.lowdragmc.lowdraglib.gui.texture.ColorBorderTexture;
 import com.lowdragmc.lowdraglib.gui.texture.DynamicTexture;
 import com.lowdragmc.lowdraglib.gui.texture.GuiTextureGroup;
@@ -13,6 +12,7 @@ import com.lowdragmc.lowdraglib.gui.widget.ButtonWidget;
 import com.lowdragmc.lowdraglib.gui.widget.ImageWidget;
 import com.lowdragmc.lowdraglib.gui.widget.WidgetGroup;
 import com.lowdragmc.lowdraglib.utils.Size;
+import com.xiaoliang.simukraft.client.gui.ldlib.LDLibMenuScreen;
 import com.xiaoliang.simukraft.entity.CustomEntity;
 import com.xiaoliang.simukraft.init.ModSoundEvents;
 import com.xiaoliang.simukraft.network.EmploymentCommandPacket;
@@ -20,7 +20,6 @@ import com.xiaoliang.simukraft.network.NetworkManager;
 import com.xiaoliang.simukraft.network.RequestBuildBoxHireStatusPacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
@@ -33,7 +32,7 @@ import java.util.UUID;
 
 @OnlyIn(Dist.CLIENT)
 @SuppressWarnings({"null", "unchecked"})
-public class BuildBoxScreen extends ModularUIGuiContainer {
+public class BuildBoxScreen extends LDLibMenuScreen {
     private static final int BUTTON_WIDTH = 120;
     private static final int BUTTON_HEIGHT = 24;
     private static final int BUTTON_SPACING_CLOSE = 2;
@@ -50,17 +49,35 @@ public class BuildBoxScreen extends ModularUIGuiContainer {
     private final BlockPos buildBoxPos;
 
     public BuildBoxScreen(BlockPos buildBoxPos) {
-        super(createModularUI(buildBoxPos), 0);
+        super(Component.translatable("gui.build_box.title"), null);
         this.buildBoxPos = buildBoxPos;
 
-        // 初始化 NBT 数据
         initNBTData();
 
-        // 播放打开音效
-        Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(ModSoundEvents.BUILD_BOX_OPEN.get(), 1.0F));
+        Minecraft.getInstance().getSoundManager().play(
+                net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(ModSoundEvents.BUILD_BOX_OPEN.get(), 1.0F));
 
-        // 请求服务器同步雇佣状态
         NetworkManager.INSTANCE.sendToServer(new RequestBuildBoxHireStatusPacket(buildBoxPos));
+    }
+
+    @Override
+    protected int getUIWidth() {
+        return Minecraft.getInstance().getWindow().getGuiScaledWidth();
+    }
+
+    @Override
+    protected int getUIHeight() {
+        return Minecraft.getInstance().getWindow().getGuiScaledHeight();
+    }
+
+    @Override
+    protected boolean enableAutoScale() {
+        return false;
+    }
+
+    @Override
+    protected ModularUI createModularUI() {
+        return createModularUI(buildBoxPos);
     }
 
     private void initNBTData() {
@@ -71,29 +88,25 @@ public class BuildBoxScreen extends ModularUIGuiContainer {
     }
 
     private static ModularUI createModularUI(BlockPos buildBoxPos) {
-        // 获取屏幕尺寸
         int screenWidth = Minecraft.getInstance().getWindow().getGuiScaledWidth();
         int screenHeight = Minecraft.getInstance().getWindow().getGuiScaledHeight();
-
         Player player = Minecraft.getInstance().player;
         BuildBoxUIHolder holder = new BuildBoxUIHolder(buildBoxPos);
         ModularUI modularUI = new ModularUI(new Size(screenWidth, screenHeight), holder, player);
 
-        // 创建根容器 - 全屏
         WidgetGroup rootGroup = new WidgetGroup();
+        rootGroup.setSelfPosition(0, 0);
         rootGroup.setSize(screenWidth, screenHeight);
 
         int centerX = screenWidth / 2;
         int centerY = screenHeight / 2;
 
-        // 标题 - 使用ImageWidget配合TextTexture实现居中
         TextTexture titleTexture = new TextTexture("gui.build_box.title");
         titleTexture.setWidth(screenWidth);
         titleTexture.setDropShadow(true);
         ImageWidget titleWidget = new ImageWidget(0, centerY - 80, screenWidth, 20, titleTexture);
         rootGroup.addWidget(titleWidget);
 
-        // 状态文本 - 使用ImageWidget配合TextTexture实现居中
         TextTexture statusTexture = new TextTexture(() -> {
             var p = Minecraft.getInstance().player;
             if (p != null) {
@@ -110,7 +123,6 @@ public class BuildBoxScreen extends ModularUIGuiContainer {
         ImageWidget statusWidget = new ImageWidget(0, centerY - 60, screenWidth, 16, statusTexture);
         rootGroup.addWidget(statusWidget);
 
-        // 指示文本 - 使用ImageWidget配合TextTexture实现居中
         TextTexture instructionTexture = new TextTexture("gui.build_box.instruction");
         instructionTexture.setWidth(screenWidth);
         instructionTexture.setColor(0xF5F5A0);
@@ -118,7 +130,6 @@ public class BuildBoxScreen extends ModularUIGuiContainer {
         ImageWidget instructionWidget = new ImageWidget(0, centerY - 40, screenWidth, 16, instructionTexture);
         rootGroup.addWidget(instructionWidget);
 
-        // 计算按钮位置
         int totalWidth = BUTTON_WIDTH * 3 + BUTTON_SPACING_CLOSE * 2;
         int startX = centerX - totalWidth / 2;
         int firstRowY = centerY + 20;
@@ -389,6 +400,11 @@ public class BuildBoxScreen extends ModularUIGuiContainer {
 
         // 调用父类渲染
         super.render(guiGraphics, mouseX, mouseY, partialTicks);
+    }
+
+    @Override
+    public void onClose() {
+        Minecraft.getInstance().setScreen(null);
     }
 
     @Override

@@ -2,7 +2,6 @@ package com.xiaoliang.simukraft.client.gui;
 
 import com.lowdragmc.lowdraglib.gui.modular.IUIHolder;
 import com.lowdragmc.lowdraglib.gui.modular.ModularUI;
-import com.lowdragmc.lowdraglib.gui.modular.ModularUIGuiContainer;
 import com.lowdragmc.lowdraglib.gui.texture.ColorBorderTexture;
 import com.lowdragmc.lowdraglib.gui.texture.ColorRectTexture;
 import com.lowdragmc.lowdraglib.gui.texture.GuiTextureGroup;
@@ -15,6 +14,7 @@ import com.lowdragmc.lowdraglib.gui.widget.Widget;
 import com.lowdragmc.lowdraglib.gui.widget.WidgetGroup;
 import com.lowdragmc.lowdraglib.utils.Position;
 import com.lowdragmc.lowdraglib.utils.Size;
+import com.xiaoliang.simukraft.client.gui.ldlib.LDLibMenuScreen;
 import com.xiaoliang.simukraft.network.BuildingListRequestPacket;
 import com.xiaoliang.simukraft.network.BuildingListResponsePacket;
 import com.xiaoliang.simukraft.network.NetworkManager;
@@ -30,7 +30,7 @@ import javax.annotation.Nonnull;
 import java.util.*;
 
 @OnlyIn(Dist.CLIENT)
-public class BuildingListScreen extends ModularUIGuiContainer {
+public class BuildingListScreen extends LDLibMenuScreen {
 
     private final String category;
     private final Screen parent;
@@ -70,19 +70,43 @@ public class BuildingListScreen extends ModularUIGuiContainer {
     enum SortMode { NAME, PRICE, SIZE }
 
     public BuildingListScreen(String category, Screen parent) {
-        super(createModularUI(), 0);
+        super(Component.translatable("gui.building_list.title", getCategoryName(category)), parent);
         this.category = category;
         this.parent = parent;
-        this.pinnedBuildings = pinManager.getPinnedBuildings(); // 加载置顶数据
+        this.pinnedBuildings = pinManager.getPinnedBuildings();
         NetworkManager.INSTANCE.sendToServer(new BuildingListRequestPacket(category));
     }
 
-    private static ModularUI createModularUI() {
+    @Override
+    protected int getUIWidth() {
+        return Minecraft.getInstance().getWindow().getGuiScaledWidth();
+    }
+
+    @Override
+    protected int getUIHeight() {
+        return Minecraft.getInstance().getWindow().getGuiScaledHeight();
+    }
+
+    @Override
+    protected boolean enableAutoScale() {
+        return false;
+    }
+
+    @Override
+    protected ModularUI createModularUI() {
+        return createInitialModularUI();
+    }
+
+    private static ModularUI createInitialModularUI() {
         int screenW = Minecraft.getInstance().getWindow().getGuiScaledWidth();
         int screenH = Minecraft.getInstance().getWindow().getGuiScaledHeight();
         Player player = Minecraft.getInstance().player;
         ListUIHolder holder = new ListUIHolder();
         ModularUI modularUI = new ModularUI(new Size(screenW, screenH), holder, player);
+        WidgetGroup mainGroup = new WidgetGroup();
+        mainGroup.setSelfPosition(0, 0);
+        mainGroup.setSize(screenW, screenH);
+        modularUI.widget(mainGroup);
         return modularUI;
     }
 
