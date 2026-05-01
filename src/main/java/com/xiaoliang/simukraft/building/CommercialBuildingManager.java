@@ -4,9 +4,10 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.xiaoliang.simukraft.Simukraft;
+import com.mojang.logging.LogUtils;
 import com.xiaoliang.simukraft.building.CommercialBuildingConfig.TradeItem;
 import net.minecraft.server.MinecraftServer;
+import org.slf4j.Logger;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -25,6 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class CommercialBuildingManager {
     
+    private static final Logger LOGGER = LogUtils.getLogger();
     private static final Gson gson = new Gson();
     private static final Map<String, CommercialBuildingConfig> buildingConfigs = new ConcurrentHashMap<>();
     private static boolean initialized = false;
@@ -59,7 +61,7 @@ public class CommercialBuildingManager {
         boolean isFirstRun = !Files.exists(userConfigDir) || !Files.exists(userConfigDir.resolve(FIRST_RUN_MARKER));
         
         if (isFirstRun) {
-            Simukraft.LOGGER.info("[CommercialBuildingManager] 首次启动，复制默认配置到用户目录");
+            LOGGER.info("[CommercialBuildingManager] 首次启动，复制默认配置到用户目录");
             copyDefaultConfigsToUserDir();
         }
         
@@ -67,7 +69,7 @@ public class CommercialBuildingManager {
         loadConfigsFromUserDir();
         
         initialized = true;
-        Simukraft.LOGGER.info("[CommercialBuildingManager] 已加载 {} 个商业建筑配置", buildingConfigs.size());
+        LOGGER.info("[CommercialBuildingManager] 已加载 {} 个商业建筑配置", buildingConfigs.size());
     }
     
     /**
@@ -80,7 +82,7 @@ public class CommercialBuildingManager {
             Path userConfigDir = new File(USER_CONFIG_PATH).toPath();
             if (!Files.exists(userConfigDir)) {
                 Files.createDirectories(userConfigDir);
-                Simukraft.LOGGER.info("[CommercialBuildingManager] 创建用户配置目录: {}", userConfigDir.toAbsolutePath());
+                LOGGER.info("[CommercialBuildingManager] 创建用户配置目录: {}", userConfigDir.toAbsolutePath());
             }
             
             // 使用已知的建筑ID列表复制文件
@@ -93,13 +95,13 @@ public class CommercialBuildingManager {
                 }
             }
             
-            Simukraft.LOGGER.info("[CommercialBuildingManager] 共复制 {} 个建筑配置", copyCount);
+            LOGGER.info("[CommercialBuildingManager] 共复制 {} 个建筑配置", copyCount);
             
             // 创建首次启动标记文件
             createFirstRunMarker(userConfigDir);
             
         } catch (Exception e) {
-            Simukraft.LOGGER.error("[CommercialBuildingManager] 复制默认配置失败", e);
+            LOGGER.error("[CommercialBuildingManager] 复制默认配置失败", e);
         }
     }
     
@@ -122,7 +124,7 @@ public class CommercialBuildingManager {
                 skCopied = true;
             }
         } catch (Exception e) {
-            Simukraft.LOGGER.error("[CommercialBuildingManager] 复制SK文件失败: {}", skFileName, e);
+            LOGGER.error("[CommercialBuildingManager] 复制SK文件失败: {}", skFileName, e);
         }
         
         // 复制JSON文件
@@ -134,7 +136,7 @@ public class CommercialBuildingManager {
                 Files.copy(is, targetJsonFile, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (Exception e) {
-            Simukraft.LOGGER.error("[CommercialBuildingManager] 复制JSON文件失败: {}", jsonFileName, e);
+            LOGGER.error("[CommercialBuildingManager] 复制JSON文件失败: {}", jsonFileName, e);
         }
         
         // 复制NBT文件（如果存在）
@@ -161,7 +163,7 @@ public class CommercialBuildingManager {
             Path markerFile = userConfigDir.resolve(FIRST_RUN_MARKER);
             Files.write(markerFile, Collections.singletonList("Commercial building configs initialized"));
         } catch (Exception e) {
-            Simukraft.LOGGER.error("[CommercialBuildingManager] 创建标记文件失败", e);
+            LOGGER.error("[CommercialBuildingManager] 创建标记文件失败", e);
         }
     }
     
@@ -172,7 +174,7 @@ public class CommercialBuildingManager {
         try {
             Path userConfigDir = new File(USER_CONFIG_PATH).toPath();
             if (!Files.exists(userConfigDir)) {
-                Simukraft.LOGGER.warn("[CommercialBuildingManager] 用户配置目录不存在: {}", USER_CONFIG_PATH);
+                LOGGER.warn("[CommercialBuildingManager] 用户配置目录不存在: {}", USER_CONFIG_PATH);
                 return;
             }
             
@@ -198,7 +200,7 @@ public class CommercialBuildingManager {
             }
             
         } catch (Exception e) {
-            Simukraft.LOGGER.error("[CommercialBuildingManager] 加载配置失败", e);
+            LOGGER.error("[CommercialBuildingManager] 加载配置失败", e);
         }
     }
     
@@ -251,7 +253,7 @@ public class CommercialBuildingManager {
 
             String configJobType = config.getJobType();
             if (configJobType == null || configJobType.isBlank()) {
-                Simukraft.LOGGER.warn("[CommercialBuildingManager] 跳过缺少 jobType 的配置: {}", config.getBuildingId());
+                LOGGER.warn("[CommercialBuildingManager] 跳过缺少 jobType 的配置: {}", config.getBuildingId());
                 continue;
             }
 
@@ -300,7 +302,7 @@ public class CommercialBuildingManager {
             String buildingId = file.getName().substring(0, file.getName().lastIndexOf('.'));
             return parseSkFile(buildingId, reader);
         } catch (Exception e) {
-            Simukraft.LOGGER.error("[CommercialBuildingManager] 加载SK文件失败: {}", file.getAbsolutePath(), e);
+            LOGGER.error("[CommercialBuildingManager] 加载SK文件失败: {}", file.getAbsolutePath(), e);
             return null;
         }
     }
@@ -358,7 +360,7 @@ public class CommercialBuildingManager {
             JsonObject json = gson.fromJson(reader, JsonObject.class);
             parseJsonConfig(config, json);
         } catch (Exception e) {
-            Simukraft.LOGGER.error("[CommercialBuildingManager] 加载JSON配置失败: {}", file.getAbsolutePath(), e);
+            LOGGER.error("[CommercialBuildingManager] 加载JSON配置失败: {}", file.getAbsolutePath(), e);
         }
     }
     

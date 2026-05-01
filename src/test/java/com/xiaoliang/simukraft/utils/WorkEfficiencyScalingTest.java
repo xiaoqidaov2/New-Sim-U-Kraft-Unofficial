@@ -2,6 +2,9 @@ package com.xiaoliang.simukraft.utils;
 
 import org.junit.jupiter.api.Test;
 
+import com.xiaoliang.simukraft.job.jobs.commercialgeneric.CommercialWorkHandler;
+import com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler;
+
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class WorkEfficiencyScalingTest {

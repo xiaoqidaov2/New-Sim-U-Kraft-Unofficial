@@ -45,12 +45,25 @@ public class StartFarmingPacket {
                 
                 Simukraft.LOGGER.debug("[StartFarmingPacket] Delegating farming request to FarmlandManager, player={}", player.getName().getString());
                 
-                if (areaSize < MIN_AREA_SIZE || areaSize > MAX_AREA_SIZE || !com.xiaoliang.simukraft.farmland.CropRegistry.isSupported(crop)) {
+                if (!com.xiaoliang.simukraft.farmland.CropRegistry.isSupported(crop)) {
                     player.displayClientMessage(
                             Objects.requireNonNull(net.minecraft.network.chat.Component.translatable("message.simukraft.farming.failed").withStyle(style -> style.withColor(0xFF5555))),
                             false
                     );
                     return;
+                }
+
+                com.xiaoliang.simukraft.world.FarmlandHiredData.loadAllFarmlandData(player.server);
+                boolean hasSavedPlot = com.xiaoliang.simukraft.world.FarmlandHiredData.getSelectedPlot(packet.farmlandBoxPos) != null;
+                if ((areaSize < MIN_AREA_SIZE || areaSize > MAX_AREA_SIZE) && !hasSavedPlot) {
+                    player.displayClientMessage(
+                            Objects.requireNonNull(net.minecraft.network.chat.Component.translatable("message.simukraft.farming.failed").withStyle(style -> style.withColor(0xFF5555))),
+                            false
+                    );
+                    return;
+                }
+                if (areaSize < MIN_AREA_SIZE || areaSize > MAX_AREA_SIZE) {
+                    areaSize = MIN_AREA_SIZE;
                 }
                 
                 // 调用统一的管理器

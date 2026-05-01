@@ -111,7 +111,7 @@ public class CustomEntity extends PathfinderMob {
     private int constructionProgress = 0;
     private String currentBuildingName = "";
     private boolean isHomeless = false;
-    private com.xiaoliang.simukraft.utils.PlannerWorkHandler plannerWorkHandler;
+    private com.xiaoliang.simukraft.job.jobs.planner.PlannerWorkHandler plannerWorkHandler;
     
     // 建筑师独立建造冷却计时器 - 修复多个建筑师速度均分bug
     private int buildCooldownTicks = 0;
@@ -510,11 +510,11 @@ public class CustomEntity extends PathfinderMob {
             }
         }
         // 加载建造任务数据 - 优先使用JSON数据，NBT数据仅作为备份
-        // 实际的恢复逻辑在BuilderDailyWorkHandler.restoreConstructionTaskIfNeeded中处理
+        // 实际的恢复逻辑在BuilderWorkService.restoreConstructionTaskIfNeeded中处理
         // 这里不再直接从NBT恢复，以避免与JSON数据冲突
         if (tag.contains("constructionTask")) {
             // 标记有NBT建造任务数据，但让JSON数据优先恢复
-            // 如果JSON中没有数据，BuilderDailyWorkHandler会尝试从NBT备份恢复
+            // 如果JSON中没有数据，BuilderWorkService会尝试从NBT备份恢复
             Simukraft.LOGGER.debug("[CustomEntity] NPC {} 从NBT读取到建造任务数据，将优先使用JSON数据恢复",
                 this.getUUID().toString().substring(0, 8));
         }
@@ -978,7 +978,7 @@ public class CustomEntity extends PathfinderMob {
 
                             // 每放置10个方块保存一次建造任务进度（用于局域网开放模式下恢复）
                             if (serverLevel.getServer() != null && constructionTask.getCurrentBlockIndex() % 10 == 0) {
-                                com.xiaoliang.simukraft.utils.BuilderDailyWorkHandler.saveConstructionTask(
+                                com.xiaoliang.simukraft.job.jobs.builder.BuilderWorkService.INSTANCE.saveConstructionTask(
                                     serverLevel.getServer(), this
                                 );
                             }
@@ -1014,9 +1014,9 @@ public class CustomEntity extends PathfinderMob {
         return com.xiaoliang.simukraft.config.ServerConfig.getBuilderPlaceSpeed(1);
     }
 
-    private com.xiaoliang.simukraft.utils.PlannerWorkHandler getOrCreatePlannerWorkHandler() {
+    private com.xiaoliang.simukraft.job.jobs.planner.PlannerWorkHandler getOrCreatePlannerWorkHandler() {
         if (plannerWorkHandler == null) {
-            plannerWorkHandler = new com.xiaoliang.simukraft.utils.PlannerWorkHandler(this);
+            plannerWorkHandler = new com.xiaoliang.simukraft.job.jobs.planner.PlannerWorkHandler(this);
         }
         return plannerWorkHandler;
     }
@@ -1544,7 +1544,7 @@ public class CustomEntity extends PathfinderMob {
             com.xiaoliang.simukraft.utils.ConstructionCompletionNotifier.notifyConstructionCompletion(this, buildingName);
 
             if (this.level() instanceof ServerLevel serverLevel) {
-                com.xiaoliang.simukraft.utils.BuilderDailyWorkHandler.autoDismissCompletedBuilder(
+                com.xiaoliang.simukraft.job.jobs.builder.BuilderWorkService.INSTANCE.autoDismissCompletedBuilder(
                         serverLevel,
                         this,
                         buildBoxPos
@@ -1656,7 +1656,7 @@ public class CustomEntity extends PathfinderMob {
 
         // 移除持久化存储中的建造任务
         if (this.level() instanceof ServerLevel serverLevel) {
-            com.xiaoliang.simukraft.utils.BuilderDailyWorkHandler.removeConstructionTask(
+            com.xiaoliang.simukraft.job.jobs.builder.BuilderWorkService.INSTANCE.removeConstructionTask(
                 serverLevel.getServer(), this.getUUID()
             );
         }

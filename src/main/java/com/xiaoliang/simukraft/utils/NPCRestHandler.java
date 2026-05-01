@@ -195,7 +195,7 @@ public class NPCRestHandler {
             BlockPos workPos = getWorkplacePosition(npc, level.getServer(), job);
             if (workPos != null) {
                 // 尝试从工业建筑配置中获取工作时间
-                String buildingFileName = com.xiaoliang.simukraft.utils.IndustrialWorkHandler.getBuildingFileName(level, workPos);
+                String buildingFileName = com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler.getBuildingFileName(level, workPos);
                 if (buildingFileName != null) {
                     com.xiaoliang.simukraft.building.IndustrialBuildingConfig config =
                         com.xiaoliang.simukraft.building.IndustrialBuildingManager.getConfig(buildingFileName);
@@ -210,7 +210,7 @@ public class NPCRestHandler {
 
                 // 尝试从商业建筑配置中获取工作时间
                 if (com.xiaoliang.simukraft.building.CommercialBuildingManager.isCommercialJobType(job)) {
-                    String commercialBuildingFileName = com.xiaoliang.simukraft.utils.CommercialWorkHandler.getBuildingFileName(level, workPos);
+                    String commercialBuildingFileName = com.xiaoliang.simukraft.job.jobs.commercialgeneric.CommercialWorkHandler.getBuildingFileName(level, workPos);
                     if (commercialBuildingFileName != null) {
                         com.xiaoliang.simukraft.building.CommercialBuildingConfig config =
                             com.xiaoliang.simukraft.building.CommercialBuildingManager.getConfig(commercialBuildingFileName);
@@ -247,7 +247,7 @@ public class NPCRestHandler {
             BlockPos workPos = getWorkplacePosition(npc, level.getServer(), job);
             if (workPos != null) {
                 // 尝试从工业建筑配置中获取工作时间
-                String buildingFileName = com.xiaoliang.simukraft.utils.IndustrialWorkHandler.getBuildingFileName(level, workPos);
+                String buildingFileName = com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler.getBuildingFileName(level, workPos);
                 if (buildingFileName != null) {
                     com.xiaoliang.simukraft.building.IndustrialBuildingConfig config =
                         com.xiaoliang.simukraft.building.IndustrialBuildingManager.getConfig(buildingFileName);
@@ -262,7 +262,7 @@ public class NPCRestHandler {
 
                 // 尝试从商业建筑配置中获取工作时间
                 if (com.xiaoliang.simukraft.building.CommercialBuildingManager.isCommercialJobType(job)) {
-                    String commercialBuildingFileName = com.xiaoliang.simukraft.utils.CommercialWorkHandler.getBuildingFileName(level, workPos);
+                    String commercialBuildingFileName = com.xiaoliang.simukraft.job.jobs.commercialgeneric.CommercialWorkHandler.getBuildingFileName(level, workPos);
                     if (commercialBuildingFileName != null) {
                         com.xiaoliang.simukraft.building.CommercialBuildingConfig config =
                             com.xiaoliang.simukraft.building.CommercialBuildingManager.getConfig(commercialBuildingFileName);
@@ -299,7 +299,7 @@ public class NPCRestHandler {
             BlockPos workPos = getWorkplacePosition(npc, level.getServer(), job);
             if (workPos != null) {
                 // 尝试从工业建筑配置中获取工作时间
-                String buildingFileName = com.xiaoliang.simukraft.utils.IndustrialWorkHandler.getBuildingFileName(level, workPos);
+                String buildingFileName = com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler.getBuildingFileName(level, workPos);
                 if (buildingFileName != null) {
                     com.xiaoliang.simukraft.building.IndustrialBuildingConfig config =
                         com.xiaoliang.simukraft.building.IndustrialBuildingManager.getConfig(buildingFileName);
@@ -322,7 +322,7 @@ public class NPCRestHandler {
 
                 // 尝试从商业建筑配置中获取工作时间
                 if (com.xiaoliang.simukraft.building.CommercialBuildingManager.isCommercialJobType(job)) {
-                    String commercialBuildingFileName = com.xiaoliang.simukraft.utils.CommercialWorkHandler.getBuildingFileName(level, workPos);
+                    String commercialBuildingFileName = com.xiaoliang.simukraft.job.jobs.commercialgeneric.CommercialWorkHandler.getBuildingFileName(level, workPos);
                     if (commercialBuildingFileName != null) {
                         com.xiaoliang.simukraft.building.CommercialBuildingConfig config =
                             com.xiaoliang.simukraft.building.CommercialBuildingManager.getConfig(commercialBuildingFileName);
@@ -445,7 +445,7 @@ public class NPCRestHandler {
         if ("builder".equals(currentJob) && npc.getConstructionTask() != null) {
             // 保存到持久化存储（JSON文件）
             if (level.getServer() != null) {
-                BuilderDailyWorkHandler.saveConstructionTask(level.getServer(), npc);
+                com.xiaoliang.simukraft.job.jobs.builder.BuilderWorkService.INSTANCE.saveConstructionTask(level.getServer(), npc);
                 LOGGER.info("[NPCRestHandler] NPC {} 保存建造任务到JSON: {}",
                     npc.getFullName(), npc.getConstructionTask().getBuildingName());
             }
@@ -679,7 +679,7 @@ public class NPCRestHandler {
         // 清除状态标签
         npc.setStatusLabel(null);
 
-        // 恢复建筑师的建造任务 - 立即从JSON恢复，而不是依赖BuilderDailyWorkHandler
+        // 恢复建筑师的建造任务 - 立即从JSON恢复，而不是依赖旧每日Handler
         // 修复：如果建筑师在天亮后才结束休息，startDailyWork已经执行过，需要立即恢复任务
         if ("builder".equals(previousJob) && level != null && level.getServer() != null) {
             // 清除可能存在的旧任务引用
@@ -727,26 +727,26 @@ public class NPCRestHandler {
         }
 
         if ("farmer".equals(previousJob)) {
-            FarmerDailyWorkHandler.restoreFarmerWorkState(npc, workPos, level);
+            com.xiaoliang.simukraft.job.jobs.farmer.FarmerWorkService.INSTANCE.restoreWorkState(npc, npc.getUUID(), level);
             return;
         }
 
         if (com.xiaoliang.simukraft.building.CommercialBuildingManager.isCommercialJobType(previousJob)) {
-            String buildingFileName = CommercialWorkHandler.getBuildingFileName(level, workPos);
+            String buildingFileName = com.xiaoliang.simukraft.job.jobs.commercialgeneric.CommercialWorkHandler.getBuildingFileName(level, workPos);
             if (buildingFileName != null) {
-                CommercialWorkHandler.restoreNpcAfterRest(npc, level, workPos, buildingFileName);
+                com.xiaoliang.simukraft.job.jobs.commercialgeneric.CommercialWorkHandler.restoreNpcAfterRest(npc, level, workPos, buildingFileName);
             }
             return;
         }
 
-        String industrialBuildingFileName = IndustrialWorkHandler.getBuildingFileName(level, workPos);
+        String industrialBuildingFileName = com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler.getBuildingFileName(level, workPos);
         if (industrialBuildingFileName != null) {
-            IndustrialWorkHandler.restoreNpcAfterRest(npc, level, workPos, industrialBuildingFileName);
+            com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler.restoreNpcAfterRest(npc, level, workPos, industrialBuildingFileName);
             return;
         }
 
         if ("warehouse_manager".equals(previousJob)) {
-            npc.setWorking(true);
+            com.xiaoliang.simukraft.job.jobs.warehousemanager.WarehouseManagerWorkService.INSTANCE.restoreWorkState(npc, npc.getUUID(), level);
         }
     }
 
@@ -1049,7 +1049,7 @@ public class NPCRestHandler {
                     // 如果是建筑师，保存建造任务到JSON而不是内存Map
                     if ("builder".equals(npc.getJob()) && npc.getConstructionTask() != null) {
                         if (npc.getServer() != null) {
-                            BuilderDailyWorkHandler.saveConstructionTask(npc.getServer(), npc);
+                            com.xiaoliang.simukraft.job.jobs.builder.BuilderWorkService.INSTANCE.saveConstructionTask(npc.getServer(), npc);
                             LOGGER.info("[NPCRestHandler] NPC {} 保存建造任务到JSON: {}",
                                 npc.getFullName(), npc.getConstructionTask().getBuildingName());
                         }

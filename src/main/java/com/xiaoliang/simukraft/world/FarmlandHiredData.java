@@ -378,6 +378,27 @@ public class FarmlandHiredData {
         }
     }
 
+    public static BlockPos findOverlappingPlotOwner(BlockPos farmlandBoxPos, FarmlandPlot plot) {
+        if (farmlandBoxPos == null || plot == null) {
+            return null;
+        }
+        for (Map.Entry<BlockPos, FarmlandPlot> entry : selectedPlots.entrySet()) {
+            BlockPos otherBoxPos = entry.getKey();
+            if (farmlandBoxPos.equals(otherBoxPos)) {
+                continue;
+            }
+            FarmlandPlot otherPlot = entry.getValue();
+            if (otherPlot != null && plot.intersects(otherPlot)) {
+                return otherBoxPos;
+            }
+        }
+        return null;
+    }
+
+    public static boolean hasOverlappingPlot(BlockPos farmlandBoxPos, FarmlandPlot plot) {
+        return findOverlappingPlotOwner(farmlandBoxPos, plot) != null;
+    }
+
     public static void clearSelectedPlot(BlockPos farmlandBoxPos) {
         selectedPlots.remove(farmlandBoxPos);
     }

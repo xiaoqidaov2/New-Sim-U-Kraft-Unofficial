@@ -1,4 +1,4 @@
-package com.xiaoliang.simukraft.utils;
+package com.xiaoliang.simukraft.job.jobs.commercialgeneric;
 
 import com.xiaoliang.simukraft.config.ServerConfig;
 import com.xiaoliang.simukraft.building.CommercialBuildingConfig;
@@ -7,6 +7,11 @@ import com.xiaoliang.simukraft.entity.CustomEntity;
 import com.xiaoliang.simukraft.notification.MessageCategory;
 import com.xiaoliang.simukraft.notification.MessageNotification;
 import com.xiaoliang.simukraft.notification.NotificationServiceManager;
+import com.xiaoliang.simukraft.utils.CityMessageUtils;
+import com.xiaoliang.simukraft.utils.ContainerUtils;
+import com.xiaoliang.simukraft.utils.NPCDataManager;
+import com.xiaoliang.simukraft.utils.NPCRestHandler;
+import com.xiaoliang.simukraft.utils.NPCWorkResumeCoordinator;
 import com.xiaoliang.simukraft.world.CityData;
 import com.xiaoliang.simukraft.world.CommercialHiredData;
 import net.minecraft.core.BlockPos;

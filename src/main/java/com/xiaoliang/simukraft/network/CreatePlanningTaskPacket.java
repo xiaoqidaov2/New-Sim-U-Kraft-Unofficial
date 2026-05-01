@@ -210,7 +210,7 @@ public class CreatePlanningTaskPacket {
             manager.startTask(task.getTaskId());
 
             // 保存任务到JSON持久化存储
-            com.xiaoliang.simukraft.utils.PlannerDailyWorkHandler.savePlanningTask(level.getServer(), task);
+            com.xiaoliang.simukraft.job.jobs.planner.PlannerWorkService.INSTANCE.savePlanningTask(level.getServer(), task);
 
             // 通知玩家
             player.displayClientMessage(

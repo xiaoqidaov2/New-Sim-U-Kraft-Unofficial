@@ -5,7 +5,7 @@ import com.xiaoliang.simukraft.building.IndustrialBuildingConfig;
 import com.xiaoliang.simukraft.building.IndustrialBuildingManager;
 import com.xiaoliang.simukraft.entity.CustomEntity;
 import com.xiaoliang.simukraft.init.ModBlocks;
-import com.xiaoliang.simukraft.utils.IndustrialWorkHandler;
+import com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler;
 import com.xiaoliang.simukraft.world.IndustrialHiredData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;

@@ -84,6 +84,15 @@ public class SetFarmlandConfigPacket {
                     com.xiaoliang.simukraft.world.FarmlandHiredData.setSelectedArea(packet.farmlandBoxPos, packet.areaSize);
                 }
                 if (packet.hasPlot) {
+                    BlockPos overlappingBox = com.xiaoliang.simukraft.world.FarmlandHiredData.findOverlappingPlotOwner(packet.farmlandBoxPos, packet.plot);
+                    if (overlappingBox != null) {
+                        player.displayClientMessage(
+                                Objects.requireNonNull(net.minecraft.network.chat.Component.translatable("message.simukraft.farming.area_overlap", overlappingBox.getX(), overlappingBox.getY(), overlappingBox.getZ()).withStyle(style -> style.withColor(0xFF5555))),
+                                false
+                        );
+                        Simukraft.LOGGER.warn("[SetFarmlandConfigPacket] Rejected overlapping farmland plot at {}, overlaps with {}", packet.farmlandBoxPos, overlappingBox);
+                        return;
+                    }
                     com.xiaoliang.simukraft.world.FarmlandHiredData.setSelectedPlot(packet.farmlandBoxPos, packet.plot);
                 }
 

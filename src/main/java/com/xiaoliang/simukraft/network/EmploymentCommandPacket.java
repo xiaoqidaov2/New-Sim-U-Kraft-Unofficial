@@ -302,12 +302,12 @@ public class EmploymentCommandPacket {
                     if (activeTask != null) {
                         taskManager.cancelTask(activeTask.getTaskId());
                         // 从JSON持久化存储中移除规划任务
-                        com.xiaoliang.simukraft.utils.PlannerDailyWorkHandler.removePlanningTask(server, activeTask.getTaskId());
+                        com.xiaoliang.simukraft.job.jobs.planner.PlannerWorkService.INSTANCE.removePlanningTask(server, activeTask.getTaskId());
                         Simukraft.LOGGER.info("[EmploymentCommandPacket] 规划师 {} 被解雇，规划任务已取消", assignment.npcUuid().toString().substring(0, 8));
                     }
                 }
                 // 同时尝试从JSON中移除该NPC的所有规划任务（以防活跃任务未找到）
-                com.xiaoliang.simukraft.utils.PlannerDailyWorkHandler.removePlanningTaskByNpc(server, assignment.npcUuid());
+                com.xiaoliang.simukraft.job.jobs.planner.PlannerWorkService.INSTANCE.removePlanningTaskByNpc(server, assignment.npcUuid());
             }
 
             // 2.5. 取消建筑师建造任务
@@ -511,9 +511,9 @@ public class EmploymentCommandPacket {
         if (targetPos != null) {
             var block = npc.level().getBlockState(targetPos).getBlock();
             if (block == com.xiaoliang.simukraft.init.ModBlocks.INDUSTRIAL_CONTROL_BOX.get()) {
-                String buildingFileName = com.xiaoliang.simukraft.utils.IndustrialWorkHandler.getBuildingFileName(
+                String buildingFileName = com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler.getBuildingFileName(
                         (ServerLevel) npc.level(), targetPos);
-                com.xiaoliang.simukraft.utils.IndustrialWorkHandler.onIndustrialNpcHired(
+                com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler.onIndustrialNpcHired(
                         npc, (ServerLevel) npc.level(), targetPos,
                         buildingFileName != null ? buildingFileName : "industrial");
             }
@@ -743,7 +743,7 @@ public class EmploymentCommandPacket {
         com.xiaoliang.simukraft.world.FarmlandHiredData.clearSelectedCrop(farmlandPos);
         com.xiaoliang.simukraft.world.FarmlandHiredData.clearSelectedArea(farmlandPos);
         com.xiaoliang.simukraft.world.FarmlandHiredData.clearBoundChest(farmlandPos);
-        com.xiaoliang.simukraft.utils.FarmerDailyWorkHandler.clearTimers(farmlandPos);
+        com.xiaoliang.simukraft.job.jobs.farmer.FarmerWorkService.INSTANCE.clearTimers(farmlandPos);
         com.xiaoliang.simukraft.world.FarmlandHiredData.saveAllFarmlandData(server);
 
         SyncFarmlandDataPacket.Response syncPacket = new SyncFarmlandDataPacket.Response(

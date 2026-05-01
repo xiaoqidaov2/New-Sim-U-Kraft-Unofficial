@@ -126,15 +126,14 @@ public class LogisticsServerScreen extends AbstractTransitionScreen
     // ══════════════════════════════
 
     private void buildRoutesTab(int x, int y) {
-        // 新增路径按钮
+        int addButtonX = x + 120;
         addRenderableWidget(Button.builder(Component.literal("§a+ ").append(Component.translatable("gui.logistics_server.add_route")), btn -> {
             if (warehouseId != null && this.minecraft != null) {
                 this.minecraft.setScreen(new ChannelCreateScreen(blockPos, warehouseId));
             }
-        }).bounds(x, y, 80, 18).build()).active = hasWarehouse;
+        }).bounds(addButtonX, y - 2, 96, 18).build()).active = hasWarehouse;
 
-        // 每条路径一行：名称 + 方向 + 状态 + [启停] [删除]
-        int rowY = y + 26;
+        int rowY = y + 30;
         for (int i = 0; i < routes.size(); i++) {
             RouteEntry route = routes.get(i);
             final UUID chId = route.channelId;
@@ -234,11 +233,11 @@ public class LogisticsServerScreen extends AbstractTransitionScreen
         guiGraphics.drawString(this.font, "§e路径管理 (" + routes.size() + " 条)", x, y, white);
 
         if (routes.isEmpty()) {
-            guiGraphics.drawString(this.font, "§8暂无路径，点击上方按钮新增", x, y + 28, gray);
+            guiGraphics.drawString(this.font, "§8暂无路径，点击右侧按钮新增", x, y + 30, gray);
             return;
         }
 
-        int rowY = y + 26;
+        int rowY = y + 30;
         for (RouteEntry route : routes) {
             String dirIcon = "SEND".equals(route.direction) ? "§a发送→" : "§c←接收";
             String status = route.enabled ? "§a●" : "§8○";

@@ -1489,6 +1489,7 @@
   "message.simukraft.farming.no_farmer_hired": "§cNo farmer hired for this farmland box!",
   "message.simukraft.farming.started": "§aFarming started! Crop: %s, Seeds needed: %d",
   "message.simukraft.farming.failed": "§cFailed to start farming!",
+  "message.simukraft.farming.area_overlap": "§cFarmland plot overlaps another farmland box at %d, %d, %d. Please select another area!",
 
   "simukraft.claim.success": "§aChunk claimed successfully!",
   "simukraft.claim.unknown_error": "§cAn unknown error occurred while claiming!",

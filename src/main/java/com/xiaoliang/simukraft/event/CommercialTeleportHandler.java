@@ -4,7 +4,7 @@ import com.xiaoliang.simukraft.building.CommercialBuildingConfig;
 import com.xiaoliang.simukraft.building.CommercialBuildingManager;
 import com.xiaoliang.simukraft.entity.CustomEntity;
 import com.xiaoliang.simukraft.init.ModBlocks;
-import com.xiaoliang.simukraft.utils.CommercialWorkHandler;
+import com.xiaoliang.simukraft.job.jobs.commercialgeneric.CommercialWorkHandler;
 import com.xiaoliang.simukraft.world.CommercialHiredData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;

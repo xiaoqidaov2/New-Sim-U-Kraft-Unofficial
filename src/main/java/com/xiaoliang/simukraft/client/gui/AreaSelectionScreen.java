@@ -42,6 +42,9 @@ public class AreaSelectionScreen extends Screen {
 
         // 启动区域选择
         AreaSelectionManager.startSelection(mode);
+        if (mode == AreaSelectionManager.SelectionMode.FARMLAND) {
+            FarmlandAreaPreviewManager.stopPreview();
+        }
 
         // 激活自由相机
         FreeCameraManager.activate();
@@ -250,6 +253,16 @@ public class AreaSelectionScreen extends Screen {
         }
 
         FarmlandPlot plot = FarmlandPlot.fromCorners(p1, p2);
+        BlockPos overlappingBox = FarmlandData.findOverlappingPlotOwner(buildBoxPos, plot);
+        if (overlappingBox != null) {
+            if (minecraft.player != null) {
+                minecraft.player.displayClientMessage(
+                        net.minecraft.network.chat.Component.translatable("message.simukraft.farming.area_overlap", overlappingBox.getX(), overlappingBox.getY(), overlappingBox.getZ()),
+                        false
+                );
+            }
+            return;
+        }
         FarmlandData.setSelectedPlot(buildBoxPos, plot);
         FarmlandAreaPreviewManager.startPreview(buildBoxPos, plot);
 

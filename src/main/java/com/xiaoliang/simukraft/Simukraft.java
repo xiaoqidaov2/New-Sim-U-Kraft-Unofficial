@@ -23,7 +23,6 @@ import com.xiaoliang.simukraft.network.NetworkManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.entity.EntityRenderers;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraftforge.api.distmarker.Dist;
@@ -86,24 +85,13 @@ public class Simukraft {
         MinecraftForge.EVENT_BUS.register(WorldEvents.class);
         MinecraftForge.EVENT_BUS.addListener(this::onRegisterCommands);
         MinecraftForge.EVENT_BUS.addListener(this::onEntityJoin);
-        MinecraftForge.EVENT_BUS.addListener(this::onServerTick);
 
-    }
-
-    // 添加服务器tick事件处理方法
-    private void onServerTick(TickEvent.ServerTickEvent event) {
-        if (event.phase == TickEvent.Phase.END) {
-            ServerLevel level = event.getServer().overworld();
-            if (level != null) {
-                // 调用农民持续工作处理器
-                com.xiaoliang.simukraft.utils.FarmerDailyWorkHandler.handleContinuousWork(level);
-            }
-        }
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
         event.enqueueWork(() -> {
             NetworkManager.register();
+            com.xiaoliang.simukraft.job.ModJobs.register();
             com.xiaoliang.simukraft.utils.BuildingDataManager.init();
             com.xiaoliang.simukraft.utils.NPCTaskScheduler.initialize();
             com.xiaoliang.simukraft.building.CommercialBuildingManager.init(null);

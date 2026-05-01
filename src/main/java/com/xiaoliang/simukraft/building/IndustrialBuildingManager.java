@@ -4,10 +4,11 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.xiaoliang.simukraft.Simukraft;
+import com.mojang.logging.LogUtils;
 import com.xiaoliang.simukraft.building.IndustrialBuildingConfig.MaterialRequirement;
 import com.xiaoliang.simukraft.building.IndustrialBuildingConfig.ProductOutput;
 import net.minecraft.server.MinecraftServer;
+import org.slf4j.Logger;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -24,6 +25,7 @@ import java.util.*;
  */
 public class IndustrialBuildingManager {
     
+    private static final Logger LOGGER = LogUtils.getLogger();
     private static final Gson gson = new Gson();
     private static final Map<String, IndustrialBuildingConfig> buildingConfigs = new HashMap<>();
     private static boolean initialized = false;
@@ -49,7 +51,7 @@ public class IndustrialBuildingManager {
         loadConfigsFromUserDir();
         
         initialized = true;
-        Simukraft.LOGGER.info("[IndustrialBuildingManager] 已加载 {} 个工业建筑配置", buildingConfigs.size());
+        LOGGER.info("[IndustrialBuildingManager] 已加载 {} 个工业建筑配置", buildingConfigs.size());
     }
     
     /**
@@ -59,7 +61,7 @@ public class IndustrialBuildingManager {
         try {
             Path userConfigDir = new File(USER_CONFIG_PATH).toPath();
             if (!Files.exists(userConfigDir)) {
-                Simukraft.LOGGER.warn("[IndustrialBuildingManager] 用户配置目录不存在: {}", USER_CONFIG_PATH);
+                LOGGER.warn("[IndustrialBuildingManager] 用户配置目录不存在: {}", USER_CONFIG_PATH);
                 return;
             }
             
@@ -85,7 +87,7 @@ public class IndustrialBuildingManager {
             }
             
         } catch (Exception e) {
-            Simukraft.LOGGER.error("[IndustrialBuildingManager] 加载配置失败", e);
+            LOGGER.error("[IndustrialBuildingManager] 加载配置失败", e);
         }
     }
     
@@ -131,7 +133,7 @@ public class IndustrialBuildingManager {
 
             String configJobType = config.getJobType();
             if (configJobType == null || configJobType.isBlank()) {
-                Simukraft.LOGGER.warn("[IndustrialBuildingManager] 跳过缺少 jobType 的配置: {}", config.getBuildingId());
+                LOGGER.warn("[IndustrialBuildingManager] 跳过缺少 jobType 的配置: {}", config.getBuildingId());
                 continue;
             }
 
@@ -151,7 +153,7 @@ public class IndustrialBuildingManager {
             String buildingId = file.getName().substring(0, file.getName().lastIndexOf('.'));
             return parseSkFile(buildingId, reader);
         } catch (Exception e) {
-            Simukraft.LOGGER.error("[IndustrialBuildingManager] 加载SK文件失败: {}", file.getAbsolutePath(), e);
+            LOGGER.error("[IndustrialBuildingManager] 加载SK文件失败: {}", file.getAbsolutePath(), e);
             return null;
         }
     }
@@ -207,7 +209,7 @@ public class IndustrialBuildingManager {
             JsonObject json = gson.fromJson(reader, JsonObject.class);
             parseJsonConfig(config, json);
         } catch (Exception e) {
-            Simukraft.LOGGER.error("[IndustrialBuildingManager] 加载JSON配置失败: {}", file.getAbsolutePath(), e);
+            LOGGER.error("[IndustrialBuildingManager] 加载JSON配置失败: {}", file.getAbsolutePath(), e);
         }
     }
     

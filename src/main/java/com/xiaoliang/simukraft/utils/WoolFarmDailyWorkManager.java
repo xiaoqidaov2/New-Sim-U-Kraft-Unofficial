@@ -22,7 +22,7 @@ public class WoolFarmDailyWorkManager {
         for (ServerLevel level : event.getServer().getAllLevels()) {
             // 每tick都检查
             // 使用统一的IndustrialWorkHandler处理工业控制箱工作
-            IndustrialWorkHandler.handleDailyWork(level);
+            com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler.handleDailyWork(level);
         }
     }
 }

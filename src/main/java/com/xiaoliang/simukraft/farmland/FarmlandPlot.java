@@ -56,6 +56,15 @@ public record FarmlandPlot(BlockPos minPos, BlockPos maxPos) {
         return widthX() * heightY() * depthZ();
     }
 
+    public boolean intersects(FarmlandPlot other) {
+        if (other == null) {
+            return false;
+        }
+        return minPos.getX() <= other.maxPos.getX() && maxPos.getX() >= other.minPos.getX()
+                && minPos.getZ() <= other.maxPos.getZ() && maxPos.getZ() >= other.minPos.getZ()
+                && minPos.getY() <= other.maxPos.getY() && maxPos.getY() >= other.minPos.getY();
+    }
+
     public void forEach(Consumer<BlockPos> consumer) {
         Objects.requireNonNull(consumer);
         for (int x = minPos.getX(); x <= maxPos.getX(); x++) {

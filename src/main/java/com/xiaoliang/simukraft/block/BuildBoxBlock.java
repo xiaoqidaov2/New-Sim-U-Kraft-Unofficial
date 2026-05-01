@@ -220,7 +220,7 @@ public class BuildBoxBlock extends Block {
         if (npc.getConstructionTask() != null) {
             npc.getConstructionTask().cancel();
         }
-        com.xiaoliang.simukraft.utils.BuilderDailyWorkHandler.removeConstructionTask(serverLevel.getServer(), npcUuid);
+        com.xiaoliang.simukraft.job.jobs.builder.BuilderWorkService.INSTANCE.removeConstructionTask(serverLevel.getServer(), npcUuid);
         resetNpcAfterWorkStopped(npc);
     }
 

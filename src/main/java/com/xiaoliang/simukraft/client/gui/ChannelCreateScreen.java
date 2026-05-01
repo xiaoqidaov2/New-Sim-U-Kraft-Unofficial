@@ -283,14 +283,30 @@ public class ChannelCreateScreen extends AbstractTransitionScreen
         }
 
         // 5. 物品选择区
-        y += 30;
+        int gridStartY = getItemGridStartY();
         String itemSelectLabel = isSend
                 ? "选择要从仓库发送的物品（点击选中/取消）:"
                 : "选择要从客户端接收的物品（点击选中/取消）:";
-        safeGuiGraphics.drawString(font, itemSelectLabel, left, y, gray);
-        y += 14;
+        safeGuiGraphics.drawString(font, itemSelectLabel, left, gridStartY - 14, gray);
 
-        renderItemGrid(safeGuiGraphics, left, y, mouseX, mouseY, a);
+        renderItemGrid(safeGuiGraphics, left, gridStartY, mouseX, mouseY, a);
+    }
+
+    private int getItemGridStartY() {
+        int y = 40;
+        if (clients.isEmpty()) {
+            y += 28;
+        } else if (selectedClientIndex >= 0 && selectedClientIndex < clients.size()) {
+            y += 34;
+        } else {
+            y += 28;
+        }
+        y += 28;
+        y += 28;
+        if (isRenamingClient) {
+            y += 28;
+        }
+        return y + 44;
     }
 
     private void renderItemGrid(GuiGraphics guiGraphics, int startX, int startY, int mouseX, int mouseY, int alpha) {
@@ -318,7 +334,7 @@ public class ChannelCreateScreen extends AbstractTransitionScreen
                     }
 
                     // 悬停
-                    if (mouseX >= x && mouseX < x + 16 && mouseY >= y && mouseY < y + 16) {
+                    if (mouseX >= x && mouseX < x + ITEM_SLOT && mouseY >= y && mouseY < y + ITEM_SLOT) {
                         guiGraphics.fill(x, y, x + 16, y + 16, 0x40FFFFFF);
                     }
                 }
@@ -334,7 +350,7 @@ public class ChannelCreateScreen extends AbstractTransitionScreen
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button == 0) {
             int startX = 20;
-            int startY = 30 + 28 + 28 + 30 + 14;
+            int startY = getItemGridStartY();
             int visibleRows = 4;
 
             for (int row = 0; row < visibleRows; row++) {
@@ -343,7 +359,7 @@ public class ChannelCreateScreen extends AbstractTransitionScreen
                     int x = startX + col * ITEM_SLOT;
                     int y = startY + row * ITEM_SLOT;
 
-                    if (mouseX >= x && mouseX < x + 16 && mouseY >= y && mouseY < y + 16) {
+                    if (mouseX >= x && mouseX < x + ITEM_SLOT && mouseY >= y && mouseY < y + ITEM_SLOT) {
                         if (idx < warehouseItems.size()) {
                             if (selectedItemIndices.contains(idx)) {
                                 selectedItemIndices.remove(idx);

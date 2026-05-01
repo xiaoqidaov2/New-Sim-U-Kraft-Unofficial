@@ -1532,6 +1532,7 @@
   "message.simukraft.farming.no_farmer_hired": "§c该农田盒尚未雇佣农民！",
   "message.simukraft.farming.started": "§a开始耕种！作物: %s，所需种子: %d",
   "message.simukraft.farming.failed": "§c开始耕种失败！",
+  "message.simukraft.farming.area_overlap": "§c农田选区与另一个农田盒重叠：%d, %d, %d，请重新选择区域！",
 
   "simukraft.claim.success": "§a区块认领成功！",
   "simukraft.claim.unknown_error": "§c认领时发生未知错误！",

@@ -32,7 +32,7 @@ public final class NPCWorkResumeCoordinator {
         return resumeAssignedWork(npc, npc != null ? npc.getJob() : null, workplacePos, () -> {
             scheduleTeleportIfNeeded(npc, workplacePos);
             if (level != null && workplacePos != null && buildingFileName != null && !buildingFileName.isBlank()) {
-                CommercialWorkHandler.restoreNpcAfterRest(npc, level, workplacePos, buildingFileName);
+                com.xiaoliang.simukraft.job.jobs.commercialgeneric.CommercialWorkHandler.restoreNpcAfterRest(npc, level, workplacePos, buildingFileName);
             }
         });
     }
@@ -41,7 +41,7 @@ public final class NPCWorkResumeCoordinator {
         return resumeAssignedWork(npc, npc != null ? npc.getJob() : null, workplacePos, () -> {
             scheduleTeleportIfNeeded(npc, workplacePos);
             if (level != null && workplacePos != null && buildingFileName != null && !buildingFileName.isBlank()) {
-                IndustrialWorkHandler.restoreNpcAfterRest(npc, level, workplacePos, buildingFileName);
+                com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler.restoreNpcAfterRest(npc, level, workplacePos, buildingFileName);
             }
         });
     }

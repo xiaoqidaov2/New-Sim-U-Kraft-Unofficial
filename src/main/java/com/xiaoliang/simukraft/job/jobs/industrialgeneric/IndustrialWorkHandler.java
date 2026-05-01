@@ -1,10 +1,16 @@
-package com.xiaoliang.simukraft.utils;
+package com.xiaoliang.simukraft.job.jobs.industrialgeneric;
 
 import com.xiaoliang.simukraft.building.ControlBoxDataManager;
 import com.xiaoliang.simukraft.building.IndustrialBuildingConfig;
 import com.xiaoliang.simukraft.building.IndustrialBuildingManager;
 import com.xiaoliang.simukraft.config.ServerConfig;
 import com.xiaoliang.simukraft.entity.CustomEntity;
+import com.xiaoliang.simukraft.utils.CityMessageUtils;
+import com.xiaoliang.simukraft.utils.ContainerUtils;
+import com.xiaoliang.simukraft.utils.FileUtils;
+import com.xiaoliang.simukraft.utils.LunchBreakManager;
+import com.xiaoliang.simukraft.utils.NPCDataManager;
+import com.xiaoliang.simukraft.utils.NPCWorkResumeCoordinator;
 import com.xiaoliang.simukraft.world.IndustrialHiredData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;

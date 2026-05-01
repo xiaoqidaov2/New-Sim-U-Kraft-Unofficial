@@ -3,7 +3,7 @@ package com.xiaoliang.simukraft.event;
 import com.xiaoliang.simukraft.Simukraft;
 import com.xiaoliang.simukraft.entity.CustomEntity;
 import com.xiaoliang.simukraft.init.ModBlocks;
-import com.xiaoliang.simukraft.utils.IndustrialWorkHandler;
+import com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler;
 import com.xiaoliang.simukraft.utils.NPCTaskScheduler;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;

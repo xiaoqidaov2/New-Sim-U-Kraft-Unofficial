@@ -169,6 +169,17 @@ public final class FarmlandManager {
         if (plot == null) {
             plot = FarmlandPlot.fromLegacy(boxPos, facing, areaSize);
         }
+        BlockPos overlappingBox = FarmlandHiredData.findOverlappingPlotOwner(boxPos, plot);
+        if (overlappingBox != null) {
+            player.displayClientMessage(
+                    Objects.requireNonNull(
+                            Component.translatable("message.simukraft.farming.area_overlap", overlappingBox.getX(), overlappingBox.getY(), overlappingBox.getZ())
+                                    .withStyle(s -> s.withColor(0xFF5555))
+                    ),
+                    false
+            );
+            return false;
+        }
         ItemStack seeds = new ItemStack(cropDefinition.seedItem());
         int requiredSeeds = plot.countPlantingSlots(cropDefinition.layoutType());
         int totalSeeds = ContainerUtils.countItem(level, chestPos, seeds);
@@ -256,7 +267,7 @@ public final class FarmlandManager {
         FarmlandHiredData.clearSelectedArea(boxPos);
         FarmlandHiredData.clearSelectedPlot(boxPos);
         FarmlandHiredData.clearBoundChest(boxPos);
-        FarmerDailyWorkHandler.clearTimers(boxPos);
+        com.xiaoliang.simukraft.job.jobs.farmer.FarmerWorkService.INSTANCE.clearTimers(boxPos);
         FarmlandHiredData.saveAllFarmlandData(server);
 
         // 5. 发送通知

@@ -2,7 +2,7 @@ package com.xiaoliang.simukraft.network;
 
 import com.xiaoliang.simukraft.building.CommercialBuildingConfig;
 import com.xiaoliang.simukraft.building.CommercialBuildingManager;
-import com.xiaoliang.simukraft.utils.CommercialWorkHandler;
+import com.xiaoliang.simukraft.job.jobs.commercialgeneric.CommercialWorkHandler;
 import com.xiaoliang.simukraft.utils.ContainerUtils;
 import com.xiaoliang.simukraft.world.CommercialHiredData;
 import net.minecraft.core.BlockPos;

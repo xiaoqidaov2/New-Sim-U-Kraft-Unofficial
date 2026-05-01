@@ -182,13 +182,13 @@ public class ServerTickHandler {
                 LOGGER.info("早上6:00到了，启动所有商店老板和工业建筑每日工作");
 
                 // 商业建筑每日工作已合并到 CommercialWorkHandler
-                com.xiaoliang.simukraft.utils.CommercialWorkHandler.handleDailyWork(overworld);
+                com.xiaoliang.simukraft.job.jobs.commercialgeneric.CommercialWorkHandler.handleDailyWork(overworld);
 
                 // 工业建筑每日工作
-                com.xiaoliang.simukraft.utils.IndustrialWorkHandler.handleDailyWork(overworld);
+                com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler.handleDailyWork(overworld);
 
                 // 启动建筑师每日工作（确保第二天能正常工作）
-                BuilderDailyWorkHandler.startDailyWork(overworld);
+                com.xiaoliang.simukraft.job.jobs.builder.BuilderWorkService.INSTANCE.startDailyWork(overworld);
             }
         } else if (dayTime >= MORNING_WORK_TIME + 100 && dayTime < 12000) {
             // 早上6:00之后到18:00之前，重置触发标志
@@ -250,7 +250,7 @@ public class ServerTickHandler {
         long dayTime = overworld.getDayTime() % 24000L;
 
         // 调用 CommercialWorkHandler 处理补货
-        com.xiaoliang.simukraft.utils.CommercialWorkHandler.handleRestock(overworld, dayTime);
+        com.xiaoliang.simukraft.job.jobs.commercialgeneric.CommercialWorkHandler.handleRestock(overworld, dayTime);
     }
 
     /**
@@ -265,13 +265,13 @@ public class ServerTickHandler {
         LOGGER.info("服务器启动，重置玩家睡眠状态跟踪器");
 
         // 商业建筑工作处理器启动
-        com.xiaoliang.simukraft.utils.CommercialWorkHandler.onServerStart(server);
+        com.xiaoliang.simukraft.job.jobs.commercialgeneric.CommercialWorkHandler.onServerStart(server);
 
         // 工业建筑工作处理器启动
-        com.xiaoliang.simukraft.utils.IndustrialWorkHandler.onServerStart(server);
+        com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler.onServerStart(server);
 
         // 清理农民的过期持久化数据并恢复工作状态
-        com.xiaoliang.simukraft.utils.FarmerDailyWorkHandler.onServerStart(server);
+        com.xiaoliang.simukraft.job.jobs.farmer.FarmerWorkService.INSTANCE.onServerStart(server.overworld());
 
         // 清理所有NPC的休息状态
         NPCRestHandler.stopAllResting();

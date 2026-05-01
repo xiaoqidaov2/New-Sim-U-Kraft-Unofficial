@@ -65,7 +65,10 @@ public class WorldEvents {
         if (serverLevel.dimension() != Level.OVERWORLD) return;
 
         // 物流传输引擎
-        com.xiaoliang.simukraft.utils.LogisticsWorkHandler.onServerTick(serverLevel);
+        com.xiaoliang.simukraft.job.jobs.warehousemanager.LogisticsWorkHandler.onServerTick(serverLevel);
+
+        // 新职业运行时
+        com.xiaoliang.simukraft.job.core.JobRuntimeService.get().tick(serverLevel);
 
         // simukraft: 处理NPC午休逻辑
         com.xiaoliang.simukraft.utils.LunchBreakManager.handleLunchBreak(serverLevel);
@@ -73,16 +76,16 @@ public class WorldEvents {
         // 处理延迟的收钱音效和房租收集
         processPendingMoneySounds(serverLevel);
 
-        // 修复：延迟恢复建造盒雇佣状态，使用BuilderDailyWorkHandler持续尝试恢复
+        // 修复：延迟恢复建造盒雇佣状态，使用 BuilderWorkService 持续尝试恢复
         if (buildBoxRestoreScheduled) {
             buildBoxRestoreTickCounter++;
             // 每100tick（5秒）尝试恢复一次，持续5分钟
             if (buildBoxRestoreTickCounter % 100 == 0) {
-                com.xiaoliang.simukraft.utils.BuilderDailyWorkHandler.startDailyWork(serverLevel);
+                com.xiaoliang.simukraft.job.jobs.builder.BuilderWorkService.INSTANCE.startDailyWork(serverLevel);
                 // 同时恢复仓库管理员工作状态
-                com.xiaoliang.simukraft.utils.WarehouseManagerDailyWorkHandler.startDailyWork(serverLevel);
+                com.xiaoliang.simukraft.job.jobs.warehousemanager.WarehouseManagerWorkService.INSTANCE.startDailyWork(serverLevel);
                 // 同时恢复规划师工作状态
-                com.xiaoliang.simukraft.utils.PlannerDailyWorkHandler.startDailyWork(serverLevel);
+                com.xiaoliang.simukraft.job.jobs.planner.PlannerWorkService.INSTANCE.startDailyWork(serverLevel);
             }
             // 5分钟后停止尝试
             if (buildBoxRestoreTickCounter > 6000) {
@@ -275,7 +278,7 @@ public class WorldEvents {
         syncHUDDataToAllPlayers(level);
 
         // 处理农民每日经验值
-        FarmerDailyWorkHandler.handleDailyXp(level);
+        com.xiaoliang.simukraft.job.jobs.farmer.FarmerWorkService.INSTANCE.handleDailyXp(level);
 
         // 处理NPC年龄增长（每7个游戏日增加1岁）
         handleNPCAgeIncrease(level);
@@ -387,7 +390,7 @@ public class WorldEvents {
         }
 
         // 恢复仓库管理员工作状态（每天早上6点）
-        com.xiaoliang.simukraft.utils.WarehouseManagerDailyWorkHandler.startDailyWork(level);
+        com.xiaoliang.simukraft.job.jobs.warehousemanager.WarehouseManagerWorkService.INSTANCE.startDailyWork(level);
     }
 
     // 注意：早晨音效和税收已经通过 detectMorningTransition 方法基于时间检测触发
@@ -415,6 +418,9 @@ public class WorldEvents {
                 // 以当前游戏日作为基准，避免服务器刚启动时在白天立刻补发一次房租。
                 lastRentCollectionDay = serverLevel.getDayTime() / 24000L;
             }
+            // 初始化职业运行时状态存储
+            com.xiaoliang.simukraft.job.core.JobRuntimeService.get().onLevelLoad(serverLevel);
+
             // 初始化城市区块数据，确保数据文件被生成
             com.xiaoliang.simukraft.world.CityChunkData.get(serverLevel);
 
@@ -462,9 +468,9 @@ public class WorldEvents {
             executeCommercialIndustrialHireStatusRestore(event.getServer());
 
             for (ServerLevel level : event.getServer().getAllLevels()) {
-                IndustrialWorkHandler.handleDailyWork(level);
+                com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler.handleDailyWork(level);
                 // 处理商业建筑每日工作
-                com.xiaoliang.simukraft.utils.CommercialWorkHandler.handleDailyWork(level);
+                com.xiaoliang.simukraft.job.jobs.commercialgeneric.CommercialWorkHandler.handleDailyWork(level);
             }
 
             // 每天执行一次NPC原材料收集任务
@@ -502,9 +508,9 @@ public class WorldEvents {
         com.xiaoliang.simukraft.utils.FileUtils.initSkFileCache(event.getServer());
 
         // 服务器启动时初始化工业控制箱工作处理器（统一处理牧羊人和屠夫）
-        IndustrialWorkHandler.onServerStart(event.getServer());
+        com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler.onServerStart(event.getServer());
         // 服务器启动时初始化商业建筑工作处理器
-        com.xiaoliang.simukraft.utils.CommercialWorkHandler.onServerStart(event.getServer());
+        com.xiaoliang.simukraft.job.jobs.commercialgeneric.CommercialWorkHandler.onServerStart(event.getServer());
 
         // 服务器启动时加载动物生成数据
         IndustrialHiredData.loadAnimalGenerationData(event.getServer());
@@ -515,7 +521,7 @@ public class WorldEvents {
         runEmploymentStartupMaintenance(event.getServer());
 
         // 服务器启动时初始化农民工作处理器（重要：确保农民状态被正确恢复）
-        com.xiaoliang.simukraft.utils.FarmerDailyWorkHandler.onServerStart(event.getServer());
+        com.xiaoliang.simukraft.job.jobs.farmer.FarmerWorkService.INSTANCE.onServerStart(event.getServer().overworld());
 
         // 服务器启动时加载NPC休息处理器的工作状态数据
         com.xiaoliang.simukraft.utils.NPCRestHandler.onServerStart(event.getServer());
@@ -524,7 +530,7 @@ public class WorldEvents {
         com.xiaoliang.simukraft.building.PlacedBuildingManager.loadFromWorld(event.getServer());
 
         // 修复：延迟恢复建造盒雇佣状态，等待世界和实体完全加载
-        // 使用BuilderDailyWorkHandler在服务器启动后持续尝试恢复建筑师状态
+        // 使用 BuilderWorkService 在服务器启动后持续尝试恢复建筑师状态
         scheduleBuildBoxHiredStatusRestore();
 
         // 修复：延迟恢复工商业雇佣状态，等待世界和NPC实体完全加载
@@ -884,6 +890,7 @@ public class WorldEvents {
         NotificationServiceManager.clearServer();
 
         // 服务器停止时保存动物生成数据
+        com.xiaoliang.simukraft.job.core.JobRuntimeService.get().onServerStopping(event.getServer().overworld());
         com.xiaoliang.simukraft.employment.service.EmploymentServices.clear(event.getServer());
 
         IndustrialHiredData.saveAnimalGenerationData(event.getServer());

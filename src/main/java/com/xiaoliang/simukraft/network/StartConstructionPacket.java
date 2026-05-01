@@ -196,7 +196,7 @@ public class StartConstructionPacket {
                     builder.setConstructionTask(task);
 
                     // 保存建造任务到持久化存储（用于局域网开放模式下恢复）
-                    com.xiaoliang.simukraft.utils.BuilderDailyWorkHandler.saveConstructionTask(
+                    com.xiaoliang.simukraft.job.jobs.builder.BuilderWorkService.INSTANCE.saveConstructionTask(
                         server, builder
                     );
 

@@ -288,8 +288,28 @@ public class FarmlandData {
         return selectedPlots.get(farmlandBoxPos);
     }
 
+    public static BlockPos findOverlappingPlotOwner(BlockPos farmlandBoxPos, FarmlandPlot plot) {
+        if (farmlandBoxPos == null || plot == null) {
+            return null;
+        }
+        for (Map.Entry<BlockPos, FarmlandPlot> entry : selectedPlots.entrySet()) {
+            BlockPos otherBoxPos = entry.getKey();
+            if (farmlandBoxPos.equals(otherBoxPos)) {
+                continue;
+            }
+            FarmlandPlot otherPlot = entry.getValue();
+            if (otherPlot != null && plot.intersects(otherPlot)) {
+                return otherBoxPos;
+            }
+        }
+        return null;
+    }
+
     public static void setSelectedPlot(BlockPos farmlandBoxPos, FarmlandPlot plot) {
         if (plot == null) {
+            return;
+        }
+        if (findOverlappingPlotOwner(farmlandBoxPos, plot) != null) {
             return;
         }
         selectedPlots.put(farmlandBoxPos, plot);
@@ -380,7 +400,9 @@ public class FarmlandData {
         }
         // 同步真实地块数据
         for (Map.Entry<BlockPos, FarmlandPlot> entry : selectedPlots.entrySet()) {
-            FarmlandHiredData.setSelectedPlot(entry.getKey(), entry.getValue());
+            if (!FarmlandHiredData.hasOverlappingPlot(entry.getKey(), entry.getValue())) {
+                FarmlandHiredData.setSelectedPlot(entry.getKey(), entry.getValue());
+            }
         }
         // 保存到文件
         FarmlandHiredData.saveAllFarmlandData(server);

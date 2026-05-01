@@ -119,26 +119,7 @@ public class CustomEntityRenderer extends MobRenderer<CustomEntity, CustomEntity
     }
 
     private static Component buildWorkStatusLine(CustomEntity entity) {
-        // 根据工作状态显示不同文本，始终显示
-        com.xiaoliang.simukraft.entity.WorkStatus status = entity.getWorkStatus();
-        com.xiaoliang.simukraft.entity.WorkSubState subState = entity.getWorkSubState();
-
-        // 优先检查子状态（下班）
-        if (subState == com.xiaoliang.simukraft.entity.WorkSubState.RESTING) {
-            return Component.literal("下班在家");
-        }
-
-        // simukraft: 午休状态显示"午休中"
-        if (subState == com.xiaoliang.simukraft.entity.WorkSubState.LUNCH_BREAK) {
-            return Component.literal("午休中");
-        }
-
-        // 根据主状态显示
-        if (status == com.xiaoliang.simukraft.entity.WorkStatus.WORKING) {
-            return Component.literal("工作中");
-        } else {
-            return Component.literal("空闲");
-        }
+        return entity.getStatusDisplayComponent();
     }
 
     private static Component buildHungerAlertLine(CustomEntity entity) {

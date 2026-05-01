@@ -130,7 +130,7 @@ public class NPCWorkStatusPacket {
     private String resolveJobByBlockType(CustomEntity targetNPC, BlockPos pos) {
         var block = targetNPC.level().getBlockState(pos).getBlock();
         if (block == com.xiaoliang.simukraft.init.ModBlocks.INDUSTRIAL_CONTROL_BOX.get()) {
-            String buildingFileName = com.xiaoliang.simukraft.utils.IndustrialWorkHandler.getBuildingFileName(
+            String buildingFileName = com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler.getBuildingFileName(
                 (ServerLevel) targetNPC.level(), pos);
             var config = com.xiaoliang.simukraft.building.IndustrialBuildingManager.getConfig(
                 buildingFileName != null ? buildingFileName : "industrial");
@@ -254,9 +254,9 @@ public class NPCWorkStatusPacket {
     private void handleIndustrialSpecialCase(CustomEntity npc, BlockPos workplacePos) {
         var block = npc.level().getBlockState(workplacePos).getBlock();
         if (block == com.xiaoliang.simukraft.init.ModBlocks.INDUSTRIAL_CONTROL_BOX.get()) {
-            String buildingFileName = com.xiaoliang.simukraft.utils.IndustrialWorkHandler.getBuildingFileName(
+            String buildingFileName = com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler.getBuildingFileName(
                 (ServerLevel) npc.level(), workplacePos);
-            com.xiaoliang.simukraft.utils.IndustrialWorkHandler.onIndustrialNpcHired(
+            com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler.onIndustrialNpcHired(
                 npc, (ServerLevel) npc.level(), workplacePos, 
                 buildingFileName != null ? buildingFileName : "industrial");
         }
