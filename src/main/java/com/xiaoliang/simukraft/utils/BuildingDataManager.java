@@ -461,8 +461,11 @@ public class BuildingDataManager {
         LOGGER.info("[BuildingDataManager] 建筑数据缓存已重新加载");
     }
 
-    // 检查和复制建筑文件到simukraftbuilding文件夹
-    private static void checkAndCopyBuildingFiles() {
+    /**
+     * menglannnn: 检查和复制建筑文件到simukraftbuilding文件夹
+     * 改为public供reload命令调用
+     */
+    public static void checkAndCopyBuildingFiles() {
         try {
             Path rootPath = Paths.get("").toAbsolutePath();
             Path simukraftBuildingPath;

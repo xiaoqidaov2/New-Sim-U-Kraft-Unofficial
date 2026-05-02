@@ -45,21 +45,26 @@ public class CommandSimukraft {
                         }
                         
                         try {
-                            // 清理并重新加载所有建筑相关缓存
-                            // 1. 清理建筑数据管理器缓存
+                            // menglannnn: 修复reload命令不刷新缓存的问题
+                            // 正确的顺序：先复制文件 -> 再加载缓存
+                            
+                            // 1. 先重新复制建筑文件（从jar/resources到simukraftbuilding文件夹）
+                            com.xiaoliang.simukraft.utils.BuildingDataManager.checkAndCopyBuildingFiles();
+                            
+                            // 2. 清理所有缓存
                             com.xiaoliang.simukraft.utils.BuildingDataManager.clearCache();
+                            
+                            // 3. 重新加载建筑数据到缓存（从simukraftbuilding文件夹）
+                            com.xiaoliang.simukraft.utils.BuildingDataManager.reloadCache();
 
-                            // 2. 重新加载工业建筑配置
+                            // 4. 重新加载工业建筑配置
                             IndustrialBuildingManager.reload(server);
 
-                            // 3. 重新加载商业建筑配置
+                            // 5. 重新加载商业建筑配置
                             CommercialBuildingManager.reload(server);
 
-                            // 4. 重新加载SK文件缓存
+                            // 6. 重新加载SK文件缓存（世界目录中的已放置建筑）
                             FileUtils.reloadSkFileCache(server);
-
-                            // 5. 预加载建筑数据到缓存
-                            com.xiaoliang.simukraft.utils.BuildingDataManager.reloadCache();
 
                             // 6. 发送指南书重载数据包到所有在线玩家（在客户端执行重载）
                             final int playerCount = server.getPlayerList().getPlayers().size();
