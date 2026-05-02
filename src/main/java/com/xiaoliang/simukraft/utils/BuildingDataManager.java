@@ -125,11 +125,17 @@ public class BuildingDataManager {
     }
     
     public static List<BuildingInfo> getBuildingsByCategory(String category) {
-        // 检查缓存
+        // menglannnn: 检查缓存 - 修复缓存为空的问题
+        // 如果缓存已初始化且该类别的缓存存在且不为空，直接返回
         if (cacheInitialized) {
             List<BuildingInfo> cached = BUILDING_CATEGORY_CACHE.get(category);
-            if (cached != null) {
+            if (cached != null && !cached.isEmpty()) {
                 return new ArrayList<>(cached);
+            }
+            // 如果缓存为空列表，清除该类别的缓存重新加载
+            if (cached != null && cached.isEmpty()) {
+                BUILDING_CATEGORY_CACHE.remove(category);
+                LOGGER.warn("[BuildingDataManager] 类别 {} 的缓存为空，重新加载", category);
             }
         }
 
@@ -202,9 +208,22 @@ public class BuildingDataManager {
             buildings.addAll(fallbackBuildings);
         }
         
-        // 存入缓存
+        // menglannnn: 存入缓存 - 修复缓存设置逻辑
+        // 无论是否为空，都设置缓存标志，但空列表时记录警告
         if (!buildings.isEmpty()) {
             BUILDING_CATEGORY_CACHE.put(category, new ArrayList<>(buildings));
+            cacheInitialized = true;
+            LOGGER.info("[BuildingDataManager] 类别 {} 已缓存 {} 个建筑", category, buildings.size());
+        } else {
+            // 如果建筑列表为空，尝试从类路径加载作为最后的后备
+            LOGGER.warn("[BuildingDataManager] 类别 {} 从文件系统加载为空，尝试类路径后备", category);
+            List<BuildingInfo> classpathBuildings = loadFromClasspathFallback(category);
+            if (!classpathBuildings.isEmpty()) {
+                buildings.addAll(classpathBuildings);
+                BUILDING_CATEGORY_CACHE.put(category, new ArrayList<>(buildings));
+                LOGGER.info("[BuildingDataManager] 类别 {} 从类路径加载了 {} 个建筑", category, classpathBuildings.size());
+            }
+            // 即使为空也设置标志，避免无限重试
             cacheInitialized = true;
         }
 
@@ -429,10 +448,12 @@ public class BuildingDataManager {
     }
     
     /**
-     * 重新初始化缓存
+     * menglannnn: 重新初始化缓存 - 修复先复制文件再加载缓存的顺序问题
      */
     public static void reloadCache() {
         clearCache();
+        // 先重新复制建筑文件，确保文件存在
+        checkAndCopyBuildingFiles();
         // 预加载所有类别的建筑数据到缓存
         for (String category : CATEGORIES) {
             getBuildingsByCategory(category);
