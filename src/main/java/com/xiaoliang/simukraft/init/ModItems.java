@@ -1,6 +1,7 @@
 package com.xiaoliang.simukraft.init;
 
 import com.xiaoliang.simukraft.item.GuideBookItem;
+import com.xiaoliang.simukraft.item.ManifestItem;
 import com.xiaoliang.simukraft.item.PortableCityCoreItem;
 import com.xiaoliang.simukraft.item.food.BuffFoodItem;
 import com.xiaoliang.simukraft.item.food.ModFoods;
@@ -21,6 +22,10 @@ public class ModItems {
     // 指南
     public static final RegistryObject<Item> GUIDE_BOOK = ITEMS.register("guide_book",
             GuideBookItem::new);
+
+    // 清单
+    public static final RegistryObject<Item> MANIFEST = ITEMS.register("manifest",
+            ManifestItem::new);
 
     // ========== 食物 ==========
 

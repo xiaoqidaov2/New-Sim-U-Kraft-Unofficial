@@ -27,6 +27,7 @@
   "block.simukraft.white_carpet": "NSUK-白色地毯",
   "item.simukraft.portable_city_core": "NSUK-便携城市核心",
   "item.simukraft.guide_book": "New:Sim-U-Kraft指南",
+  "item.simukraft.manifest": "NSUK-建造清单",
   "item.simukraft.hamburger": "NSUK-汉堡",
   "item.simukraft.french_fries": "NSUK-薯条",
   "item.simukraft.cheese_chunk": "NSUK-奶酪块",
@@ -1623,5 +1624,18 @@
   "notify.title.official_added": "官员任命",
   "notify.content.official_added": "您已被任命为 %s 的官员！",
   "notify.title.restock": "店铺补货",
-  "notify.content.restock": "NPC %s 已完成对 %s 的补货，共补货 %s。"
+  "notify.content.restock": "NPC %s 已完成对 %s 的补货，共补货 %s。",
+
+  "tooltip.simukraft.manifest.empty": "§7空清单 - 潜行+右键点击建筑盒获取材料清单",
+  "tooltip.simukraft.manifest.building": "§7建筑: §f%s",
+  "tooltip.simukraft.manifest.progress": "§7进度: §a%d§7/§a%d §7(§e%d%%§7)",
+
+  "gui.manifest.title": "建造材料清单",
+  "gui.manifest.title_with_building": "建造清单 - %s",
+  "gui.manifest.empty_title": "建造清单",
+  "gui.manifest.progress": "进度: %d / %d",
+  "gui.manifest.no_materials": "§7暂无材料数据",
+  "gui.close": "关闭",
+
+  "message.simukraft.manifest.filled": "§a清单已填充！右键打开查看材料需求。"
 }

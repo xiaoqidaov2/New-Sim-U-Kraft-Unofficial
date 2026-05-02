@@ -353,19 +353,6 @@ public class NetworkManager {
                 DeleteCityPacket::new,
                 DeleteCityPacket::handle);
 
-        // 建造任务请求和响应
-        INSTANCE.registerMessage(id++,
-                ConstructionTasksRequestPacket.class,
-                ConstructionTasksRequestPacket::encode,
-                ConstructionTasksRequestPacket::decode,
-                ConstructionTasksRequestPacket::handle);
-
-        INSTANCE.registerMessage(id++,
-                ConstructionTasksResponsePacket.class,
-                ConstructionTasksResponsePacket::encode,
-                ConstructionTasksResponsePacket::decode,
-                ConstructionTasksResponsePacket::handle);
-
         // 材料需求请求和响应
         INSTANCE.registerMessage(id++,
                 MaterialRequirementsRequestPacket.class,

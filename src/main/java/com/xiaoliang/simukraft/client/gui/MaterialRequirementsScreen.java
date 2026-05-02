@@ -192,7 +192,7 @@ public class MaterialRequirementsScreen extends AbstractTransitionScreen {
 
     private void closeScreen() {
         if (this.minecraft != null) {
-            this.minecraft.setScreen(new ConstructionTasksScreen(cityCorePos));
+            this.minecraft.setScreen(null);
         }
     }
 

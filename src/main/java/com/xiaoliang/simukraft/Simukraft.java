@@ -17,6 +17,7 @@ import com.xiaoliang.simukraft.entity.CustomEntity;
 import com.xiaoliang.simukraft.entity.FloatingBuildBoxEntity;
 import com.xiaoliang.simukraft.event.PlayerEvents;
 import com.xiaoliang.simukraft.event.WorldEvents;
+import com.xiaoliang.simukraft.crafting.ModRecipeSerializers;
 import com.xiaoliang.simukraft.init.*;
 import com.xiaoliang.simukraft.logging.SimukraftLogConfigurator;
 import com.xiaoliang.simukraft.network.NetworkManager;
@@ -75,6 +76,7 @@ public class Simukraft {
         ModBlocks.BLOCKS.register(modEventBus);
         ModCreativeModeTabs.CREATIVE_MODE_TABS.register(modEventBus);
         ModMenus.MENUS.register(modEventBus);
+        ModRecipeSerializers.RECIPE_SERIALIZERS.register(modEventBus);
 
         // 注册服务器配置
         ServerConfig.register();

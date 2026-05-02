@@ -937,6 +937,36 @@ public class ConstructionTask {
         return displayName;
     }
 
+    /**
+     * 获取建造所需的所有材料清单
+     * menglannnn: 用于清单物品显示材料需求
+     * @return 材料ID到数量的映射
+     */
+    @Nonnull
+    public Map<String, Integer> getRequiredMaterials() {
+        Map<String, Integer> materials = new LinkedHashMap<>();
+        
+        for (BlockInfo blockInfo : blocksToPlace) {
+            BlockState state = blockInfo.state();
+            
+            // 跳过空气方块
+            if (state.isAir()) {
+                continue;
+            }
+            
+            // 检查是否需要材料
+            if (!com.xiaoliang.simukraft.utils.MaterialManager.requiresMaterial(state)) {
+                continue;
+            }
+            
+            // 获取方块ID作为材料ID
+            String blockId = com.xiaoliang.simukraft.utils.MaterialManager.getBlockId(state.getBlock());
+            materials.merge(blockId, 1, Integer::sum);
+        }
+        
+        return materials;
+    }
+
     public record BlockInfo(@Nonnull BlockPos pos, @Nonnull BlockState state) {
     }
 }

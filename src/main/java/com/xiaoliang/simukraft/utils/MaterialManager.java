@@ -204,7 +204,7 @@ public class MaterialManager {
         addVariantItemIds(acceptedItemIds, materialId);
     }
 
-    private static String getBlockId(Block block) {
+    public static String getBlockId(Block block) {
         ResourceLocation blockKey = ForgeRegistries.BLOCKS.getKey(block);
         return blockKey != null ? blockKey.toString() : "";
     }

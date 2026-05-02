@@ -44,6 +44,8 @@ public class ModCreativeModeTabs {
                         output.accept(nn(ModItems.PORTABLE_CITY_CORE.get()));
                         // 指南
                         output.accept(nn(ModItems.GUIDE_BOOK.get()));
+                        // 清单
+                        output.accept(nn(ModItems.MANIFEST.get()));
                         // 食物
                         output.accept(nn(ModItems.HAMBURGER.get()));
                         output.accept(nn(ModItems.FRENCH_FRIES.get()));
