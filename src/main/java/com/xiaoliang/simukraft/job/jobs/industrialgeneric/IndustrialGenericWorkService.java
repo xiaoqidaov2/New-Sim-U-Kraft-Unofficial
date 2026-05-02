@@ -5,7 +5,6 @@ import com.xiaoliang.simukraft.entity.CustomEntity;
 import com.xiaoliang.simukraft.entity.WorkStatus;
 import com.xiaoliang.simukraft.job.api.JobContext;
 import com.xiaoliang.simukraft.job.core.services.AbstractWorkService;
-import com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;

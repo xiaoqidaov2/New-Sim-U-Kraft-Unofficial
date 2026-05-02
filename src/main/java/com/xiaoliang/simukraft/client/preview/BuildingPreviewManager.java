@@ -191,7 +191,7 @@ public class BuildingPreviewManager {
         return rotatedState;
     }
 
-    @SuppressWarnings({"null", "unchecked", "deprecation", "unused"})
+    @SuppressWarnings({"unchecked", "deprecation", "unused"})
     private static BlockState rotateBlockStateOnce(BlockState state) {
         if (state.hasProperty(BlockStateProperties.FACING)) {
             Direction facing = state.getValue(BlockStateProperties.FACING);

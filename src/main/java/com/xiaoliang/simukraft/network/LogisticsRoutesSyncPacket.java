@@ -12,7 +12,7 @@ import java.util.function.Supplier;
 /**
  * S→C 物流路径同步包 — 将仓库的频道/路径信息同步给客户端GUI
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class LogisticsRoutesSyncPacket {
 
     private final BlockPos blockPos;

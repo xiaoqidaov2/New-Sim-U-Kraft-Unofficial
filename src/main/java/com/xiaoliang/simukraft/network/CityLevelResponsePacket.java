@@ -8,7 +8,7 @@ import net.minecraftforge.network.NetworkEvent;
 
 import java.util.function.Supplier;
 
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class CityLevelResponsePacket {
     private final BlockPos cityCorePos;
     private final int cityLevel;

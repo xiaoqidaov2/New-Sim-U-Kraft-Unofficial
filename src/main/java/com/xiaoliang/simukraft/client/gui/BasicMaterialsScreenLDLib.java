@@ -17,7 +17,6 @@ import java.util.function.Consumer;
  * 用于配置普通模式下建筑师需要的单个材料
  */
 @OnlyIn(Dist.CLIENT)
-@SuppressWarnings("null")
 public class BasicMaterialsScreenLDLib extends ConfigurableListScreenLDLib {
 
     public BasicMaterialsScreenLDLib(Screen parent, List<String> initialItems, Consumer<List<String>> onSave) {

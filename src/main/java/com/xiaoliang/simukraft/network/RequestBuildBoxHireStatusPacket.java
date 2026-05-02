@@ -13,7 +13,7 @@ import java.util.function.Supplier;
  * 客户端 -> 服务器
  * 客户端打开建筑盒界面时请求同步雇佣数据
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class RequestBuildBoxHireStatusPacket {
     private final BlockPos buildBoxPos;
 

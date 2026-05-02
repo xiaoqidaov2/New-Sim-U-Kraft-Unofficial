@@ -11,7 +11,7 @@ import net.minecraftforge.network.NetworkEvent;
 import java.util.Optional;
 import java.util.function.Supplier;
 
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class EmploymentSnapshotPacket {
     private final boolean success;
     private final String code;

@@ -14,7 +14,6 @@ import java.util.EnumMap;
 import java.util.Map;
 import java.util.UUID;
 
-@SuppressWarnings("null")
 public class PlannerWorkHandler {
 
     private final CustomEntity npc;

@@ -8,7 +8,7 @@ import com.xiaoliang.simukraft.world.OfficialInvitationService;
 import java.util.UUID;
 import java.util.function.Supplier;
 
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class OfficialInvitationResponsePacket {
     private final UUID invitationId;
     private final boolean accepted;

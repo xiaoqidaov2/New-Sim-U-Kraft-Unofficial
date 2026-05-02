@@ -13,7 +13,7 @@ import net.minecraftforge.network.NetworkEvent;
 import java.util.UUID;
 import java.util.function.Supplier;
 
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class HireFarmerPacket {
     private final BlockPos farmlandBoxPos;
     private final UUID npcUuid;

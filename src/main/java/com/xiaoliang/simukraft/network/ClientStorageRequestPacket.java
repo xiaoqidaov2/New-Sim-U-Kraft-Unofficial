@@ -18,7 +18,7 @@ import java.util.function.Supplier;
  * C→S 请求客户端存储物品数据
  * 客户端请求服务器扫描指定容器的物品并返回结果
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class ClientStorageRequestPacket {
     private final BlockPos clientBlockPos;  // 客户端盒子位置
 

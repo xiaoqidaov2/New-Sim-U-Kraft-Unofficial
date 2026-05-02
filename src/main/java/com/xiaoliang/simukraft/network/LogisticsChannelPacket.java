@@ -22,7 +22,7 @@ import java.util.function.Supplier;
  * C→S 频道操作包：创建/删除/切换启用频道。
  * 支持NBT物品传输
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class LogisticsChannelPacket {
 
     public enum Action { CREATE, DELETE, TOGGLE }

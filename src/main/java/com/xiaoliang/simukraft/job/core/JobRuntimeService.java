@@ -13,8 +13,6 @@ import com.xiaoliang.simukraft.job.api.JobRuntimeState;
 import com.xiaoliang.simukraft.utils.NPCDataManager;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.phys.AABB;
-
 import java.util.Collection;
 import java.util.Optional;
 import java.util.Set;

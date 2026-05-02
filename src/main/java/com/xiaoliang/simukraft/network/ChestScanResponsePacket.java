@@ -16,7 +16,7 @@ import java.util.function.Supplier;
  * 箱子扫描响应数据包
  * 服务器返回箱子内容给客户端
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class ChestScanResponsePacket {
     private final BlockPos chestPos;
     private final Map<Block, Integer> chestContents;

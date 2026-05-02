@@ -13,7 +13,7 @@ import java.util.function.Supplier;
  * 重载配置数据包
  * 客户端发送请求到服务器，要求重载配置文件
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class ReloadConfigPacket {
 
     public ReloadConfigPacket() {

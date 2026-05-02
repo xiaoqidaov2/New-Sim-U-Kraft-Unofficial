@@ -24,7 +24,7 @@ import java.util.function.Supplier;
  * 拆除建筑网络包（客户端 -> 服务器）
  * menglannnn: 仅本城市官员和市长可以拆除本城市建筑
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class DemolishBuildingPacket {
     private static final Logger LOGGER = LogManager.getLogger();
     private final BlockPos controlBoxPos;

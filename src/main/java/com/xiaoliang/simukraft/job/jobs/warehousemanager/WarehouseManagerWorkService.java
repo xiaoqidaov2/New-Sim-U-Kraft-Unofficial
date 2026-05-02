@@ -4,7 +4,6 @@ import com.xiaoliang.simukraft.entity.CustomEntity;
 import com.xiaoliang.simukraft.entity.WorkStatus;
 import com.xiaoliang.simukraft.job.api.JobContext;
 import com.xiaoliang.simukraft.job.core.services.AbstractWorkService;
-import com.xiaoliang.simukraft.job.jobs.warehousemanager.LogisticsWorkHandler;
 import com.xiaoliang.simukraft.world.BaseBuildingHiredData;
 import com.xiaoliang.simukraft.world.LogisticsHiredData;
 import net.minecraft.core.BlockPos;

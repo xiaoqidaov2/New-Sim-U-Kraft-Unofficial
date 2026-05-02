@@ -15,7 +15,7 @@ import java.util.function.Supplier;
  * S→C 频道物品数据响应
  * 服务器返回扫描到的物品数据
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class ChannelItemsResponsePacket {
     private final BlockPos warehouseBlockPos;
     private final boolean isSend;

@@ -17,7 +17,7 @@ import java.util.function.Supplier;
  * C→S 请求频道物品数据
  * 客户端请求服务器扫描指定仓库或客户端的物品
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class RequestChannelItemsPacket {
     private final BlockPos warehouseBlockPos;
     private final boolean isSend;

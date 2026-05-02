@@ -19,6 +19,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+@SuppressWarnings("null")
 public class BuilderWorkService extends AbstractWorkService {
 
     public static final BuilderWorkService INSTANCE = new BuilderWorkService();

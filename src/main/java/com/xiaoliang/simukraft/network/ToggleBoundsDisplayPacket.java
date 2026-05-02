@@ -13,7 +13,7 @@ import java.util.function.Supplier;
  * 切换界限显示网络包（客户端 -> 服务器）
  * menglannnn: 用于同步建筑界限和活动界限的显示状态
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class ToggleBoundsDisplayPacket {
     private static final Logger LOGGER = LogManager.getLogger();
     private final BlockPos controlBoxPos;

@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.function.Supplier;
 
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class DeleteNPCPacket {
     private final UUID npcUuid;
     

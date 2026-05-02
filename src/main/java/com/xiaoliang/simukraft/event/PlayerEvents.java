@@ -32,7 +32,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Mod.EventBusSubscriber(modid = Simukraft.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class PlayerEvents {
     private static final Logger LOGGER = LogManager.getLogger();
     private static final ResourceLocation FIRST_DREAM_ADVANCEMENT_ID =

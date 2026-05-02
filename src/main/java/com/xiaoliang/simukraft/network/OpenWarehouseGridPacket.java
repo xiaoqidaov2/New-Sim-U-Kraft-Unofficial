@@ -13,7 +13,7 @@ import java.util.function.Supplier;
 /**
  * 打开仓库网格菜单的数据包
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class OpenWarehouseGridPacket {
 
     private final BlockPos warehousePos;

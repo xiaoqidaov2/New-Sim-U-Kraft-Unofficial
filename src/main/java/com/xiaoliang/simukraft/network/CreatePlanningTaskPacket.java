@@ -21,7 +21,7 @@ import java.util.function.Supplier;
  * 创建规划任务网络包
  * 客户端发送给服务器创建规划任务
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class CreatePlanningTaskPacket {
 
     public enum TaskType {

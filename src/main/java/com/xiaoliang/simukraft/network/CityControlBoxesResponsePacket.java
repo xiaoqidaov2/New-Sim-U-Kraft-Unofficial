@@ -12,7 +12,7 @@ import java.util.function.Supplier;
  * S→C 城市控制盒数据响应
  * 服务端返回城市所有控制盒的位置和名称信息
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class CityControlBoxesResponsePacket {
     private final List<ControlBoxData> controlBoxes;
 

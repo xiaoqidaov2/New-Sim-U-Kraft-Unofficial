@@ -17,7 +17,6 @@ import java.util.function.Consumer;
  * 用于配置专家模式下不需要的材料
  */
 @OnlyIn(Dist.CLIENT)
-@SuppressWarnings("null")
 public class ExpertModeSkipListScreenLDLib extends ConfigurableListScreenLDLib {
 
     public ExpertModeSkipListScreenLDLib(Screen parent, List<String> initialItems, Consumer<List<String>> onSave) {

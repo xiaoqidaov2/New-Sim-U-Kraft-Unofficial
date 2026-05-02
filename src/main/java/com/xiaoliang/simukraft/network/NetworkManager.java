@@ -18,7 +18,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class NetworkManager {
     private static final String PROTOCOL_VERSION = "1";
     private static final Map<UUID, HudSyncState> LAST_HUD_SYNC = new ConcurrentHashMap<>();

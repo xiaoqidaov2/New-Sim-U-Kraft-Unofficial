@@ -3,11 +3,15 @@ package com.xiaoliang.simukraft.entity.ai.path;
 import com.xiaoliang.simukraft.entity.CustomEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.FenceGateBlock;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -22,14 +26,13 @@ public class NPCPathNavigator {
     private final NPCPathFinder pathFinder;
     private final NPCMoveController moveController;
     
-    // 异步寻路线程池
     private static final ExecutorService pathfindingExecutor = Executors.newFixedThreadPool(2);
     
-    // 寻路参数
-    private static final int PATH_RECALCULATE_INTERVAL = 20; // 1秒重新计算一次路径
-    private static final double PATH_RECALCULATE_DISTANCE = 2.0; // 偏离路径超过2格重新计算
+    private static final int PATH_RECALCULATE_INTERVAL = 20;
+    private static final double PATH_RECALCULATE_DISTANCE = 2.0;
+    private static final int LIVE_OBSTACLE_RECHECK_INTERVAL = 4;
+    private static final int TARGET_PROGRESS_STALL_TICKS = 30;
     
-    // 状态
     private boolean isPathfinding;
     private int pathRecalculateCooldown;
     private int blockedRepathTicks;
@@ -38,8 +41,11 @@ public class NPCPathNavigator {
     private Vec3 preciseTargetPos;
     private Vec3 debugDisplayTargetPos;
     private double reachDistance;
+    private int liveObstacleCheckCooldown;
+    private int targetProgressStallTicks;
+    private double lastDistanceToTarget;
+    private final Set<BlockPos> openedFenceGates;
     
-    // 路径完成回调
     private PathCompleteCallback onPathComplete;
     private PathFailCallback onPathFail;
     
@@ -62,31 +68,21 @@ public class NPCPathNavigator {
         this.debugDisplayTargetPos = Vec3.ZERO;
         this.usingTemporaryBypassTarget = false;
         this.reachDistance = 1.0;
+        this.liveObstacleCheckCooldown = 0;
+        this.targetProgressStallTicks = 0;
+        this.lastDistanceToTarget = Double.MAX_VALUE;
+        this.openedFenceGates = new LinkedHashSet<>();
+        this.moveController.setFenceGateTracker(this::trackOpenedFenceGate);
     }
     
-    /**
-     * 移动到指定位置
-     * @param pos 目标位置
-     * @param reachDistance 到达距离阈值
-     * @return 是否成功开始寻路
-     */
     public boolean moveTo(BlockPos pos, double reachDistance) {
         return moveTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, reachDistance);
     }
     
-    /**
-     * 移动到指定位置
-     * @param x 目标X坐标
-     * @param y 目标Y坐标
-     * @param z 目标Z坐标
-     * @param reachDistance 到达距离阈值
-     * @return 是否成功开始寻路
-     */
     public boolean moveTo(double x, double y, double z, double reachDistance) {
         BlockPos target = BlockPos.containing(x, y, z);
         Vec3 preciseTarget = new Vec3(x, y, z);
         
-        // 检查是否已经在目标位置
         if (isAtPosition(x, y, z, reachDistance)) {
             stop();
             if (onPathComplete != null) {
@@ -100,21 +96,17 @@ public class NPCPathNavigator {
         this.debugDisplayTargetPos = preciseTarget;
         this.usingTemporaryBypassTarget = false;
         this.reachDistance = reachDistance;
+        this.liveObstacleCheckCooldown = 0;
+        this.targetProgressStallTicks = 0;
+        this.lastDistanceToTarget = getDistanceToPreciseTarget();
         
-        // 立即开始寻路
         return startPathfinding();
     }
     
-    /**
-     * 异步移动到指定位置（不会阻塞主线程）
-     */
     public CompletableFuture<Boolean> moveToAsync(BlockPos pos, double reachDistance) {
         return CompletableFuture.supplyAsync(() -> moveTo(pos, reachDistance), pathfindingExecutor);
     }
     
-    /**
-     * 停止导航
-     */
     public void stop() {
         isPathfinding = false;
         blockedRepathTicks = 0;
@@ -122,12 +114,13 @@ public class NPCPathNavigator {
         targetPos = null;
         preciseTargetPos = Vec3.ZERO;
         debugDisplayTargetPos = Vec3.ZERO;
+        liveObstacleCheckCooldown = 0;
+        targetProgressStallTicks = 0;
+        lastDistanceToTarget = Double.MAX_VALUE;
         moveController.stop();
+        restoreOpenedFenceGates();
     }
     
-    /**
-     * 每tick更新
-     */
     public void tick() {
         if (npc.isSleeping()) {
             stop();
@@ -138,7 +131,6 @@ public class NPCPathNavigator {
             return;
         }
         
-        // 更新移动控制器
         moveController.tick();
         
         if (moveController.isInStepUpTraversal()) {
@@ -146,10 +138,12 @@ public class NPCPathNavigator {
             if (pathRecalculateCooldown > 0) {
                 pathRecalculateCooldown--;
             }
+            if (liveObstacleCheckCooldown > 0) {
+                liveObstacleCheckCooldown--;
+            }
             return;
         }
         
-        // 检查是否到达目标
         if (targetPos != null && !usingTemporaryBypassTarget && isAtTarget()) {
             handlePathComplete();
             return;
@@ -159,8 +153,12 @@ public class NPCPathNavigator {
             recalculatePath(6);
             return;
         }
+
+        updateProgressTracking();
+        if (shouldRecalculateForLiveObstacle()) {
+            recalculatePath(moveController.isMovementBlockedState() ? 6 : 3);
+        }
         
-        // 检查是否需要重新计算路径
         if (shouldRecalculatePath()) {
             if (moveController.isMovementBlockedState()) {
                 blockedRepathTicks++;
@@ -178,15 +176,14 @@ public class NPCPathNavigator {
             blockedRepathTicks = 0;
         }
         
-        // 更新冷却
         if (pathRecalculateCooldown > 0) {
             pathRecalculateCooldown--;
         }
+        if (liveObstacleCheckCooldown > 0) {
+            liveObstacleCheckCooldown--;
+        }
     }
     
-    /**
-     * 开始寻路
-     */
     private boolean startPathfinding() {
         if (targetPos == null) {
             return false;
@@ -211,12 +208,12 @@ public class NPCPathNavigator {
         }
         
         isPathfinding = true;
+        liveObstacleCheckCooldown = 0;
+        targetProgressStallTicks = 0;
+        lastDistanceToTarget = getDistanceToPreciseTarget();
         return moveController.setPath(path);
     }
     
-    /**
-     * 重新计算路径
-     */
     private void recalculatePath(int alternativeSearchRange) {
         if (pathRecalculateCooldown > 0) return;
         
@@ -234,6 +231,7 @@ public class NPCPathNavigator {
         
         if (!newPath.isFailed()) {
             moveController.setPath(newPath);
+            resetPathProgressState();
             return;
         }
 
@@ -242,6 +240,7 @@ public class NPCPathNavigator {
             NPCPath alternativePath = pathFinder.findPath(currentPos, alternativeTarget);
             if (!alternativePath.isFailed()) {
                 moveController.setPath(alternativePath);
+                resetPathProgressState();
             }
         }
     }
@@ -264,6 +263,7 @@ public class NPCPathNavigator {
         if (!directPath.isFailed()) {
             usingTemporaryBypassTarget = false;
             moveController.setPath(directPath);
+            resetPathProgressState();
             return;
         }
 
@@ -277,79 +277,129 @@ public class NPCPathNavigator {
             if (toCandidatePath.isFailed()) {
                 continue;
             }
-
-            NPCPath candidateToFinal = pathFinder.findPath(normalizedCandidate, normalizedTarget);
-            if (candidateToFinal.isFailed()) {
-                continue;
-            }
-
             usingTemporaryBypassTarget = true;
+            debugDisplayTargetPos = Vec3.atCenterOf(targetPos);
             moveController.setPath(toCandidatePath);
+            resetPathProgressState();
             return;
-        }
-
-        BlockPos alternativeTarget = pathFinder.findAlternativeTargetNear(normalizedTarget, 8);
-        if (alternativeTarget != null) {
-            NPCPath alternativePath = pathFinder.findPath(currentPos, alternativeTarget);
-            if (!alternativePath.isFailed()) {
-                usingTemporaryBypassTarget = true;
-                moveController.setPath(alternativePath);
-            }
         }
     }
 
     private List<BlockPos> buildLocalBypassTargets(BlockPos currentPos, BlockPos finalTarget) {
-        List<BlockPos> targets = new ArrayList<>();
+        List<BlockPos> candidates = new ArrayList<>();
         int dx = Integer.compare(finalTarget.getX(), currentPos.getX());
         int dz = Integer.compare(finalTarget.getZ(), currentPos.getZ());
-        int sideX = -dz;
-        int sideZ = dx;
+        BlockPos lateralLeft = currentPos.offset(-dz, 0, dx);
+        BlockPos lateralRight = currentPos.offset(dz, 0, -dx);
+        BlockPos forward = currentPos.offset(dx, 0, dz);
+        BlockPos diagonalLeft = lateralLeft.offset(dx, 0, dz);
+        BlockPos diagonalRight = lateralRight.offset(dx, 0, dz);
 
-        int[] sideSteps = new int[] {1, 2, -1, -2};
-        for (int sideStep : sideSteps) {
-            int actualSideX = sideX * sideStep;
-            int actualSideZ = sideZ * sideStep;
-            targets.add(currentPos.offset(actualSideX + dx, 0, actualSideZ + dz));
-            targets.add(currentPos.offset(actualSideX + dx * 2, 0, actualSideZ + dz * 2));
-            targets.add(currentPos.offset(actualSideX + dx, 1, actualSideZ + dz));
+        candidates.add(diagonalLeft);
+        candidates.add(diagonalRight);
+        candidates.add(lateralLeft);
+        candidates.add(lateralRight);
+        candidates.add(forward);
+        return candidates;
+    }
+
+    private boolean shouldRecalculatePath() {
+        if (pathRecalculateCooldown > 0 || targetPos == null || preciseTargetPos == Vec3.ZERO) {
+            return false;
         }
 
-        return targets;
-    }
-    
-    /**
-     * 检查是否需要重新计算路径
-     */
-    private boolean shouldRecalculatePath() {
-        NPCPath currentPath = moveController.getCurrentPath();
-        if (currentPath == null) return true;
-        
         if (moveController.isMovementBlockedState()) {
             return true;
         }
 
-        // 检查是否偏离路径
-        Vec3 currentPos = npc.position();
-        NPCPathNode currentNode = currentPath.getCurrentNode();
-        
-        if (currentNode != null) {
-            double distToPath = currentPos.distanceTo(currentPath.getCurrentTarget());
-            if (distToPath > PATH_RECALCULATE_DISTANCE) {
-                return true;
-            }
+        NPCPath currentPath = moveController.getCurrentPath();
+        if (currentPath == null || currentPath.isFailed() || currentPath.isCompleted()) {
+            return true;
         }
-        
+
+        Vec3 currentPos = npc.position();
+        double distanceToPath = calculateDistanceToPath(currentPath, currentPos);
+        if (distanceToPath > PATH_RECALCULATE_DISTANCE) {
+            return true;
+        }
+
+        Vec3 currentTarget = currentPath.getCurrentTarget();
+        if (currentTarget == null) {
+            return true;
+        }
+
+        double distanceToCurrentNode = currentPos.distanceTo(currentTarget);
+        return distanceToCurrentNode > 3.0;
+    }
+
+    private boolean shouldRecalculateForLiveObstacle() {
+        if (targetPos == null || liveObstacleCheckCooldown > 0) {
+            return false;
+        }
+        NPCPath currentPath = moveController.getCurrentPath();
+        if (currentPath == null || currentPath.isFailed() || currentPath.isCompleted()) {
+            liveObstacleCheckCooldown = LIVE_OBSTACLE_RECHECK_INTERVAL;
+            return true;
+        }
+        if (moveController.shouldReplanForObstacle()) {
+            liveObstacleCheckCooldown = LIVE_OBSTACLE_RECHECK_INTERVAL;
+            return true;
+        }
+        if (targetProgressStallTicks >= TARGET_PROGRESS_STALL_TICKS) {
+            liveObstacleCheckCooldown = LIVE_OBSTACLE_RECHECK_INTERVAL;
+            return true;
+        }
         return false;
     }
-    
-    /**
-     * 检查是否到达目标
-     */
+
+    private double calculateDistanceToPath(NPCPath path, Vec3 position) {
+        if (path == null || position == null) {
+            return Double.MAX_VALUE;
+        }
+        double nearestDistance = Double.MAX_VALUE;
+        for (NPCPathNode node : path.getNodes()) {
+            if (node == null) {
+                continue;
+            }
+            Vec3 nodePos = new Vec3(node.standX, node.standY, node.standZ);
+            nearestDistance = Math.min(nearestDistance, position.distanceTo(nodePos));
+        }
+        return nearestDistance;
+    }
+
+    private void updateProgressTracking() {
+        double distanceToTarget = getDistanceToPreciseTarget();
+        if (distanceToTarget + 0.15D < lastDistanceToTarget) {
+            targetProgressStallTicks = 0;
+            lastDistanceToTarget = distanceToTarget;
+            return;
+        }
+        if (Math.abs(distanceToTarget - lastDistanceToTarget) <= 0.05D) {
+            targetProgressStallTicks++;
+        } else {
+            targetProgressStallTicks = 0;
+        }
+        lastDistanceToTarget = distanceToTarget;
+    }
+
+    private void resetPathProgressState() {
+        liveObstacleCheckCooldown = LIVE_OBSTACLE_RECHECK_INTERVAL;
+        targetProgressStallTicks = 0;
+        lastDistanceToTarget = getDistanceToPreciseTarget();
+    }
+
+    private double getDistanceToPreciseTarget() {
+        if (preciseTargetPos == null || preciseTargetPos == Vec3.ZERO) {
+            return targetPos == null ? Double.MAX_VALUE : npc.position().distanceTo(Vec3.atCenterOf(targetPos));
+        }
+        return npc.position().distanceTo(preciseTargetPos);
+    }
+
     private boolean isAtTarget() {
-        if (targetPos == null) return false;
-        
-        Vec3 targetVec = preciseTargetPos != null ? preciseTargetPos : new Vec3(targetPos.getX() + 0.5, targetPos.getY(), targetPos.getZ() + 0.5);
-        return npc.position().distanceTo(targetVec) <= reachDistance;
+        if (preciseTargetPos == null || preciseTargetPos == Vec3.ZERO) {
+            return false;
+        }
+        return npc.position().distanceTo(preciseTargetPos) <= reachDistance;
     }
 
     private boolean isAtTemporaryBypassTarget() {
@@ -364,17 +414,11 @@ public class NPCPathNavigator {
         return npc.position().distanceTo(currentTarget) <= Math.max(reachDistance, 0.8D);
     }
     
-    /**
-     * 检查是否在指定位置
-     */
     private boolean isAtPosition(double x, double y, double z, double distance) {
         Vec3 target = new Vec3(x, y, z);
         return npc.position().distanceTo(target) <= distance;
     }
     
-    /**
-     * 处理路径完成
-     */
     private void handlePathComplete() {
         stop();
         if (onPathComplete != null) {
@@ -391,9 +435,6 @@ public class NPCPathNavigator {
         return pathFinder.normalizeStartPosition(npc.blockPosition());
     }
 
-    /**
-     * 处理路径失败
-     */
     private void handlePathFail() {
         stop();
         if (onPathFail != null) {
@@ -401,45 +442,27 @@ public class NPCPathNavigator {
         }
     }
     
-    /**
-     * 设置路径完成回调
-     */
     public void setOnPathComplete(PathCompleteCallback callback) {
         this.onPathComplete = callback;
     }
     
-    /**
-     * 设置路径失败回调
-     */
     public void setOnPathFail(PathFailCallback callback) {
         this.onPathFail = callback;
     }
     
-    /**
-     * 是否正在寻路
-     */
     public boolean isPathfinding() {
         return isPathfinding;
     }
     
-    /**
-     * 是否已到达目标
-     */
     public boolean isDone() {
         return !isPathfinding;
     }
     
-    /**
-     * 获取当前路径
-     */
     @Nullable
     public NPCPath getCurrentPath() {
         return moveController.getCurrentPath();
     }
     
-    /**
-     * 获取目标位置
-     */
     @Nullable
     public BlockPos getTargetPos() {
         return targetPos;
@@ -450,19 +473,15 @@ public class NPCPathNavigator {
         return debugDisplayTargetPos == Vec3.ZERO ? null : debugDisplayTargetPos;
     }
     
-    /**
-     * 获取到目标的距离
-     */
     public double getDistanceToTarget() {
         if (targetPos == null) return 0;
         
-        Vec3 target = new Vec3(targetPos.getX() + 0.5, targetPos.getY(), targetPos.getZ() + 0.5);
+        Vec3 target = preciseTargetPos == null || preciseTargetPos == Vec3.ZERO
+                ? new Vec3(targetPos.getX() + 0.5, targetPos.getY(), targetPos.getZ() + 0.5)
+                : preciseTargetPos;
         return npc.position().distanceTo(target);
     }
     
-    /**
-     * 获取移动控制器
-     */
     public NPCMoveController getMoveController() {
         return moveController;
     }
@@ -470,10 +489,27 @@ public class NPCPathNavigator {
     public boolean isBlockedByObstacle() {
         return moveController.isMovementBlockedState();
     }
+
+    private void trackOpenedFenceGate(BlockPos gatePos) {
+        if (gatePos != null) {
+            openedFenceGates.add(gatePos.immutable());
+        }
+    }
+
+    private void restoreOpenedFenceGates() {
+        if (!(npc.level() instanceof ServerLevel serverLevel) || openedFenceGates.isEmpty()) {
+            openedFenceGates.clear();
+            return;
+        }
+        for (BlockPos gatePos : new ArrayList<>(openedFenceGates)) {
+            BlockState gateState = serverLevel.getBlockState(gatePos);
+            if (gateState.getBlock() instanceof FenceGateBlock && gateState.hasProperty(FenceGateBlock.OPEN) && gateState.getValue(FenceGateBlock.OPEN)) {
+                serverLevel.setBlock(gatePos, gateState.setValue(FenceGateBlock.OPEN, false), 10);
+            }
+        }
+        openedFenceGates.clear();
+    }
     
-    /**
-     * 关闭导航器（释放资源）
-     */
     public static void shutdown() {
         pathfindingExecutor.shutdown();
     }

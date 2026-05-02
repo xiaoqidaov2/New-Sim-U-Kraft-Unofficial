@@ -31,7 +31,7 @@ import java.util.function.Supplier;
  * 1. 需要原料的商业建筑：实时从箱子读取原料作为库存，购买时扣除原料
  * 2. 不需要原料的商业建筑：使用传统库存系统
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class CommercialBuyPacket {
     private final BlockPos controlBoxPos;
     private final String buildingFileName;

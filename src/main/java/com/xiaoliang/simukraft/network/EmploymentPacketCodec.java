@@ -6,7 +6,7 @@ import com.xiaoliang.simukraft.employment.domain.JobType;
 import com.xiaoliang.simukraft.employment.domain.WorkBlockType;
 import net.minecraft.network.FriendlyByteBuf;
 
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 final class EmploymentPacketCodec {
     private EmploymentPacketCodec() {
     }

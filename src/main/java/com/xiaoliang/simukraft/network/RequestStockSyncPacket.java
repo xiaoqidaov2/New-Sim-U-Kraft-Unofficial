@@ -22,7 +22,7 @@ import java.util.function.Supplier;
  * 请求同步库存数据包
  * 客户端 -> 服务器
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class RequestStockSyncPacket {
     private final BlockPos pos;
     private final String buildingFileName;

@@ -15,7 +15,7 @@ import net.minecraftforge.network.NetworkEvent;
 import java.util.UUID;
 import java.util.function.Supplier;
 
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class CreateCityPacket {
     private final String cityName;
     private final BlockPos cityCorePos;

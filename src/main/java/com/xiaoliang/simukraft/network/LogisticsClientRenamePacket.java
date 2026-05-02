@@ -12,7 +12,7 @@ import java.util.function.Supplier;
  * 物流客户端重命名数据包
  * 用于同步客户端自定义名称
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class LogisticsClientRenamePacket {
 
     private final UUID clientId;

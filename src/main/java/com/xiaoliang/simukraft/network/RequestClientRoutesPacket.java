@@ -16,7 +16,7 @@ import java.util.function.Supplier;
 /**
  * C→S 请求客户端关联的所有物流路径
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class RequestClientRoutesPacket {
     private final BlockPos clientBlockPos;
 

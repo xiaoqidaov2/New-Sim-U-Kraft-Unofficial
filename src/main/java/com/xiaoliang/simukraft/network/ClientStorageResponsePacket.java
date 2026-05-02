@@ -16,7 +16,7 @@ import java.util.function.Supplier;
  * S→C 客户端存储物品数据响应
  * 服务器返回扫描到的容器物品数据
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class ClientStorageResponsePacket {
     private final BlockPos clientBlockPos;
     private final List<ItemEntry> items;

@@ -14,7 +14,7 @@ import java.util.function.Supplier;
  * 请求配方同步数据包
  * 客户端打开界面时请求服务器同步当前配方
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class RequestRecipeSyncPacket {
     private final BlockPos pos;
 

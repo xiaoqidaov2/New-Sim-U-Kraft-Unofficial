@@ -19,7 +19,6 @@ import java.util.Objects;
  * 参考 FTB Chunks 的 ColorMapLoader / BlockColors，但完全独立不依赖 FTB 库。
  * 为每个方块状态计算一个 ARGB 颜色，用于地图渲染。
  */
-@SuppressWarnings("null")
 public class SimuBlockColors {
     private static final SimuBlockColors INSTANCE = new SimuBlockColors();
     private final Map<Block, Integer> colorOverrides = new HashMap<>();

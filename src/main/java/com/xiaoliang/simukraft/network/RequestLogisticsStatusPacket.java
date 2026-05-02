@@ -15,7 +15,7 @@ import java.util.function.Supplier;
 /**
  * 请求物流盒子雇佣状态 - 照抄 RequestBuildBoxHireStatusPacket
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class RequestLogisticsStatusPacket {
     private final BlockPos blockPos;
     private final boolean isServerBox; // true=服务端盒子, false=客户端盒子

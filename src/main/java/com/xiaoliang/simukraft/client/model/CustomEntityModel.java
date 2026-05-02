@@ -15,7 +15,6 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.Objects;
 
-@SuppressWarnings("null")
 public class CustomEntityModel<T extends LivingEntity> extends PlayerModel<T> {
     @Nonnull
     private static <V> V nn(@Nullable V value) {

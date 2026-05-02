@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+@SuppressWarnings("null")
 public final class JobRuntimeStateStore {
     private static final String DATA_NAME = "simukraft_job_runtime_states";
 

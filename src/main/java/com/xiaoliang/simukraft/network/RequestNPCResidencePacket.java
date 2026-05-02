@@ -10,7 +10,7 @@ import java.util.function.Supplier;
 /**
  * 请求NPC居住信息的网络包（客户端 -> 服务器）
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class RequestNPCResidencePacket {
     private final String npcName;
 

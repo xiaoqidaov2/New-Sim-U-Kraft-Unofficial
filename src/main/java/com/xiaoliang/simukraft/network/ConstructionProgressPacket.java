@@ -10,7 +10,7 @@ import net.minecraftforge.network.NetworkEvent;
 
 import java.util.function.Supplier;
 
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class ConstructionProgressPacket {
     private final BlockPos buildBoxPos;
     private final String buildingName;

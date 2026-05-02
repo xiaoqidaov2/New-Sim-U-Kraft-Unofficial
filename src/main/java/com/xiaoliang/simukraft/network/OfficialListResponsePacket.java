@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
 
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class OfficialListResponsePacket {
     private final BlockPos cityCorePos;
     private final List<OfficialInfo> officials;

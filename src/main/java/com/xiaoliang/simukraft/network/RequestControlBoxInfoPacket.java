@@ -19,7 +19,7 @@ import java.util.function.Supplier;
 /**
  * 请求控制盒信息的网络包（客户端 -> 服务器）
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class RequestControlBoxInfoPacket {
     private final BlockPos controlBoxPos;
     private final String controlBoxType;

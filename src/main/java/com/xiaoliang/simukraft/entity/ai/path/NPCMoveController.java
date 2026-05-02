@@ -20,6 +20,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
+import java.util.function.Consumer;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -81,6 +82,7 @@ public class NPCMoveController {
     private int fatigueTicks;
     private int fatigueCooldownTicks;
     private double fatigueSpeed;
+    private Consumer<BlockPos> fenceGateTracker;
 
     private enum ObstacleType {
         NONE,
@@ -122,6 +124,7 @@ public class NPCMoveController {
         this.fatigueTicks = 0;
         this.fatigueCooldownTicks = 0;
         this.fatigueSpeed = WALK_MOVE_SPEED;
+        this.fenceGateTracker = null;
     }
     
     /**
@@ -1466,6 +1469,9 @@ public class NPCMoveController {
         if (block instanceof FenceGateBlock) {
             if (!state.getValue(FenceGateBlock.OPEN)) {
                 level.setBlock(doorPos, state.setValue(FenceGateBlock.OPEN, true), 10);
+                if (fenceGateTracker != null) {
+                    fenceGateTracker.accept(doorPos);
+                }
                 doorInteractCooldown = 20;
             }
             return true;
@@ -1597,6 +1603,52 @@ public class NPCMoveController {
      */
     public NPCPath getCurrentPath() {
         return currentPath;
+    }
+
+    public void setFenceGateTracker(Consumer<BlockPos> fenceGateTracker) {
+        this.fenceGateTracker = fenceGateTracker;
+    }
+
+    public boolean shouldReplanForObstacle() {
+        if (!isMoving || currentPath == null || currentPath.isCompleted()) {
+            return false;
+        }
+        NPCPathNode currentNode = currentPath.getCurrentNode();
+        if (currentNode == null) {
+            return true;
+        }
+        Vec3 currentTarget = currentPath.getCurrentTarget();
+        if (currentTarget == null) {
+            return true;
+        }
+        if (currentObstacleType == ObstacleType.DOOR_CLOSED) {
+            handleDoorInteraction();
+            return false;
+        }
+        if (currentObstacleType == ObstacleType.NPC_BLOCKER) {
+            return false;
+        }
+        if (currentObstacleType == ObstacleType.SOLID_BLOCK || currentObstacleType == ObstacleType.TIGHT_SPACE) {
+            return true;
+        }
+        return !isCurrentNodeStillReachable(currentNode, currentTarget);
+    }
+
+    private boolean isCurrentNodeStillReachable(NPCPathNode currentNode, Vec3 currentTarget) {
+        if (currentNode == null || currentTarget == null) {
+            return false;
+        }
+        if (isMovementBlocked(currentTarget)) {
+            return false;
+        }
+        BlockPos nextFootPos = BlockPos.containing(currentTarget.x, currentNode.standY, currentTarget.z);
+        BlockPos nextHeadPos = nextFootPos.above();
+        BlockState nextFootState = level.getBlockState(nextFootPos);
+        BlockState nextHeadState = level.getBlockState(nextHeadPos);
+        if (!nextFootState.getCollisionShape(level, nextFootPos).isEmpty() && !isDoorPassable(nextFootState) && !isClimbableBlock(nextFootState)) {
+            return false;
+        }
+        return nextHeadState.getCollisionShape(level, nextHeadPos).isEmpty() || isDoorPassable(nextHeadState);
     }
     
     /**

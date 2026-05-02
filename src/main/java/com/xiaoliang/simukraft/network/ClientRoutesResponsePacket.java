@@ -10,7 +10,7 @@ import java.util.function.Supplier;
 /**
  * S→C 客户端路径响应包 — 返回指定客户端关联的所有物流路径
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class ClientRoutesResponsePacket {
     private final List<RouteInfo> routes;
 

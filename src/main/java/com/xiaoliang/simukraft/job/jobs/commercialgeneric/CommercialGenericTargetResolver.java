@@ -4,8 +4,6 @@ import com.xiaoliang.simukraft.building.CommercialBuildingConfig;
 import com.xiaoliang.simukraft.building.CommercialBuildingManager;
 import com.xiaoliang.simukraft.job.api.JobContext;
 import com.xiaoliang.simukraft.job.api.WorkTargetResolver;
-import com.xiaoliang.simukraft.job.jobs.commercialgeneric.CommercialWorkHandler;
-
 import java.util.Optional;
 
 public final class CommercialGenericTargetResolver implements WorkTargetResolver<CommercialGenericWorkTarget> {

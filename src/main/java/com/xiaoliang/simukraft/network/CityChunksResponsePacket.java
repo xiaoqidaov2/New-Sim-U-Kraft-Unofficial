@@ -7,7 +7,7 @@ import net.minecraftforge.network.NetworkEvent;
 import java.util.*;
 import java.util.function.Supplier;
 
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class CityChunksResponsePacket {
     private final UUID currentCityId;
     private final Map<UUID, Set<Long>> allCityChunks;

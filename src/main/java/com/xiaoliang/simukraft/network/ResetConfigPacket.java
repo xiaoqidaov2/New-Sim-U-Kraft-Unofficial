@@ -13,7 +13,7 @@ import java.util.function.Supplier;
  * 重置配置数据包
  * 客户端发送请求到服务器，要求重置配置为默认值
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class ResetConfigPacket {
 
     public ResetConfigPacket() {

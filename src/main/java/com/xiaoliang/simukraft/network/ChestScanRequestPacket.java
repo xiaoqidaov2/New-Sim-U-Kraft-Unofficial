@@ -21,7 +21,7 @@ import java.util.function.Supplier;
  * 箱子扫描请求数据包
  * 客户端请求服务器扫描指定位置的箱子内容
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class ChestScanRequestPacket {
     private final BlockPos chestPos;
 

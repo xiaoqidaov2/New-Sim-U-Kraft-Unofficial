@@ -11,7 +11,7 @@ import java.util.function.Supplier;
 /**
  * S→C 容器列表响应包 — 返回客户端盒子绑定的容器信息
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class ContainerListResponsePacket {
     private final BlockPos clientBlockPos;
     private final List<ContainerEntry> entries;

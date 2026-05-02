@@ -13,7 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
 
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class MaterialRequirementsResponsePacket {
     private final List<TaskMaterialInfo> tasks;
 

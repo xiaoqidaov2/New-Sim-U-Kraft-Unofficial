@@ -11,7 +11,7 @@ import java.util.function.Supplier;
 /**
  * 控制盒信息响应网络包（服务器 -> 客户端）
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class ControlBoxInfoResponsePacket {
     private final BlockPos controlBoxPos;
     private final String buildingName;

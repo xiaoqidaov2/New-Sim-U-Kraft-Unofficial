@@ -13,7 +13,7 @@ import java.util.function.Supplier;
  * 雇员列表响应数据包
  * 服务器发送所有雇佣数据给客户端
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class EmployeeListResponsePacket {
     private final Map<UUID, EmployeeListRequestPacket.EmployeeData> employees;
 

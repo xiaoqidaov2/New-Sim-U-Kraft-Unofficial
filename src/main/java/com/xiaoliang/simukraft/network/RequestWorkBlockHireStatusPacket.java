@@ -13,7 +13,7 @@ import java.util.function.Supplier;
  * 客户端 -> 服务器
  * 客户端打开工作方块界面时请求同步雇佣数据
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class RequestWorkBlockHireStatusPacket {
     private final BlockPos workBlockPos;
     private final String workBlockType;  // 工作方块类型

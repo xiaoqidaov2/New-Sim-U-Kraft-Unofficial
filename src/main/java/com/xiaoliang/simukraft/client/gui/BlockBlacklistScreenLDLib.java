@@ -17,7 +17,6 @@ import java.util.function.Consumer;
  * 用于配置规划师和建筑师不能处理的方块
  */
 @OnlyIn(Dist.CLIENT)
-@SuppressWarnings("null")
 public class BlockBlacklistScreenLDLib extends ConfigurableListScreenLDLib {
 
     public enum BlacklistType {

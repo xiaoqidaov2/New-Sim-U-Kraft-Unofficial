@@ -16,7 +16,7 @@ import java.util.function.Supplier;
 /**
  * C→S 请求容器列表
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class RequestContainerListPacket {
     private final BlockPos clientBlockPos;
 

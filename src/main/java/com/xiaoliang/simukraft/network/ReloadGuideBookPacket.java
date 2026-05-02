@@ -14,7 +14,7 @@ import java.util.function.Supplier;
  * 重载指南书数据包
  * 服务器发送通知到客户端，触发指南书热重载
  */
-@SuppressWarnings({"null", "unused"})
+
 public class ReloadGuideBookPacket {
 
     public ReloadGuideBookPacket() {

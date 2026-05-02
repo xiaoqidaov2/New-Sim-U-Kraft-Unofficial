@@ -26,8 +26,6 @@ public abstract class AbstractWorkService implements IWorkService {
     public void onServerStart(ServerLevel level) {
         if (level == null) return;
         MinecraftServer server = level.getServer();
-        if (server == null) return;
-        
         dataInitialized = false;
         timers.clear();
         

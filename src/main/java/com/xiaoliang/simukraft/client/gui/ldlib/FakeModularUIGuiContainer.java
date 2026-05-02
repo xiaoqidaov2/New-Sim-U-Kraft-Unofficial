@@ -31,7 +31,6 @@ public class FakeModularUIGuiContainer extends ModularUIGuiContainer {
     }
 
     @Override
-    @SuppressWarnings("null")
     public void setHoverTooltip(List<Component> tooltipTexts, ItemStack tooltipStack, @Nullable Font tooltipFont, @Nullable TooltipComponent tooltipComponent) {
         this.tooltipTexts = nn(tooltipTexts);
         this.tooltipStack = nn(tooltipStack);

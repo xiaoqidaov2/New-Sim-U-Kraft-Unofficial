@@ -14,7 +14,7 @@ import java.util.function.Supplier;
 /**
  * NPC寻路调试同步包
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class SyncNPCPathDebugPacket {
     private final UUID npcUuid;
     private final int currentIndex;

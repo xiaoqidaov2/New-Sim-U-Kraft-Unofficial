@@ -16,7 +16,7 @@ import java.util.function.Supplier;
  * C→S 请求物流网络数据
  * 客户端请求服务器发送仓库和客户端列表数据
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class RequestLogisticsNetworkPacket {
     private final BlockPos warehouseBlockPos;
     private final UUID warehouseId;

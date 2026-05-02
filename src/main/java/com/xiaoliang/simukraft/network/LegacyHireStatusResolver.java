@@ -14,7 +14,7 @@ import net.minecraft.server.level.ServerPlayer;
 import java.util.Map;
 import java.util.UUID;
 
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 final class LegacyHireStatusResolver {
     private LegacyHireStatusResolver() {
     }

@@ -21,7 +21,7 @@ import java.util.function.Supplier;
 /**
  * 请求居民信息的网络包（客户端 -> 服务器）
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class RequestResidentInfoPacket {
     private final BlockPos controlBoxPos;
     private final String controlBoxType;

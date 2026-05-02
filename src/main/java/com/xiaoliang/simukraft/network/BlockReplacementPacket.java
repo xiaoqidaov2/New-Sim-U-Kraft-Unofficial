@@ -17,7 +17,7 @@ import java.util.function.Supplier;
  * 方块替换请求数据包
  * 客户端发送选区内的方块替换请求到服务器
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class BlockReplacementPacket {
     private final BlockPos selectionStart;
     private final BlockPos selectionEnd;

@@ -19,7 +19,7 @@ import java.util.function.Supplier;
  * C→S 物流操作包。
  * 统一处理：创建/删除仓库、设定/删除端口 等操作。
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class LogisticsActionPacket {
     private static final Logger LOGGER = LogUtils.getLogger();
 

@@ -23,7 +23,7 @@ import java.util.Objects;
  * 仓库网格容器界面
  * 参考 Refined Storage 的设计，直接绘制物品而不是使用槽位
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings({ "unused"})
 public class WarehouseGridContainerScreen extends AbstractContainerScreen<WarehouseGridMenu> {
 
     private static final Logger LOGGER = LogManager.getLogger(WarehouseGridContainerScreen.class);
