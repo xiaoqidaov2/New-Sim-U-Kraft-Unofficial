@@ -35,56 +35,43 @@ import java.util.concurrent.ConcurrentHashMap;
 @SuppressWarnings("null")
 public class LunchBreakManager {
 
-    // 午休时间范围
-    public static final int LUNCH_BREAK_START = 6000;  // 中午12:00
-    public static final int LUNCH_BREAK_END = 8000;    // 下午16:00
+    public static final int LUNCH_BREAK_START = 6000;
+    public static final int LUNCH_BREAK_END = 8000;
 
-    // 固定午休的工作类型（不受配置文件影响）
     private static final Set<String> FIXED_LUNCH_BREAK_JOBS = Set.of(
-        "farmer",            // 农民
-        "warehouse_manager", // 仓库管理员
-        "builder",           // 建筑师
-        "planner"            // 规划师
+        "farmer",
+        "warehouse_manager",
+        "builder",
+        "planner"
     );
 
-    // 可配置午休的工作类型（根据配置文件）
     private static final Set<String> CONFIGURABLE_LUNCH_BREAK_JOBS = Set.of(
-        "industrial"         // 工业工人
+        "industrial"
     );
 
-    // 记录NPC午休前的工作位置（用于午休结束后返回）
-    // menglannnn: 这个Map只用于运行时，不需要持久化，因为NPC的workSubState已经持久化了
     private static final Map<UUID, BlockPos> lunchBreakWorkPositions = new ConcurrentHashMap<>();
+    private static final Map<UUID, WorkStatus> lunchBreakPreviousWorkStatus = new ConcurrentHashMap<>();
+    private static final Map<UUID, String> lunchBreakPreviousJob = new ConcurrentHashMap<>();
 
-    /**
-     * 检查当前是否在午休时间
-     */
     public static boolean isLunchBreakTime(long dayTime) {
         long timeOfDay = dayTime % 24000L;
         return timeOfDay >= LUNCH_BREAK_START && timeOfDay < LUNCH_BREAK_END;
     }
 
-    /**
-     * 检查NPC是否应该午休
-     * menglannnn: 农民和仓库管理员固定午休，工商业根据配置决定
-     */
     public static boolean shouldHaveLunchBreak(CustomEntity npc) {
         if (npc == null) return false;
 
         String job = npc.getJob();
         if (job == null || job.isEmpty()) return false;
 
-        // 固定午休的职业
         if (FIXED_LUNCH_BREAK_JOBS.contains(job)) {
             return true;
         }
 
-        // 可配置午休的职业
         if (CONFIGURABLE_LUNCH_BREAK_JOBS.contains(job)) {
             return shouldIndustrialHaveLunchBreak(npc);
         }
 
-        // 商业职业（如肉铺老板、水果店老板等）
         if (isCommercialJob(job)) {
             return shouldCommercialHaveLunchBreak(npc);
         }
@@ -92,15 +79,12 @@ public class LunchBreakManager {
         return false;
     }
 
-    /**
-     * 检查工业工人是否应该午休（根据配置文件）
-     */
     private static boolean shouldIndustrialHaveLunchBreak(CustomEntity npc) {
         BlockPos workPos = findIndustrialWorkPosition(npc.getUUID(), npc.level().getServer());
-        if (workPos == null) return true; // 默认午休
+        if (workPos == null) return true;
 
         IndustrialBuildingConfig config = getIndustrialConfig(npc.level().getServer(), workPos);
-        if (config == null) return true; // 默认午休
+        if (config == null) return true;
 
         String selectedRecipeId = com.xiaoliang.simukraft.building.ControlBoxDataManager.getSelectedRecipe(
             npc.level().getServer(), workPos);
@@ -108,102 +92,68 @@ public class LunchBreakManager {
         return config.isHasLunchBreakForRecipe(selectedRecipeId);
     }
 
-    /**
-     * 检查商业职业是否应该午休（根据配置文件）
-     */
     private static boolean shouldCommercialHaveLunchBreak(CustomEntity npc) {
         BlockPos workPos = findCommercialWorkPosition(npc.getUUID(), npc.level().getServer());
-        if (workPos == null) return true; // 默认午休
+        if (workPos == null) return true;
 
         CommercialBuildingConfig config = getCommercialConfig(npc.level().getServer(), workPos);
-        if (config == null) return true; // 默认午休
+        if (config == null) return true;
 
         return config.isHasLunchBreak();
     }
 
-    /**
-     * 检查是否是商业职业
-     * simukraft: 从配置文件读取，而不是硬编码
-     */
     private static boolean isCommercialJob(String job) {
         return CommercialBuildingManager.isCommercialJobType(job);
     }
 
-    /**
-     * 检查NPC是否应该开始午休
-     * menglannnn: 使用NPC的workSubState状态来判断，支持持久化
-     */
     public static boolean shouldStartLunchBreak(CustomEntity npc, long dayTime) {
         if (npc == null) return false;
         if (!isLunchBreakTime(dayTime)) return false;
-
-        // 如果已经在午休状态，不再重复开始（这个检查应该在最前面）
         if (npc.getWorkSubState() == WorkSubState.LUNCH_BREAK) {
             return false;
         }
-
         if (npc.getWorkStatus() != WorkStatus.WORKING) return false;
 
         return shouldHaveLunchBreak(npc);
     }
 
-    /**
-     * 检查NPC是否应该结束午休
-     * menglannnn: 使用NPC的workSubState状态来判断，支持持久化
-     */
     public static boolean shouldEndLunchBreak(CustomEntity npc, long dayTime) {
         if (npc == null) return false;
-        if (isLunchBreakTime(dayTime)) return false; // 还在午休时间内
+        if (isLunchBreakTime(dayTime)) return false;
         if (npc.getWorkSubState() != WorkSubState.LUNCH_BREAK) return false;
 
         return true;
     }
 
-    /**
-     * 开始午休（完全仿造休息的写法）
-     * menglannnn: 记录工作位置，设置午休状态，停止所有活动
-     */
     public static void startLunchBreak(CustomEntity npc, BlockPos workPos) {
-        if (npc == null) return;
+        if (npc == null || workPos == null) return;
 
         UUID npcId = npc.getUUID();
-
-        // 记录工作位置
         lunchBreakWorkPositions.put(npcId, workPos.immutable());
+        lunchBreakPreviousWorkStatus.put(npcId, npc.getWorkStatus());
+        lunchBreakPreviousJob.put(npcId, npc.getJob());
 
-        // 设置午休状态（这个状态会被保存到NBT）
         npc.setWorkSubState(WorkSubState.LUNCH_BREAK);
         npc.setStatusLabel("gui.npc.status.lunch_break");
 
-        // 停止NPC的所有活动（仿造休息的写法）
         stopAllNPCActivities(npc);
 
         Simukraft.LOGGER.debug("[LunchBreakManager] NPC {} 开始午休，工作位置: {}",
             npc.getFullName(), workPos);
     }
 
-    /**
-     * 停止NPC的所有活动，但允许移动（仿造休息的写法）
-     */
     private static void stopAllNPCActivities(CustomEntity npc) {
         if (npc == null) return;
 
-        // 设置isWorking为false，允许NPC移动
         npc.setWorking(false);
-
-        // 恢复AI
         npc.setNoAi(false);
-
-        // 清除目标
         npc.setTarget(null);
         npc.setLastHurtByMob(null);
 
-        // 停止建造任务
         if (npc.getConstructionTask() != null) {
             npc.setConstructionTask(null);
         }
 
-        // 清除休息界限，让NPC午休期间可以自由活动
         com.xiaoliang.simukraft.entity.ai.NPCBoundaryManager boundaryManager = npc.getBoundaryManager();
         if (boundaryManager != null) {
             boundaryManager.clearRestrictedArea();
@@ -212,73 +162,160 @@ public class LunchBreakManager {
         Simukraft.LOGGER.debug("[LunchBreakManager] NPC {} 的所有活动已停止，已设置为可移动状态", npc.getFullName());
     }
 
-    /**
-     * 结束午休，返回工作（完全仿造休息的写法）
-     * menglannnn: 午休结束后恢复工作状态，传送回工作位置
-     */
     public static void endLunchBreak(CustomEntity npc, ServerLevel level) {
         if (npc == null || level == null) return;
 
         UUID npcId = npc.getUUID();
-
-        // 获取工作位置
         BlockPos workPos = lunchBreakWorkPositions.get(npcId);
+        WorkStatus previousWorkStatus = lunchBreakPreviousWorkStatus.getOrDefault(npcId, WorkStatus.WORKING);
+        String previousJob = lunchBreakPreviousJob.getOrDefault(npcId, npc.getJob());
 
-        if (workPos != null) {
-            if (!npc.moveToWithNewPathfinder(workPos, 1.0D)) {
-                double distance = npc.position().distanceTo(new net.minecraft.world.phys.Vec3(
-                    workPos.getX() + 0.5, workPos.getY(), workPos.getZ() + 0.5));
-                Simukraft.LOGGER.debug("[LunchBreakManager] NPC {} 午休结束寻路失败，距离工作位置{}格，改为传送回工作位置",
-                    npc.getFullName(), distance);
-                spawnTeleportParticles(npc);
-                npc.teleportTo(workPos.getX() + 0.5, workPos.getY() + 1, workPos.getZ() + 0.5);
-                spawnTeleportParticles(npc);
-                npc.stopNewPathfinder();
-            }
+        if (workPos == null) {
+            workPos = findWorkPosition(npc);
         }
 
-        // 恢复工作状态（仿造休息的写法）
-        restoreWorkStatus(npc, npcId, workPos, level);
+        stopSleepingIfNeeded(npc);
+        npc.setWorking(false);
 
-        // 清理运行时记录
-        lunchBreakWorkPositions.remove(npcId);
+        if (previousWorkStatus == WorkStatus.WORKING && previousJob != null && !previousJob.isBlank() && !"unemployed".equals(previousJob)) {
+            if (workPos != null) {
+                double distance = npc.position().distanceTo(new net.minecraft.world.phys.Vec3(workPos.getX() + 0.5, workPos.getY(), workPos.getZ() + 0.5));
+                boolean preferImmediateTeleport = CommercialBuildingManager.isCommercialJobType(previousJob)
+                    || findIndustrialWorkPosition(npcId, level.getServer()) != null;
 
-        Simukraft.LOGGER.debug("[LunchBreakManager] NPC {} 结束午休，返回工作位置并恢复工作",
-            npc.getFullName());
-    }
+                if (distance > 10.0 || (preferImmediateTeleport && distance > 3.0)) {
+                    Simukraft.LOGGER.debug("[LunchBreakManager] NPC {} 午休结束后距离工作岗位{}格，直接传送回工作岗位: {}",
+                        npc.getFullName(), distance, workPos);
+                    spawnTeleportParticles(npc);
+                    npc.teleportTo(workPos.getX() + 0.5, workPos.getY() + 1, workPos.getZ() + 0.5);
+                    spawnTeleportParticles(npc);
+                    restoreWorkStatus(npc, npcId, previousWorkStatus, previousJob, level);
+                } else if (distance > 3.0) {
+                    Simukraft.LOGGER.debug("[LunchBreakManager] NPC {} 午休结束后开始寻路返回工作岗位: {}",
+                        npc.getFullName(), workPos);
+                    restoreWorkStatus(npc, npcId, previousWorkStatus, previousJob, level);
+                    npc.setStatusLabel("gui.npc.status.going_to_work");
+                    clearLunchBreakData(npcId, false);
+                    com.xiaoliang.simukraft.entity.ai.NPCBoundaryManager boundaryManager = npc.getBoundaryManager();
+                    if (boundaryManager != null) {
+                        boundaryManager.clearRestrictedArea();
+                    }
+                    npc.setWorkSubState(WorkSubState.RESTING);
+                    npc.moveToWithNewPathfinder(workPos, 1.0D);
+                    return;
+                } else {
+                    restoreWorkStatus(npc, npcId, previousWorkStatus, previousJob, level);
+                }
+            } else {
+                restoreWorkStatus(npc, npcId, previousWorkStatus, previousJob, level);
+            }
+        } else {
+            npc.setWorkStatus(WorkStatus.IDLE);
+            npc.setWorkSubState(WorkSubState.NONE);
+            npc.setWorking(false);
+            npc.setStatusLabel(null);
+        }
 
-    /**
-     * 恢复NPC的工作状态（仿造休息的写法）
-     */
-    private static void restoreWorkStatus(CustomEntity npc, UUID npcId, BlockPos workPos, ServerLevel level) {
-        // 恢复NPC的工作状态
-        npc.setWorkStatus(WorkStatus.WORKING);
-        npc.setWorkSubState(WorkSubState.WORKING);
-        npc.setWorking(true);
-
-        // 清除状态标签
-        npc.setStatusLabel(null);
-
-        // 清除休息界限，防止NPC被限制在住宅范围内无法前往工作岗位
         com.xiaoliang.simukraft.entity.ai.NPCBoundaryManager boundaryManager = npc.getBoundaryManager();
         if (boundaryManager != null) {
             boundaryManager.clearRestrictedArea();
         }
 
-        // 恢复建筑师的建造任务
-        String job = npc.getJob();
-        if ("builder".equals(job) && level != null && level.getServer() != null) {
+        clearLunchBreakData(npcId, true);
+
+        Simukraft.LOGGER.debug("[LunchBreakManager] NPC {} 结束午休，恢复原状态: {}，原职业: {}",
+            npc.getFullName(), previousWorkStatus, previousJob);
+    }
+
+    private static void restoreWorkStatus(CustomEntity npc, UUID npcId, WorkStatus previousWorkStatus, String previousJob, ServerLevel level) {
+        stopSleepingIfNeeded(npc);
+
+        if (previousJob != null && !previousJob.isBlank()) {
+            npc.setJob(previousJob);
+        }
+
+        npc.setWorkStatus(previousWorkStatus);
+
+        if (previousWorkStatus == WorkStatus.WORKING) {
+            npc.setWorkSubState(WorkSubState.WORKING);
+            npc.setWorking(true);
+            restoreJobSpecificWorkState(npc, npcId, previousJob, level);
+        } else {
+            npc.setWorkSubState(WorkSubState.NONE);
+            npc.setWorking(false);
+        }
+
+        npc.setStatusLabel(null);
+
+        if ("builder".equals(previousJob) && level != null && level.getServer() != null) {
             npc.setConstructionTask(null);
             BlockPos buildBoxPos = findBuilderWorkPosition(npcId, level.getServer());
             if (buildBoxPos != null) {
                 restoreBuilderTaskFromJson(level.getServer(), npc, buildBoxPos);
             }
         }
+
+        clearLunchBreakData(npcId, true);
     }
 
-    /**
-     * 生成传送粒子效果（仿造休息的写法）
-     */
+    private static void restoreJobSpecificWorkState(CustomEntity npc, UUID npcId, String previousJob, ServerLevel level) {
+        if (npc == null || previousJob == null || previousJob.isBlank() || level == null || level.getServer() == null) {
+            return;
+        }
+
+        BlockPos workPos = findWorkPositionByJob(npcId, level.getServer(), previousJob);
+        if (workPos == null) {
+            return;
+        }
+
+        if ("builder".equals(previousJob)) {
+            return;
+        }
+
+        if ("farmer".equals(previousJob)) {
+            com.xiaoliang.simukraft.job.jobs.farmer.FarmerWorkService.INSTANCE.restoreWorkState(npc, npcId, level);
+            return;
+        }
+
+        if (CommercialBuildingManager.isCommercialJobType(previousJob)) {
+            String buildingFileName = com.xiaoliang.simukraft.job.jobs.commercialgeneric.CommercialWorkHandler.getBuildingFileName(level, workPos);
+            if (buildingFileName != null) {
+                com.xiaoliang.simukraft.job.jobs.commercialgeneric.CommercialWorkHandler.restoreNpcAfterRest(npc, level, workPos, buildingFileName);
+            }
+            return;
+        }
+
+        String industrialBuildingFileName = com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler.getBuildingFileName(level, workPos);
+        if (industrialBuildingFileName != null) {
+            com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler.restoreNpcAfterRest(npc, level, workPos, industrialBuildingFileName);
+            return;
+        }
+
+        if ("warehouse_manager".equals(previousJob)) {
+            com.xiaoliang.simukraft.job.jobs.warehousemanager.WarehouseManagerWorkService.INSTANCE.restoreWorkState(npc, npcId, level);
+        }
+    }
+
+    private static void stopSleepingIfNeeded(CustomEntity npc) {
+        if (npc == null) {
+            return;
+        }
+        if (npc.isSleeping()) {
+            npc.stopSleeping();
+        }
+    }
+
+    private static void clearLunchBreakData(UUID npcId, boolean clearRuntimeWorkPos) {
+        if (npcId == null) {
+            return;
+        }
+        lunchBreakPreviousWorkStatus.remove(npcId);
+        lunchBreakPreviousJob.remove(npcId);
+        if (clearRuntimeWorkPos) {
+            lunchBreakWorkPositions.remove(npcId);
+        }
+    }
+
     private static void spawnTeleportParticles(CustomEntity npc) {
         if (npc.level() instanceof ServerLevel serverLevel) {
             for (int i = 0; i < 20; i++) {
@@ -293,18 +330,13 @@ public class LunchBreakManager {
         }
     }
 
-    /**
-     * 从JSON恢复建筑师的建造任务（完全仿造休息的写法）
-     */
     private static void restoreBuilderTaskFromJson(MinecraftServer server, CustomEntity npc, BlockPos buildBoxPos) {
         if (server == null || npc == null || buildBoxPos == null) return;
 
-        // 如果NPC已经有建造任务，不需要恢复
         if (npc.getConstructionTask() != null) {
             return;
         }
 
-        // 从持久化存储中加载建造任务
         com.xiaoliang.simukraft.world.ConstructionTaskData.TaskInfo taskInfo =
             com.xiaoliang.simukraft.world.ConstructionTaskData.loadTask(server, npc.getUUID());
         if (taskInfo == null) {
@@ -313,7 +345,6 @@ public class LunchBreakManager {
         }
 
         try {
-            // 验证taskInfo的必需字段
             if (taskInfo.buildingName == null || taskInfo.category == null ||
                 taskInfo.startPos == null || taskInfo.buildBoxPos == null ||
                 taskInfo.facing == null || taskInfo.displayName == null) {
@@ -322,7 +353,6 @@ public class LunchBreakManager {
                 return;
             }
 
-            // 验证建筑盒是否还存在
             ServerLevel level = server.overworld();
             net.minecraft.world.level.block.state.BlockState buildBoxState = level.getBlockState(taskInfo.buildBoxPos);
             if (buildBoxState.isAir()) {
@@ -332,7 +362,6 @@ public class LunchBreakManager {
                 return;
             }
 
-            // 重新创建建造任务
             com.xiaoliang.simukraft.building.ConstructionTask task = new com.xiaoliang.simukraft.building.ConstructionTask(
                 taskInfo.buildingName,
                 taskInfo.category,
@@ -344,10 +373,7 @@ public class LunchBreakManager {
                 level
             );
 
-            // 恢复建造进度
             task.setCurrentBlockIndex(taskInfo.currentBlockIndex);
-
-            // 设置NPC的建造任务
             npc.setConstructionTask(task);
 
             Simukraft.LOGGER.debug("[LunchBreakManager] 成功恢复建造任务 - NPC: {}, 建筑: {}, 进度: {}/{}",
@@ -360,14 +386,9 @@ public class LunchBreakManager {
         }
     }
 
-    /**
-     * 恢复午休状态
-     * menglannnn: NPC加载时调用，恢复工作位置等运行时数据
-     */
     public static void restoreLunchBreakState(CustomEntity npc) {
         if (npc == null) return;
 
-        // 如果NPC处于午休状态，但工作位置记录丢失了，尝试重新查找
         if (npc.getWorkSubState() == WorkSubState.LUNCH_BREAK) {
             UUID npcId = npc.getUUID();
             if (!lunchBreakWorkPositions.containsKey(npcId)) {
@@ -378,34 +399,26 @@ public class LunchBreakManager {
                         npc.getFullName(), workPos);
                 }
             }
+            lunchBreakPreviousWorkStatus.putIfAbsent(npcId, WorkStatus.WORKING);
+            lunchBreakPreviousJob.putIfAbsent(npcId, npc.getJob());
         }
     }
 
-    /**
-     * 获取NPC的工作位置
-     */
     @Nullable
     public static BlockPos getWorkPosition(UUID npcId) {
         return lunchBreakWorkPositions.get(npcId);
     }
 
-    /**
-     * 处理所有NPC的午休逻辑
-     * menglannnn: 由WorldEvents.tick事件调用
-     */
     public static void handleLunchBreak(ServerLevel level) {
         if (level == null) return;
 
         long dayTime = level.getDayTime();
 
-        // 遍历所有在线NPC
         for (var entity : level.getAllEntities()) {
             if (!(entity instanceof CustomEntity npc)) continue;
 
-            // 恢复午休状态（用于NPC重新加载后的情况）
             restoreLunchBreakState(npc);
 
-            // 检查是否应该开始午休
             if (shouldStartLunchBreak(npc, dayTime)) {
                 BlockPos workPos = findWorkPosition(npc);
                 if (workPos != null) {
@@ -413,17 +426,12 @@ public class LunchBreakManager {
                 }
             }
 
-            // 检查是否应该结束午休
             if (shouldEndLunchBreak(npc, dayTime)) {
                 endLunchBreak(npc, level);
             }
         }
     }
 
-    /**
-     * 查找NPC的工作位置
-     * menglannnn: 根据职业类型从不同数据源获取
-     */
     @Nullable
     private static BlockPos findWorkPosition(CustomEntity npc) {
         if (npc == null) return null;
@@ -432,6 +440,15 @@ public class LunchBreakManager {
         UUID npcId = npc.getUUID();
         MinecraftServer server = npc.level().getServer();
         if (server == null) return null;
+
+        return findWorkPositionByJob(npcId, server, job);
+    }
+
+    @Nullable
+    private static BlockPos findWorkPositionByJob(UUID npcId, MinecraftServer server, String job) {
+        if (job == null || server == null || npcId == null) {
+            return null;
+        }
 
         return switch (job) {
             case "builder" -> findBuilderWorkPosition(npcId, server);
@@ -443,9 +460,6 @@ public class LunchBreakManager {
         };
     }
 
-    /**
-     * 查找建筑师的工作位置
-     */
     @Nullable
     private static BlockPos findBuilderWorkPosition(UUID npcId, MinecraftServer server) {
         var hires = com.xiaoliang.simukraft.world.BuildBoxHiredData.loadHiredBuilders(server);
@@ -457,9 +471,6 @@ public class LunchBreakManager {
         return null;
     }
 
-    /**
-     * 查找规划师的工作位置
-     */
     @Nullable
     private static BlockPos findPlannerWorkPosition(UUID npcId, MinecraftServer server) {
         var hires = com.xiaoliang.simukraft.world.BuildBoxHiredData.loadHiredPlanners(server);
@@ -471,41 +482,59 @@ public class LunchBreakManager {
         return null;
     }
 
-    /**
-     * 查找农民的工作位置
-     */
     @Nullable
     private static BlockPos findFarmerWorkPosition(UUID npcId) {
-        Map<BlockPos, UUID> hires = com.xiaoliang.simukraft.world.FarmlandHiredData.getHiredFarmers();
-        for (var entry : hires.entrySet()) {
-            if (entry.getValue().equals(npcId)) {
+        if (npcId == null) {
+            return null;
+        }
+        Map<BlockPos, UUID> hiredFarmers = com.xiaoliang.simukraft.world.FarmlandHiredData.getHiredFarmers();
+        for (Map.Entry<BlockPos, UUID> entry : hiredFarmers.entrySet()) {
+            if (npcId.equals(entry.getValue())) {
                 return entry.getKey();
             }
         }
         return null;
     }
 
-    /**
-     * 查找仓库管理员的工作位置
-     */
     @Nullable
     private static BlockPos findWarehouseWorkPosition(UUID npcId, MinecraftServer server) {
-        var hires = com.xiaoliang.simukraft.world.LogisticsHiredData.getServerBoxHiredNpcs(server);
-        for (var entry : hires.entrySet()) {
-            if (entry.getValue().equals(npcId)) {
+        if (server == null || npcId == null) {
+            return null;
+        }
+        Map<BlockPos, UUID> hiredManagers = com.xiaoliang.simukraft.world.LogisticsHiredData.getServerBoxHiredNpcs(server);
+        for (Map.Entry<BlockPos, UUID> entry : hiredManagers.entrySet()) {
+            if (npcId.equals(entry.getValue())) {
                 return entry.getKey();
             }
         }
         return null;
     }
 
-    /**
-     * 查找工业工人的工作位置
-     */
     @Nullable
-    static BlockPos findIndustrialWorkPosition(UUID npcId, MinecraftServer server) {
-        var hires = com.xiaoliang.simukraft.world.IndustrialHiredData.loadHiredEmployees(server);
-        for (var entry : hires.entrySet()) {
+    private static BlockPos findIndustrialWorkPosition(UUID npcId, MinecraftServer server) {
+        var hiredEmployees = com.xiaoliang.simukraft.world.IndustrialHiredData.loadHiredEmployees(server);
+        for (var entry : hiredEmployees.entrySet()) {
+            var hireInfo = entry.getValue();
+            if (hireInfo != null && hireInfo.getNpcUuid().equals(npcId)) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
+
+    @Nullable
+    private static BlockPos findCommercialWorkPosition(UUID npcId, MinecraftServer server) {
+        var employment = com.xiaoliang.simukraft.employment.service.EmploymentServices.get(server)
+                .findByNpc(npcId)
+                .filter(assignment -> assignment.workBlockType() == com.xiaoliang.simukraft.employment.domain.WorkBlockType.COMMERCIAL_CONTROL_BOX)
+                .map(com.xiaoliang.simukraft.employment.domain.EmploymentAssignment::workplacePos)
+                .orElse(null);
+        if (employment != null) {
+            return employment;
+        }
+
+        var hiredEmployees = com.xiaoliang.simukraft.world.CommercialHiredData.loadHiredEmployees(server);
+        for (var entry : hiredEmployees.entrySet()) {
             if (entry.getValue().getNpcUuid().equals(npcId)) {
                 return entry.getKey();
             }
@@ -513,41 +542,19 @@ public class LunchBreakManager {
         return null;
     }
 
-    /**
-     * 查找商业职业的工作位置
-     */
     @Nullable
-    static BlockPos findCommercialWorkPosition(UUID npcId, MinecraftServer server) {
-        var hires = com.xiaoliang.simukraft.world.CommercialHiredData.loadHiredEmployees(server);
-        for (var entry : hires.entrySet()) {
-            if (entry.getValue().getNpcUuid().equals(npcId)) {
-                return entry.getKey();
-            }
-        }
-        return null;
+    private static IndustrialBuildingConfig getIndustrialConfig(MinecraftServer server, BlockPos workPos) {
+        if (server == null || workPos == null) return null;
+        String buildingFileName = com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler.getBuildingFileName(server.overworld(), workPos);
+        if (buildingFileName == null) return null;
+        return IndustrialBuildingManager.getConfig(buildingFileName);
     }
 
-    /**
-     * 获取工业建筑配置
-     */
     @Nullable
-    private static IndustrialBuildingConfig getIndustrialConfig(MinecraftServer server, BlockPos pos) {
-        var hires = com.xiaoliang.simukraft.world.IndustrialHiredData.loadHiredEmployees(server);
-        var hireInfo = hires.get(pos);
-        if (hireInfo == null) return null;
-
-        return IndustrialBuildingManager.getConfig(hireInfo.getBuildingFileName());
-    }
-
-    /**
-     * 获取商业建筑配置
-     */
-    @Nullable
-    private static CommercialBuildingConfig getCommercialConfig(MinecraftServer server, BlockPos pos) {
-        var hires = com.xiaoliang.simukraft.world.CommercialHiredData.loadHiredEmployees(server);
-        var hireInfo = hires.get(pos);
-        if (hireInfo == null) return null;
-
-        return CommercialBuildingManager.getConfig(hireInfo.getBuildingFileName());
+    private static CommercialBuildingConfig getCommercialConfig(MinecraftServer server, BlockPos workPos) {
+        if (server == null || workPos == null) return null;
+        String buildingFileName = com.xiaoliang.simukraft.job.jobs.commercialgeneric.CommercialWorkHandler.getBuildingFileName(server.overworld(), workPos);
+        if (buildingFileName == null) return null;
+        return CommercialBuildingManager.getConfig(buildingFileName);
     }
 }
