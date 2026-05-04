@@ -419,14 +419,14 @@ public class CommercialWorkHandler {
             }
 
             int newStock = currentStock + actualRestockAmount;
-                CommercialHiredData.updateStockFull(pos, trade.getItemId(), newStock, maxStock,
-                        gameTime, dailyBoughtAmount, maxBuyAmount);
+            CommercialHiredData.updateStockFull(pos, trade.getItemId(), newStock, maxStock,
+                    gameTime, dailyBoughtAmount, maxBuyAmount);
 
-                if (restockedItems.length() > 0) {
-                    restockedItems.append(", ");
-                }
+            if (restockedItems.length() > 0) {
+                restockedItems.append(", ");
+            }
             restockedItems.append(trade.getItemId()).append(" x").append(actualRestockAmount);
-                hasRestocked = true;
+            hasRestocked = true;
         }
 
         if (hasRestocked) {
