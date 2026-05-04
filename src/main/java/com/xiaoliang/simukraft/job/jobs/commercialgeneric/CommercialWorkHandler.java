@@ -366,11 +366,6 @@ public class CommercialWorkHandler {
     public static void processRestock(BlockPos pos, ServerLevel level, CommercialBuildingConfig config) {
         if (pos == null || level == null || config == null) return;
 
-        // 需要原料前置的商业建筑改为开工时从输入建筑取料，不走自动补货。
-        if (config.hasMaterialRequirements()) {
-            return;
-        }
-
         // 确保库存数据已加载
         CommercialHiredData.loadStockData(level.getServer());
 
@@ -386,7 +381,11 @@ public class CommercialWorkHandler {
         boolean hasRestocked = false;
         StringBuilder restockedItems = new StringBuilder();
 
-        // 遍历所有交易物品，执行补货
+        // 遍历所有交易物品，逐项决定是否补货以及如何补货：
+        // - 不需要原料的商品：照旧补货
+        // - 需要原料的商品：从附近箱子消耗对应原料，按可用量补货
+        // 这样在 requireMaterialsForSale=true 的店里，不需要原料的商品也能正常上架，
+        // 需要原料的商品也能在原料齐全时把库存补回来（修复"买空后未补货"的反馈）。
         for (CommercialBuildingConfig.TradeItem trade : config.getTrades()) {
             CommercialHiredData.StockInfo stockInfo = CommercialHiredData.getStock(pos, trade.getItemId());
             int currentStock = stockInfo != null ? stockInfo.getCurrentStock() : 0;
@@ -394,26 +393,40 @@ public class CommercialWorkHandler {
             int dailyBoughtAmount = stockInfo != null ? stockInfo.getDailyBoughtAmount() : 0;
             int maxBuyAmount = stockInfo != null ? stockInfo.getMaxBuyAmount() : maxStock / 64;
 
-            if (currentStock < maxStock) {
-                int restockAmount = Math.min(trade.getRestockAmount(), maxStock - currentStock);
-                int newStock = currentStock + restockAmount;
+            if (currentStock >= maxStock) {
+                // 库存已满，确保字段完整
+                if (stockInfo == null || stockInfo.getMaxStock() == 0) {
+                    CommercialHiredData.updateStockFull(pos, trade.getItemId(), currentStock, maxStock,
+                            stockInfo != null ? stockInfo.getLastRestockTime() : 0, dailyBoughtAmount, maxBuyAmount);
+                }
+                continue;
+            }
 
+            int requestedAmount = Math.min(trade.getRestockAmount(), maxStock - currentStock);
+            if (requestedAmount <= 0) {
+                continue;
+            }
+
+            int actualRestockAmount;
+            if (trade.requiresMaterial()) {
+                actualRestockAmount = restockMaterialBackedTrade(pos, level, trade, requestedAmount);
+            } else {
+                actualRestockAmount = requestedAmount;
+            }
+
+            if (actualRestockAmount <= 0) {
+                continue;
+            }
+
+            int newStock = currentStock + actualRestockAmount;
                 CommercialHiredData.updateStockFull(pos, trade.getItemId(), newStock, maxStock,
                         gameTime, dailyBoughtAmount, maxBuyAmount);
 
                 if (restockedItems.length() > 0) {
                     restockedItems.append(", ");
                 }
-                restockedItems.append(trade.getItemId()).append(" x").append(restockAmount);
-
+            restockedItems.append(trade.getItemId()).append(" x").append(actualRestockAmount);
                 hasRestocked = true;
-            } else {
-                // 即使没有补货，也要确保库存信息被正确初始化
-                if (stockInfo == null || stockInfo.getMaxStock() == 0) {
-                    CommercialHiredData.updateStockFull(pos, trade.getItemId(), currentStock, maxStock,
-                            stockInfo != null ? stockInfo.getLastRestockTime() : 0, dailyBoughtAmount, maxBuyAmount);
-                }
-            }
         }
 
         if (hasRestocked) {
@@ -423,6 +436,72 @@ public class CommercialWorkHandler {
             // 保存库存数据
             CommercialHiredData.saveStockData(level.getServer());
         }
+    }
+
+    /**
+     * 根据附近箱子里的原料，为需要原料的商品计算并消耗实际可补货数量。
+     * 返回真正补到的件数（0 表示原料不足，本次不补货）。
+     */
+    private static int restockMaterialBackedTrade(BlockPos pos, ServerLevel level,
+                                                  CommercialBuildingConfig.TradeItem trade,
+                                                  int requestedAmount) {
+        String requiredMaterial = trade.getRequiredMaterial();
+        int requiredCount = trade.getRequiredMaterialCount();
+        if (requiredMaterial == null || requiredMaterial.isEmpty() || requiredCount <= 0) {
+            return 0;
+        }
+
+        ItemStack materialTemplate = parseItemStack(requiredMaterial);
+        if (materialTemplate.isEmpty()) {
+            return 0;
+        }
+
+        int availableMaterials = countMaterialsInNearbyContainers(level, pos, materialTemplate);
+        int producible = Math.min(requestedAmount, availableMaterials / requiredCount);
+        if (producible <= 0) {
+            return 0;
+        }
+
+        int materialsToConsume = producible * requiredCount;
+        int actuallyConsumed = consumeMaterialsForRestock(level, pos, materialTemplate, materialsToConsume);
+        return actuallyConsumed / requiredCount;
+    }
+
+    /**
+     * 从建筑周围 5×5×5（水平 5、垂直 ±2）范围内的箱子消耗指定原料。
+     * 用于补货逻辑——保证按 requiredCount 步进消耗，避免把容器一次性掏空。
+     */
+    private static int consumeMaterialsForRestock(ServerLevel level, BlockPos centerPos,
+                                                  ItemStack itemTemplate, int amount) {
+        if (level == null || centerPos == null || itemTemplate.isEmpty() || amount <= 0) {
+            return 0;
+        }
+        return ContainerUtils.executeOnMainThread(level, () -> {
+            int remaining = amount;
+            int consumed = 0;
+            for (int dx = -5; dx <= 5 && remaining > 0; dx++) {
+                for (int dy = -2; dy <= 2 && remaining > 0; dy++) {
+                    for (int dz = -5; dz <= 5 && remaining > 0; dz++) {
+                        BlockPos checkPos = centerPos.offset(dx, dy, dz);
+                        if (!ContainerUtils.isContainer(level, checkPos)) {
+                            continue;
+                        }
+                        int available = ContainerUtils.countItem(level, checkPos, itemTemplate);
+                        if (available <= 0) {
+                            continue;
+                        }
+                        int toConsume = Math.min(available, remaining);
+                        ItemStack consumeStack = itemTemplate.copy();
+                        consumeStack.setCount(toConsume);
+                        if (ContainerUtils.consumeItem(level, checkPos, consumeStack)) {
+                            remaining -= toConsume;
+                            consumed += toConsume;
+                        }
+                    }
+                }
+            }
+            return consumed;
+        });
     }
 
     // 开工时间窗口：1000 tick = 50秒，确保不会错过
