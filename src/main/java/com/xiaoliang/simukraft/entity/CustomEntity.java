@@ -939,9 +939,15 @@ public class CustomEntity extends PathfinderMob {
                                 serverLevel.destroyBlock(targetPos, false);
                             }
 
-                            // 放置目标方块
-                            serverLevel.setBlock(targetPos, targetState, 3);
-                            
+                            try {
+                                // 放置目标方块
+                                serverLevel.setBlock(targetPos, targetState, 3);
+                            } catch (Exception e) {
+                                //Simukraft.LOGGER.error("[CustomEntity] 放置方块失败 at {}: {}", targetPos, targetState, e);
+                                placedBlock = true;
+                                continue;
+                            }
+
                             // 修复：如果是双格方块（门或床），同时放置另一半
                             if (isDoubleBlock(targetState)) {
                                 BlockPos otherHalfPos = getOtherHalfPos(targetState, targetPos);
@@ -954,11 +960,15 @@ public class CustomEntity extends PathfinderMob {
                                             serverLevel.destroyBlock(otherHalfPos, false);
                                         }
                                         // 放置另一半
-                                        serverLevel.setBlock(otherHalfPos, otherHalfState, 3);
+                                        try {
+                                            serverLevel.setBlock(otherHalfPos, otherHalfState, 3);
+                                        } catch (Exception e) {
+                                            //Simukraft.LOGGER.error("[CustomEntity] 放置双格方块另一半失败 at {}: {}", otherHalfPos, otherHalfState, e);
+                                        }
                                     }
                                 }
                             }
-                            
+
                             placedBlock = true;
                             
                             // 重置建造冷却计时器
@@ -1161,8 +1171,8 @@ public class CustomEntity extends PathfinderMob {
         int npcAge = getNpcAge();
         int npcLifespan = getLifespan();
         NPCDataManager.recordNPCData(this.level().getServer(), npcId, npcName, skinName, genderStr, this.getUUID(), this.cityId, npcAge, this.isSick, npcLifespan);
-        Simukraft.LOGGER.debug("[CustomEntity] Recorded NPC data: id={}, name={}, skin={}, gender={}, uuid={}, cityId={}, age={}, sick={}, lifespan={}",
-                npcId, npcName, skinName, genderStr, this.getUUID(), this.cityId, npcAge, this.isSick, npcLifespan);
+        //Simukraft.LOGGER.debug("[CustomEntity] Recorded NPC data: id={}, name={}, skin={}, gender={}, uuid={}, cityId={}, age={}, sick={}, lifespan={}",
+                //npcId, npcName, skinName, genderStr, this.getUUID(), this.cityId, npcAge, this.isSick, npcLifespan);
     }
 
     private void spawnTeleportParticles() {
