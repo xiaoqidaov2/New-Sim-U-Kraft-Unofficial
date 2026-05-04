@@ -165,6 +165,11 @@ public final class JobRuntimeService {
         if (subState == WorkSubState.RESTING || subState == WorkSubState.LUNCH_BREAK) {
             return;
         }
+        // 让 NPCRestHandler 完整接管"回家/上班"传送链路。drift 兜底如果在去工作过程中插一脚，
+        // 会与 stopResting 的传送、scheduleHireArrivalTeleport 的隐身倒计时打架，造成 NPC 消失。
+        if (NPCRestHandler.isNpcInRestWorkflow(assignment.npcUuid())) {
+            return;
+        }
 
         long gameTime = context.level().getGameTime();
         Long lastCheck = lastWorkplaceCorrectionTicks.get(assignment.npcUuid());

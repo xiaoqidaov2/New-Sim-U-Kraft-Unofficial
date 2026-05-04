@@ -1145,7 +1145,12 @@ public class CustomEntity extends PathfinderMob {
             return;
         }
 
-        String npcId = String.valueOf(this.getId());
+        // 使用稳定的 NPC 序号（持久化在 NBT 中），避免使用每次重新加载会变的运行时 entity id —
+        // 否则 npc.json 中的 id 与 saveJobData 写入的 "npc"+npcId 不一致，UI 上看到"编号变成奇异数字"。
+        if (this.npcId == -1 && this.level() instanceof ServerLevel serverLevel) {
+            this.npcId = NameManager.getNextNPCId(serverLevel);
+        }
+        String npcId = "npc" + this.npcId;
         String npcName = fullName;
         String skinName = skinPath != null ? skinPath : "default";
         String genderStr = gender != null ? gender.getName() : "male";
@@ -1421,6 +1426,12 @@ public class CustomEntity extends PathfinderMob {
     }
 
     public void scheduleHireArrivalTeleport(BlockPos pos) {
+        // 幂等保护：如果已经在朝同一个目标传送，不要重置 30 tick 倒计时 —
+        // 否则像 JobRuntimeService.correctWorkplaceDrift 这样的兜底路径每 100 tick 调一次，
+        // 会让 NPC 长时间保持隐身，造成"NPC 消失"假象。
+        if (this.hireArrivalTeleportActive && pos != null && pos.equals(this.targetPos)) {
+            return;
+        }
         clearHireArrivalTeleportState();
         this.targetPos = pos;
         this.teleportCountdown = 30; // 先在工作方块上方播放一段紫色粒子，再让NPC出现
