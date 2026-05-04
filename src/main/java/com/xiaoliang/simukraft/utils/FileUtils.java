@@ -1071,6 +1071,7 @@ public class FileUtils {
     
     /**
      * 从缓存获取完整的建筑配置信息（包含SK和JSON）
+     * 如果缓存为null，会尝试直接从硬盘读取作为备用方案
      * @param type 建筑类型: "commercial" 或 "industrial"
      * @param pos 建筑位置
      * @return BuildingCacheEntry 包含完整的建筑配置，如果不存在返回null
@@ -1082,8 +1083,59 @@ public class FileUtils {
         }
         String cacheKey = type + ":" + pos.getX() + "," + pos.getY() + "," + pos.getZ();
         BuildingCacheEntry entry = BUILDING_CACHE.get(cacheKey);
+        
+        // 缓存未命中，尝试直接从硬盘读取
+        if (entry == null) {
+            entry = loadBuildingFromDisk(type, pos, cacheKey);
+        }
+        
         LOGGER.debug("[FileUtils] 读取建筑缓存 [{}] => {}", cacheKey, entry);
         return entry;
+    }
+    
+    /**
+     * 从硬盘直接读取建筑信息（备用方案）
+     * @param type 建筑类型: "commercial" 或 "industrial"
+     * @param pos 建筑位置
+     * @param cacheKey 缓存键
+     * @return BuildingCacheEntry 如果文件不存在返回null
+     */
+    private static BuildingCacheEntry loadBuildingFromDisk(String type, BlockPos pos, String cacheKey) {
+        try {
+            // 获取世界目录
+            Path worldDir = null;
+            for (Map.Entry<String, BuildingCacheEntry> e : BUILDING_CACHE.entrySet()) {
+                if (e.getValue() != null && e.getValue().getSkFilePath() != null) {
+                    worldDir = e.getValue().getSkFilePath().getParent().getParent().getParent();
+                    break;
+                }
+            }
+            
+            if (worldDir == null) {
+                return null;
+            }
+            
+            // 构建SK文件路径
+            String dirName = type.equals("industrial") ? INDUSTRIAL_DIR : COMMERCIAL_DIR;
+            String fileName = pos.getX() + "_" + pos.getY() + "_" + pos.getZ() + ".sk";
+            Path skFile = worldDir.resolve(MODE_DIR).resolve(dirName).resolve(fileName);
+            
+            if (!Files.exists(skFile)) {
+                return null;
+            }
+            
+            // 读取SK文件
+            BuildingCacheEntry entry = readBuildingInfoFromSkFile(skFile, cacheKey);
+            if (entry != null) {
+                LOGGER.info("[FileUtils] 缓存未命中，从硬盘读取建筑配置: {} => {}", cacheKey, entry.getBuildingFileName());
+                // 同时更新缓存，避免下次再次读取硬盘
+                BUILDING_CACHE.put(cacheKey, entry);
+            }
+            return entry;
+        } catch (Exception e) {
+            LOGGER.error("[FileUtils] 从硬盘读取建筑配置失败: {} at {}", type, pos, e);
+            return null;
+        }
     }
     
     /**
@@ -1102,6 +1154,7 @@ public class FileUtils {
     
     /**
      * 从缓存获取商业建筑的building_file_name (兼容旧方法)
+     * 如果缓存为null，会尝试直接从硬盘读取作为备用方案
      */
     public static String readCommercialBuildingFileNameCached(MinecraftServer server, BlockPos pos) {
         if (!cacheInitialized) {
@@ -1119,12 +1172,23 @@ public class FileUtils {
         
         // 兼容旧缓存
         String result = SK_FILE_CACHE.get(cacheKey);
-        LOGGER.debug("[FileUtils] 读取商业建筑缓存 [{}] => {} (来自旧缓存)", cacheKey, result);
-        return result;
+        if (result != null) {
+            LOGGER.debug("[FileUtils] 读取商业建筑缓存 [{}] => {} (来自旧缓存)", cacheKey, result);
+            return result;
+        }
+        
+        // 缓存未命中，尝试从硬盘读取
+        entry = loadBuildingFromDisk("commercial", pos, cacheKey);
+        if (entry != null) {
+            return entry.getBuildingFileName();
+        }
+        
+        return null;
     }
 
     /**
      * 从缓存获取工业建筑的building_file_name (兼容旧方法)
+     * 如果缓存为null，会尝试直接从硬盘读取作为备用方案
      */
     public static String readIndustrialBuildingFileNameCached(MinecraftServer server, BlockPos pos) {
         if (!cacheInitialized) {
@@ -1136,14 +1200,22 @@ public class FileUtils {
         // 优先从新缓存获取
         BuildingCacheEntry entry = BUILDING_CACHE.get(cacheKey);
         if (entry != null) {
-            //LOGGER.debug("[FileUtils] 读取工业建筑缓存 [{}] => {} (来自新缓存)", cacheKey, entry.getBuildingFileName());
             return entry.getBuildingFileName();
         }
         
         // 兼容旧缓存
         String result = SK_FILE_CACHE.get(cacheKey);
-        //LOGGER.debug("[FileUtils] 读取工业建筑缓存 [{}] => {} (来自旧缓存)", cacheKey, result);
-        return result;
+        if (result != null) {
+            return result;
+        }
+        
+        // 缓存未命中，尝试从硬盘读取
+        entry = loadBuildingFromDisk("industrial", pos, cacheKey);
+        if (entry != null) {
+            return entry.getBuildingFileName();
+        }
+        
+        return null;
     }
 
     /**

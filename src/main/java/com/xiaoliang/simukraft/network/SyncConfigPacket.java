@@ -20,9 +20,10 @@ public class SyncConfigPacket {
     private final String configName;
     private final int intValue;
     private final boolean boolValue;
+    private final double doubleValue;
 
     public enum ConfigType {
-        INT, BOOLEAN
+        INT, BOOLEAN, DOUBLE
     }
 
     // 整数配置
@@ -31,6 +32,7 @@ public class SyncConfigPacket {
         this.configName = configName;
         this.intValue = value;
         this.boolValue = false;
+        this.doubleValue = 0.0;
     }
 
     // 布尔配置
@@ -39,6 +41,16 @@ public class SyncConfigPacket {
         this.configName = configName;
         this.intValue = 0;
         this.boolValue = value;
+        this.doubleValue = 0.0;
+    }
+
+    // 小数配置
+    public SyncConfigPacket(String configName, double value) {
+        this.type = ConfigType.DOUBLE;
+        this.configName = configName;
+        this.intValue = 0;
+        this.boolValue = false;
+        this.doubleValue = value;
     }
 
     public SyncConfigPacket(FriendlyByteBuf buf) {
@@ -46,6 +58,7 @@ public class SyncConfigPacket {
         this.configName = Objects.requireNonNull(buf.readUtf());
         this.intValue = buf.readInt();
         this.boolValue = buf.readBoolean();
+        this.doubleValue = buf.readDouble();
     }
 
     public void encode(FriendlyByteBuf buf) {
@@ -53,6 +66,7 @@ public class SyncConfigPacket {
         buf.writeUtf(Objects.requireNonNull(configName));
         buf.writeInt(intValue);
         buf.writeBoolean(boolValue);
+        buf.writeDouble(doubleValue);
     }
 
     public void handle(Supplier<NetworkEvent.Context> ctx) {
@@ -72,6 +86,9 @@ public class SyncConfigPacket {
 
                 // 保存到文件
                 ServerConfig.SPEC.save();
+                
+                // menglan: 清除配置缓存，确保新值立即生效
+                ServerConfig.clearCache();
 
                 Simukraft.LOGGER.info("[SyncConfigPacket] Config '{}' updated", configName);
             }
@@ -104,7 +121,7 @@ public class SyncConfigPacket {
             case "plannerXpPerBlock" -> ServerConfig.PLANNER_XP_PER_BLOCK.set(intValue);
 
             // 建筑师配置
-            case "builderPlaceSpeedBase" -> ServerConfig.BUILDER_PLACE_SPEED_BASE.set(intValue);
+            case "builderBlocksPerSecond" -> ServerConfig.BUILDER_BLOCKS_PER_SECOND.set(doubleValue);
             case "builderChestSearchRange" -> ServerConfig.BUILDER_CHEST_SEARCH_RANGE.set(intValue);
             case "builderWarningCooldown" -> ServerConfig.BUILDER_WARNING_COOLDOWN.set(intValue);
             case "builderEnableXpGain" -> ServerConfig.BUILDER_ENABLE_XP_GAIN.set(boolValue);

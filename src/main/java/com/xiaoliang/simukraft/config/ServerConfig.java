@@ -48,7 +48,8 @@ public class ServerConfig {
     public static final ForgeConfigSpec.ConfigValue<Integer> PLANNER_XP_PER_BLOCK;
 
     // ==================== 建筑师工作配置 ====================
-    public static final ForgeConfigSpec.ConfigValue<Integer> BUILDER_PLACE_SPEED_BASE;
+    // menglan: 使用每秒放置方块数，内部自动转换为每tick小数
+    public static final ForgeConfigSpec.ConfigValue<Double> BUILDER_BLOCKS_PER_SECOND;
     public static final ForgeConfigSpec.ConfigValue<Integer> BUILDER_CHEST_SEARCH_RANGE;
     public static final ForgeConfigSpec.ConfigValue<Integer> BUILDER_WARNING_COOLDOWN;
     public static final ForgeConfigSpec.ConfigValue<Boolean> BUILDER_ENABLE_XP_GAIN;
@@ -118,8 +119,8 @@ public class ServerConfig {
         builder.push("npc_leveling");
 
         NPC_MAX_LEVEL = builder
-                .comment("NPC最高等级")
-                .defineInRange("maxLevel", 7, 1, 20);
+                .comment("NPC最高等级（默认20级）")
+                .defineInRange("maxLevel", 20, 1, 20);
 
         NPC_SPEED_BONUS_PER_LEVEL = builder
                 .comment("每升一级减少的工作时间（tick）")
@@ -228,10 +229,11 @@ public class ServerConfig {
                         "默认包含基岩、命令方块、屏障等保护方块，以及本模组的所有控制盒和建筑盒")
                 .define("blockBlacklist", new ArrayList<>(DEFAULT_BLACKLIST));
 
-        // 速度配置
-        BUILDER_PLACE_SPEED_BASE = builder
-                .comment("建筑师基础放置速度（tick/方块）")
-                .defineInRange("placeSpeedBase", 40, 1, 200);
+        // 速度配置 - menglan: 使用每秒放置方块数，更直观
+        BUILDER_BLOCKS_PER_SECOND = builder
+                .comment("建筑师每秒放置方块数（1级=1个，20级=5个，线性增长）",
+                        "实际速度会根据等级自动计算")
+                .defineInRange("blocksPerSecond", 1.0, 0.1, 20.0);
 
         BUILDER_CHEST_SEARCH_RANGE = builder
                 .comment("建筑师搜索材料的箱子范围（格）")
@@ -530,10 +532,25 @@ public class ServerConfig {
 
     // ==================== 建筑师配置获取方法 ====================
 
-    public static int getBuilderPlaceSpeed(int level) {
-        int baseSpeed = getCached("builderPlaceSpeedBase", BUILDER_PLACE_SPEED_BASE);
-        int bonus = getCached("npcSpeedBonusPerLevel", NPC_SPEED_BONUS_PER_LEVEL) * (level - 1);
-        return Math.max(getCached("npcMinSpeedTicks", NPC_MIN_SPEED_TICKS), baseSpeed - bonus);
+    /**
+     * menglan: 获取建筑师每秒放置方块数（根据等级线性增长）
+     * @param level NPC等级
+     * @return 每秒放置方块数
+     */
+    public static double getBuilderBlocksPerSecond(int level) {
+        double baseSpeed = getCached("builderBlocksPerSecond", BUILDER_BLOCKS_PER_SECOND);
+        int maxLevel = getCached("npcMaxLevel", NPC_MAX_LEVEL);
+        float progress = (float) (level - 1) / (maxLevel - 1);
+        return baseSpeed * (1 + progress * 4); // 1级=1倍, 20级=5倍
+    }
+
+    /**
+     * menglan: 获取建筑师每tick放置方块数（小数）
+     * @param level NPC等级
+     * @return 每tick放置方块数
+     */
+    public static double getBuilderBlocksPerTickDouble(int level) {
+        return getBuilderBlocksPerSecond(level) / 20.0; // 20 tick = 1秒
     }
 
     /**

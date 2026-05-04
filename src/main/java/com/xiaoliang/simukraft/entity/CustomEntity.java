@@ -113,8 +113,8 @@ public class CustomEntity extends PathfinderMob {
     private boolean isHomeless = false;
     private com.xiaoliang.simukraft.job.jobs.planner.PlannerWorkHandler plannerWorkHandler;
     
-    // 建筑师独立建造冷却计时器 - 修复多个建筑师速度均分bug
-    private int buildCooldownTicks = 0;
+    // menglan: 建造进度累积器，用于小数方块放置
+    private double buildProgressAccumulator = 0.0;
     
     // 年龄与疾病系统本地字段
     private int age = -1; // -1表示未初始化，将在首次获取时生成18-25岁随机值
@@ -892,146 +892,148 @@ public class CustomEntity extends PathfinderMob {
             }
 
             if (!constructionTask.isCompleted() && constructionTask.hasNextBlock()) {
-                // 根据等级计算建造速度（tick间隔）
-                int buildSpeed = getBuildSpeedByLevel();
+                if (this.level() instanceof ServerLevel serverLevel) {
+                    // menglan: 使用新的速度系统 - 每tick放置小数个方块
+                    int npcLevel = com.xiaoliang.simukraft.utils.NPCDataManager.getNPCLevel(serverLevel.getServer(), this.getUUID());
+                    double blocksPerTick = com.xiaoliang.simukraft.config.ServerConfig.getBuilderBlocksPerTickDouble(npcLevel);
+                    
+                    // 累积小数部分
+                    buildProgressAccumulator += blocksPerTick;
+                    int blocksToPlace = (int) buildProgressAccumulator;
+                    buildProgressAccumulator -= blocksToPlace;
+                    
+                    int scannedCandidates = 0;
+                    int placedBlocksCount = 0;
+                    // menglan: 最大扫描次数，确保高速时也能找到足够方块
+                    int maxScanPerTick = Math.max(20, blocksToPlace * 5);
+                    
+                    // menglan: 循环放置多个方块，直到达到计算出的数量或没有更多方块
+                    while (placedBlocksCount < blocksToPlace && constructionTask.hasNextBlock() && scannedCandidates < maxScanPerTick) {
+                        scannedCandidates++;
+                        // 修复：传入serverLevel以检查方块是否已存在，避免重复消耗材料
+                        com.xiaoliang.simukraft.building.ConstructionTask.BlockInfo blockInfo = constructionTask.getNextBlock(serverLevel);
+                        if (blockInfo == null) break;
 
-                // 使用独立的冷却计时器，避免多个建筑师共享tickCount导致的同步问题
-                buildCooldownTicks++;
-                if (buildCooldownTicks >= buildSpeed) {
-                    if (this.level() instanceof ServerLevel serverLevel) {
-                        int maxBuildScanPerTick = Math.max(8, buildSpeed);
-                        int scannedCandidates = 0;
-                        boolean placedBlock = false;
-                        while (!placedBlock && constructionTask.hasNextBlock() && scannedCandidates < maxBuildScanPerTick) {
-                            scannedCandidates++;
-                            // 修复：传入serverLevel以检查方块是否已存在，避免重复消耗材料
-                            com.xiaoliang.simukraft.building.ConstructionTask.BlockInfo blockInfo = constructionTask.getNextBlock(serverLevel);
-                            if (blockInfo == null) break;
+                        BlockPos targetPos = blockInfo.pos();
+                        BlockState targetState = blockInfo.state();
 
-                            BlockPos targetPos = blockInfo.pos();
-                            BlockState targetState = blockInfo.state();
-
-                            // menglannnn: 处理空气方块（用于拆除/替换已有方块）
-                            if (targetState.isAir()) {
-                                // 目标为空气，移除该位置的方块
-                                BlockState currentState = serverLevel.getBlockState(targetPos);
-                                if (!currentState.isAir()) {
-                                    // 检查是否在黑名单中（menglannnn: 黑名单方块不应被拆除）
-                                    ResourceLocation blockId = ForgeRegistries.BLOCKS.getKey(currentState.getBlock());
-                                    if (blockId != null && ServerConfig.isBlockBlacklistedForConstruction(blockId.toString())) {
-                                        if (ServerConfig.shouldLogSkippedBlocks()) {
-                                            Simukraft.LOGGER.info("[CustomEntity] Blacklisted block encountered during air placement, keeping original and skipping pos {}: {}", targetPos, blockId);
-                                        }
-                                        completeBuildStepAfterSkip();
-                                        placedBlock = true;
-                                        constructionProgress = constructionTask.getProgress();
-                                        continue;
-                                    }
-                                    serverLevel.destroyBlock(targetPos, false);
-                                }
-                                completeBuildStepAfterSkip();
-                                placedBlock = true;
-                                constructionProgress = constructionTask.getProgress();
-                                continue;
-                            }
-
-                            // 检查当前位置是否有阻挡方块（非目标方块的其他方块）
+                        // menglannnn: 处理空气方块（用于拆除/替换已有方块）
+                        if (targetState.isAir()) {
+                            // 目标为空气，移除该位置的方块
                             BlockState currentState = serverLevel.getBlockState(targetPos);
-                            if (!currentState.isAir() && currentState.getBlock() != targetState.getBlock()) {
-                                // 检查阻挡方块是否在黑名单中
+                            if (!currentState.isAir()) {
+                                // 检查是否在黑名单中（menglannnn: 黑名单方块不应被拆除）
                                 ResourceLocation blockId = ForgeRegistries.BLOCKS.getKey(currentState.getBlock());
                                 if (blockId != null && ServerConfig.isBlockBlacklistedForConstruction(blockId.toString())) {
-                                    // 黑名单方块，保留阻挡方块，将此位置标记为已完成（不放置目标方块）
                                     if (ServerConfig.shouldLogSkippedBlocks()) {
-                                        Simukraft.LOGGER.info("[CustomEntity] Blacklisted block encountered during construction, keeping original and skipping pos {}: {}", targetPos, blockId);
+                                        Simukraft.LOGGER.info("[CustomEntity] Blacklisted block encountered during air placement, keeping original and skipping pos {}: {}", targetPos, blockId);
                                     }
                                     completeBuildStepAfterSkip();
-                                    placedBlock = true;
+                                    placedBlocksCount++;
                                     constructionProgress = constructionTask.getProgress();
                                     continue;
                                 }
-                                // 清除阻挡方块
                                 serverLevel.destroyBlock(targetPos, false);
                             }
+                            completeBuildStepAfterSkip();
+                            placedBlocksCount++;
+                            constructionProgress = constructionTask.getProgress();
+                            continue;
+                        }
 
-                            try {
-                                // 放置目标方块
-                                serverLevel.setBlock(targetPos, targetState, 3);
-                            } catch (Exception e) {
+                        // 检查当前位置是否有阻挡方块（非目标方块的其他方块）
+                        BlockState currentState = serverLevel.getBlockState(targetPos);
+                        if (!currentState.isAir() && currentState.getBlock() != targetState.getBlock()) {
+                            // 检查阻挡方块是否在黑名单中
+                            ResourceLocation blockId = ForgeRegistries.BLOCKS.getKey(currentState.getBlock());
+                            if (blockId != null && ServerConfig.isBlockBlacklistedForConstruction(blockId.toString())) {
+                                // 黑名单方块，保留阻挡方块，将此位置标记为已完成（不放置目标方块）
+                                if (ServerConfig.shouldLogSkippedBlocks()) {
+                                    Simukraft.LOGGER.info("[CustomEntity] Blacklisted block encountered during construction, keeping original and skipping pos {}: {}", targetPos, blockId);
+                                }
                                 completeBuildStepAfterSkip();
-                                placedBlock = true;
+                                placedBlocksCount++;
                                 constructionProgress = constructionTask.getProgress();
                                 continue;
                             }
+                            // 清除阻挡方块
+                            serverLevel.destroyBlock(targetPos, false);
+                        }
 
-                            // 修复：如果是双格方块（门或床），同时放置另一半
-                            if (isDoubleBlock(targetState)) {
-                                BlockPos otherHalfPos = getOtherHalfPos(targetState, targetPos);
-                                if (otherHalfPos != null) {
-                                    BlockState otherHalfState = getOtherHalfState(targetState);
-                                    if (otherHalfState != null) {
-                                        // 清除阻挡方块
-                                        BlockState otherCurrentState = serverLevel.getBlockState(otherHalfPos);
-                                        if (!otherCurrentState.isAir() && otherCurrentState.getBlock() != otherHalfState.getBlock()) {
-                                            serverLevel.destroyBlock(otherHalfPos, false);
-                                        }
-                                        // 放置另一半
-                                        try {
-                                            serverLevel.setBlock(otherHalfPos, otherHalfState, 3);
-                                        } catch (Exception e) {
-                                            //Simukraft.LOGGER.error("[CustomEntity] 放置双格方块另一半失败 at {}: {}", otherHalfPos, otherHalfState, e);
-                                        }
+                        try {
+                            // 放置目标方块
+                            serverLevel.setBlock(targetPos, targetState, 3);
+                        } catch (Exception e) {
+                            completeBuildStepAfterSkip();
+                            placedBlocksCount++;
+                            constructionProgress = constructionTask.getProgress();
+                            continue;
+                        }
+
+                        // 修复：如果是双格方块（门或床），同时放置另一半
+                        if (isDoubleBlock(targetState)) {
+                            BlockPos otherHalfPos = getOtherHalfPos(targetState, targetPos);
+                            if (otherHalfPos != null) {
+                                BlockState otherHalfState = getOtherHalfState(targetState);
+                                if (otherHalfState != null) {
+                                    // 清除阻挡方块
+                                    BlockState otherCurrentState = serverLevel.getBlockState(otherHalfPos);
+                                    if (!otherCurrentState.isAir() && otherCurrentState.getBlock() != otherHalfState.getBlock()) {
+                                        serverLevel.destroyBlock(otherHalfPos, false);
+                                    }
+                                    // 放置另一半
+                                    try {
+                                        serverLevel.setBlock(otherHalfPos, otherHalfState, 3);
+                                    } catch (Exception e) {
+                                        //Simukraft.LOGGER.error("[CustomEntity] 放置双格方块另一半失败 at {}: {}", otherHalfPos, otherHalfState, e);
                                     }
                                 }
                             }
+                        }
 
-                            placedBlock = true;
-                            
-                            // 重置建造冷却计时器
-                            buildCooldownTicks = 0;
+                        placedBlocksCount++;
+                        
+                        // 添加熟练度经验值 - 每放置一个方块+1xp
+                        addBuilderXpForBlock(serverLevel.getServer());
 
-                            // 添加熟练度经验值 - 每放置一个方块+1xp
-                            addBuilderXpForBlock(serverLevel.getServer());
+                        // 添加白烟粒子效果
+                        for(int i = 0; i < 5; i++) {
+                            serverLevel.sendParticles(
+                                    ParticleTypes.CLOUD,
+                                    targetPos.getX() + 0.5,
+                                    targetPos.getY() + 0.1 + i * 0.2,
+                                    targetPos.getZ() + 0.5,
+                                    1,
+                                    0, 0.1, 0,
+                                    0.02
+                            );
+                        }
 
-                            // 添加白烟粒子效果
-                            for(int i = 0; i < 5; i++) {
-                                serverLevel.sendParticles(
-                                        ParticleTypes.CLOUD,
-                                        targetPos.getX() + 0.5,
-                                        targetPos.getY() + 0.1 + i * 0.2,
-                                        targetPos.getZ() + 0.5,
-                                        1,
-                                        0, 0.1, 0,
-                                        0.02
-                                );
-                            }
+                        // 更新进度
+                        constructionProgress = constructionTask.getProgress();
 
-                            // 更新进度
-                            constructionProgress = constructionTask.getProgress();
+                        // 同步到客户端 - 每放置5个方块或进度变化超过10%时才同步
+                        if (serverLevel.getServer() != null &&
+                            (constructionProgress % 10 < 2 || constructionTask.getCurrentBlockIndex() % 5 == 0)) {
+                            serverLevel.getServer().getPlayerList().getPlayers().forEach(player -> {
+                                if (player.distanceTo(this) < 50) {
+                                    com.xiaoliang.simukraft.network.NetworkManager.sendToPlayer(
+                                            new com.xiaoliang.simukraft.network.ConstructionProgressPacket(
+                                                    blockPosition(),
+                                                    currentBuildingName,
+                                                    constructionProgress
+                                            ),
+                                            player
+                                    );
+                                }
+                            });
+                        }
 
-                            // 同步到客户端 - 每放置5个方块或进度变化超过10%时才同步
-                            if (serverLevel.getServer() != null &&
-                                (constructionProgress % 10 < 2 || constructionTask.getCurrentBlockIndex() % 5 == 0)) {
-                                serverLevel.getServer().getPlayerList().getPlayers().forEach(player -> {
-                                    if (player.distanceTo(this) < 50) {
-                                        com.xiaoliang.simukraft.network.NetworkManager.sendToPlayer(
-                                                new com.xiaoliang.simukraft.network.ConstructionProgressPacket(
-                                                        blockPosition(),
-                                                        currentBuildingName,
-                                                        constructionProgress
-                                                ),
-                                                player
-                                        );
-                                    }
-                                });
-                            }
-
-                            // 每放置10个方块保存一次建造任务进度（用于局域网开放模式下恢复）
-                            if (serverLevel.getServer() != null && constructionTask.getCurrentBlockIndex() % 10 == 0) {
-                                com.xiaoliang.simukraft.job.jobs.builder.BuilderWorkService.INSTANCE.saveConstructionTask(
-                                    serverLevel.getServer(), this
-                                );
-                            }
+                        // 每放置10个方块保存一次建造任务进度（用于局域网开放模式下恢复）
+                        if (serverLevel.getServer() != null && constructionTask.getCurrentBlockIndex() % 10 == 0) {
+                            com.xiaoliang.simukraft.job.jobs.builder.BuilderWorkService.INSTANCE.saveConstructionTask(
+                                serverLevel.getServer(), this
+                            );
                         }
                     }
                 }
@@ -1053,19 +1055,7 @@ public class CustomEntity extends PathfinderMob {
     }
 
     private void completeBuildStepAfterSkip() {
-        buildCooldownTicks = 0;
-    }
-
-    /**
-     * 根据等级获取建造速度（tick间隔）
-     * 使用配置系统中的设置
-     */
-    private int getBuildSpeedByLevel() {
-        if (this.level() instanceof ServerLevel serverLevel) {
-            int level = com.xiaoliang.simukraft.utils.NPCDataManager.getNPCLevel(serverLevel.getServer(), this.getUUID());
-            return com.xiaoliang.simukraft.config.ServerConfig.getBuilderPlaceSpeed(level);
-        }
-        return com.xiaoliang.simukraft.config.ServerConfig.getBuilderPlaceSpeed(1);
+        // menglan: 新系统不再需要重置冷却计时器
     }
 
     private com.xiaoliang.simukraft.job.jobs.planner.PlannerWorkHandler getOrCreatePlannerWorkHandler() {
@@ -1536,7 +1526,6 @@ public class CustomEntity extends PathfinderMob {
         if (task != null && !task.isCompleted() && task.hasNextBlock()) {
             this.currentBuildingName = task.getBuildingName();
             this.constructionProgress = task.getProgress();
-            this.buildCooldownTicks = 0;
             if (this.level() instanceof ServerLevel serverLevel) {
                 com.xiaoliang.simukraft.utils.BuildBoxFloatingEntityManager.ensureSpawned(
                         serverLevel,
@@ -1550,7 +1539,6 @@ public class CustomEntity extends PathfinderMob {
         } else {
             this.currentBuildingName = "";
             this.constructionProgress = 0;
-            this.buildCooldownTicks = 0;
             if (this.level() instanceof ServerLevel serverLevel && previousTask != null) {
                 com.xiaoliang.simukraft.utils.BuildBoxFloatingEntityManager.remove(
                         serverLevel,
@@ -1720,8 +1708,6 @@ public class CustomEntity extends PathfinderMob {
         }
         this.currentBuildingName = "";
         this.constructionProgress = 0;
-        this.buildCooldownTicks = 0;
-
         // 移除持久化存储中的建造任务
         if (this.level() instanceof ServerLevel serverLevel) {
             com.xiaoliang.simukraft.job.jobs.builder.BuilderWorkService.INSTANCE.removeConstructionTask(

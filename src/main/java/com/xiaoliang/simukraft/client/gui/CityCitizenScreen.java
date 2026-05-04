@@ -23,8 +23,6 @@ import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -857,7 +855,7 @@ public class CityCitizenScreen extends AbstractTransitionScreen {
             // 经验条位置和尺寸
             int barX = this.getX() + 8;
             int barY = this.getY() + this.height - 20;
-            int barWidth = this.width - 50; // 留出空间给等级物品
+            int barWidth = this.width - 16; // 使用完整宽度
             int barHeight = 12;
             int cornerRadius = 3;
 
@@ -897,16 +895,11 @@ public class CityCitizenScreen extends AbstractTransitionScreen {
             guiGraphics.drawString(nn(Minecraft.getInstance().font), expText, textX + 1, textY + 1, 0xFF000000);
             guiGraphics.drawString(nn(Minecraft.getInstance().font), expText, textX, textY, 0xFFFFFFFF);
 
-            // 绘制等级物品（右侧）
-            int itemX = this.getX() + this.width - 28;
-            int itemY = this.getY() + this.height - 22;
-            ItemStack levelItem = getLevelItem(level);
-            guiGraphics.renderItem(nn(levelItem), itemX, itemY);
-
-            // 绘制等级文字（物品上方，带阴影）
+            // menglan: 删除等级图标，只保留等级文字
+            // 绘制等级文字（右侧）
             String levelText = "Lv " + level;
-            int levelTextX = itemX + 8 - nn(Minecraft.getInstance().font).width(levelText) / 2;
-            int levelTextY = itemY - 10;
+            int levelTextX = this.getX() + this.width - 8 - nn(Minecraft.getInstance().font).width(levelText);
+            int levelTextY = barY - 10;
             guiGraphics.drawString(nn(Minecraft.getInstance().font), levelText, levelTextX + 1, levelTextY + 1, 0xFF000000);
             guiGraphics.drawString(nn(Minecraft.getInstance().font), levelText, levelTextX, levelTextY, 0xFFFFFFFF);
         }
@@ -957,25 +950,6 @@ public class CityCitizenScreen extends AbstractTransitionScreen {
             int maxLevel = com.xiaoliang.simukraft.config.ServerConfig.getNpcMaxLevel();
             if (level >= maxLevel) return -1; // 已满级
             return com.xiaoliang.simukraft.utils.NPCDataManager.getXpToNextLevel(level);
-        }
-
-        /**
-         * 根据等级获取对应的物品
-         * 支持1-20级，超过7级使用循环物品
-         */
-        private ItemStack getLevelItem(int level) {
-            // 超过7级时循环使用物品（8级=煤炭，9级=铜锭，以此类推）
-            int itemLevel = ((level - 1) % 7) + 1;
-            return switch (itemLevel) {
-                case 1 -> new ItemStack(nn(Items.COAL));
-                case 2 -> new ItemStack(nn(Items.COPPER_INGOT));
-                case 3 -> new ItemStack(nn(Items.IRON_INGOT));
-                case 4 -> new ItemStack(nn(Items.GOLD_INGOT));
-                case 5 -> new ItemStack(nn(Items.DIAMOND));
-                case 6 -> new ItemStack(nn(Items.ANCIENT_DEBRIS));
-                case 7 -> new ItemStack(nn(Items.NETHERITE_INGOT));
-                default -> new ItemStack(nn(Items.COAL));
-            };
         }
 
         /**

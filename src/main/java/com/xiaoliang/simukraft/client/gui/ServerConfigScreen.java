@@ -168,6 +168,8 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
         private final List<ButtonWidget> tabButtons = new ArrayList<>(); //: 存储标签按钮引用
         // simukraft: 存储所有数字输入框，用于保存时读取最新值
         private final Map<String, TextFieldWidget> intInputFields = new HashMap<>();
+        // menglan: 存储小数输入框
+        private final Map<String, TextFieldWidget> doubleInputFields = new HashMap<>();
 
         public void setScreen(ServerConfigScreen screen) {
             this.screen = screen;
@@ -368,6 +370,7 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
             configValues.clear();
             // simukraft: 清空输入框映射，防止旧引用干扰
             intInputFields.clear();
+            doubleInputFields.clear();
 
             int page = screen.getCurrentPage();
             int contentWidth = WINDOW_WIDTH - CONTENT_PADDING * 2 - 16;
@@ -515,14 +518,18 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
         }
 
         private void buildBuilderPage(WidgetGroup parent, int width, int startY) {
-            addSectionTitle(parent, width, startY, "工作速度");
+            addSectionTitle(parent, width, startY, "建造速度");
             startY += 24;
 
-            addIntOption(parent, width, startY, "builderPlaceSpeedBase",
-                    "放置速度", "基础放置速度(tick/方块)",
-                    ServerConfig.BUILDER_PLACE_SPEED_BASE.get(), 1, 200,
-                    value -> configValues.put("builderPlaceSpeedBase", new IntConfigValue(value)));
+            // menglan: 使用更直观的每秒方块数配置
+            addDoubleOption(parent, width, startY, "builderBlocksPerSecond",
+                    "1级速度", "1级建筑师每秒放置方块数(20级=5倍)",
+                    ServerConfig.BUILDER_BLOCKS_PER_SECOND.get(), 0.1, 20.0,
+                    value -> configValues.put("builderBlocksPerSecond", new DoubleConfigValue(value)));
             startY += ITEM_HEIGHT + SECTION_SPACING;
+
+            addSectionTitle(parent, width, startY, "材料搜索");
+            startY += 24;
 
             addIntOption(parent, width, startY, "builderChestSearchRange",
                     "搜索范围", "搜索材料的箱子范围(格)",
@@ -530,23 +537,8 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
                     value -> configValues.put("builderChestSearchRange", new IntConfigValue(value)));
             startY += ITEM_HEIGHT + SECTION_SPACING;
 
-            addSectionTitle(parent, width, startY, "区块加载");
+            addSectionTitle(parent, width, startY, "经验与警告");
             startY += 24;
-
-            addIntOption(parent, width, startY, "builderChunkLoadWaitTicks",
-                    "等待时间", "按工作流强加载后等待区块就绪的最大tick数",
-                    ServerConfig.BUILDER_CHUNK_LOAD_WAIT_TICKS.get(), 10, 200,
-                    value -> configValues.put("builderChunkLoadWaitTicks", new IntConfigValue(value)));
-            startY += ITEM_HEIGHT + SECTION_SPACING;
-
-            addSectionTitle(parent, width, startY, "其他设置");
-            startY += 24;
-
-            addIntOption(parent, width, startY, "builderWarningCooldown",
-                    "警告冷却", "材料不足警告冷却时间(秒)",
-                    ServerConfig.BUILDER_WARNING_COOLDOWN.get(), 1, 300,
-                    value -> configValues.put("builderWarningCooldown", new IntConfigValue(value)));
-            startY += ITEM_HEIGHT;
 
             addBooleanOption(parent, width, startY, "builderEnableXpGain",
                     "获得经验", "建筑师是否获得经验",
@@ -558,6 +550,21 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
                     "每块经验", "每放置一个方块获得的经验值",
                     ServerConfig.BUILDER_XP_PER_BLOCK.get(), 0, 100,
                     value -> configValues.put("builderXpPerBlock", new IntConfigValue(value)));
+            startY += ITEM_HEIGHT;
+
+            addIntOption(parent, width, startY, "builderWarningCooldown",
+                    "警告冷却", "材料不足警告冷却时间(秒)",
+                    ServerConfig.BUILDER_WARNING_COOLDOWN.get(), 1, 300,
+                    value -> configValues.put("builderWarningCooldown", new IntConfigValue(value)));
+            startY += ITEM_HEIGHT + SECTION_SPACING;
+
+            addSectionTitle(parent, width, startY, "性能");
+            startY += 24;
+
+            addIntOption(parent, width, startY, "builderChunkLoadWaitTicks",
+                    "区块加载等待", "等待区块就绪的最大tick数",
+                    ServerConfig.BUILDER_CHUNK_LOAD_WAIT_TICKS.get(), 10, 200,
+                    value -> configValues.put("builderChunkLoadWaitTicks", new IntConfigValue(value)));
         }
 
         private void buildMaterialsPage(WidgetGroup parent, int width, int startY) {
@@ -701,6 +708,55 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
             parent.addWidget(inputContainer);
         }
 
+        // menglan: 添加小数输入选项
+        private void addDoubleOption(WidgetGroup parent, int width, int y, String key,
+                                    String label, String tooltip,
+                                    double initialValue, double min, double max,
+                                    Consumer<Double> onChange) {
+            // 标签
+            TextTexture labelTexture = new TextTexture(label, COLOR_TEXT_NORMAL);
+            labelTexture.setType(TextTexture.TextType.LEFT);
+            ImageWidget labelWidget = new ImageWidget(8, y + 8, width - 100, 14, labelTexture);
+            labelWidget.setHoverTooltips(tooltip);
+            parent.addWidget(labelWidget);
+
+            // 输入框容器
+            WidgetGroup inputContainer = new WidgetGroup();
+            inputContainer.setSelfPosition(width - 80, y + 4);
+            inputContainer.setSize(64, 22);
+
+            // 输入框
+            TextFieldWidget textField = new TextFieldWidget();
+            textField.setSelfPosition(0, 0);
+            textField.setSize(64, 20);
+            textField.setCurrentString(String.format("%.1f", initialValue));
+            textField.setTextColor(COLOR_TEXT_NORMAL);
+            textField.setBordered(false);
+            textField.setMaxStringLength(10);
+            // menglan: 存储输入框引用
+            doubleInputFields.put(key, textField);
+            textField.setTextResponder(newText -> {
+                try {
+                    double value = Double.parseDouble(newText);
+                    if (value >= min && value <= max) {
+                        onChange.accept(value);
+                    }
+                } catch (NumberFormatException ignored) {
+                    // 输入无效时不更新值
+                }
+            });
+            inputContainer.addWidget(textField);
+
+            // 底部灰色下划线
+            WidgetGroup underline = new WidgetGroup();
+            underline.setSelfPosition(0, 20);
+            underline.setSize(64, 2);
+            underline.setBackground(new ColorRectTexture(0xFF808080).setRadius(1));
+            inputContainer.addWidget(underline);
+
+            parent.addWidget(inputContainer);
+        }
+
         private void addOpenScreenButton(WidgetGroup parent, int width, int y,
                                           String text, Consumer<ClickData> onPress) {
             ButtonWidget button = new ButtonWidget();
@@ -782,6 +838,19 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
                 }
             }
 
+            // menglan: 读取小数输入框的值
+            for (Map.Entry<String, TextFieldWidget> entry : doubleInputFields.entrySet()) {
+                String key = entry.getKey();
+                TextFieldWidget textField = entry.getValue();
+                try {
+                    double value = Double.parseDouble(textField.getCurrentString());
+                    // 更新configValues中的值
+                    configValues.put(key, new DoubleConfigValue(value));
+                } catch (NumberFormatException ignored) {
+                    // 输入无效时保持原值
+                }
+            }
+
             // 应用所有配置值并同步到服务器
             for (Map.Entry<String, ConfigValue<?>> entry : configValues.entrySet()) {
                 String key = entry.getKey();
@@ -806,6 +875,9 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
             } else if (value instanceof IntConfigValue) {
                 int intValue = ((IntConfigValue) value).value;
                 NetworkManager.INSTANCE.sendToServer(new SyncConfigPacket(key, intValue));
+            } else if (value instanceof DoubleConfigValue) {
+                double doubleValue = ((DoubleConfigValue) value).value;
+                NetworkManager.INSTANCE.sendToServer(new SyncConfigPacket(key, doubleValue));
             }
         }
 
@@ -816,6 +888,7 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
 
         private void resetConfig() {
             ServerConfig.resetToDefaults();
+            ServerConfig.clearCache(); // menglan: 重置后清除缓存
             closeScreen();
         }
 
@@ -854,11 +927,15 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
                         case "plannerChestSearchRange" -> ServerConfig.PLANNER_CHEST_SEARCH_RANGE.set(intValue);
                         case "plannerWarningCooldown" -> ServerConfig.PLANNER_WARNING_COOLDOWN.set(intValue);
                         case "plannerXpPerBlock" -> ServerConfig.PLANNER_XP_PER_BLOCK.set(intValue);
-                        case "builderPlaceSpeedBase" -> ServerConfig.BUILDER_PLACE_SPEED_BASE.set(intValue);
                         case "builderChestSearchRange" -> ServerConfig.BUILDER_CHEST_SEARCH_RANGE.set(intValue);
                         case "builderChunkLoadWaitTicks" -> ServerConfig.BUILDER_CHUNK_LOAD_WAIT_TICKS.set(intValue);
                         case "builderWarningCooldown" -> ServerConfig.BUILDER_WARNING_COOLDOWN.set(intValue);
                         case "builderXpPerBlock" -> ServerConfig.BUILDER_XP_PER_BLOCK.set(intValue);
+                    }
+                } else if (value instanceof DoubleConfigValue) {
+                    double doubleValue = ((DoubleConfigValue) value).value;
+                    switch (key) {
+                        case "builderBlocksPerSecond" -> ServerConfig.BUILDER_BLOCKS_PER_SECOND.set(doubleValue);
                     }
                 }
             } catch (Exception e) {
@@ -899,6 +976,12 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
 
     private static class IntConfigValue extends ConfigValue<Integer> {
         public IntConfigValue(Integer value) {
+            super(value);
+        }
+    }
+
+    private static class DoubleConfigValue extends ConfigValue<Double> {
+        public DoubleConfigValue(Double value) {
             super(value);
         }
     }

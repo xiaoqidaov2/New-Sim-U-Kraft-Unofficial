@@ -19,7 +19,7 @@
 [npc_leveling]
 	#NPC最高等级
 	#Range: 1 ~ 20
-	maxLevel = 7
+	maxLevel = 20
 	#每升一级减少的工作时间（tick）
 	#Range: 0 ~ 50
 	speedBonusPerLevel = 5
@@ -87,9 +87,10 @@
 	#格式: modid:block_name
 	#默认包含基岩、命令方块、屏障等保护方块，以及本模组的所有控制盒和建筑盒
 	blockBlacklist = ["minecraft:bedrock", "minecraft:command_block", "minecraft:chain_command_block", "minecraft:repeating_command_block", "minecraft:barrier", "minecraft:structure_block", "minecraft:structure_void", "minecraft:jigsaw", "simukraft:build_box", "simukraft:city_core", "simukraft:residential_control_box", "simukraft:commercial_control_box", "simukraft:industrial_control_box", "simukraft:other_control_box", "simukraft:wool_farm_control_box", "simukraft:building_material_store_control_box", "simukraft:beef_farm_control_box", "simukraft:nsuk_meat_shop_control_box", "simukraft:nsuk_farmland_box", "simukraft:fruit_shop_control_box", "simukraft:bakery_control_box"]
-	#建筑师基础放置速度（tick/方块）
-	#Range: 1 ~ 200
-	placeSpeedBase = 40
+	#建筑师1级时的基础速度（每秒放置方块数）
+	#20级时速度为5倍（默认20级=5个方块/秒）
+	#Range: 0.1 ~ 20.0
+	blocksPerSecond = 1.0
 	#建筑师搜索材料的箱子范围（格）
 	#Range: 1 ~ 20
 	chestSearchRange = 3
