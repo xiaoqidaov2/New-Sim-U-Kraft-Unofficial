@@ -945,9 +945,12 @@ public class NPCRestHandler {
             ServerLevel level = server.overworld();
             net.minecraft.world.level.block.state.BlockState buildBoxState = level.getBlockState(taskInfo.buildBoxPos);
             if (buildBoxState.isAir()) {
-                LOGGER.warn("[NPCRestHandler] 建筑盒已不存在，移除建造任务 - NPC: {}",
+                LOGGER.warn("[NPCRestHandler] 建筑盒已不存在，移除建造任务并解除雇佣 - NPC: {}",
                     npc.getFullName());
                 com.xiaoliang.simukraft.world.ConstructionTaskData.removeTask(server, npc.getUUID());
+                // 兜底：建筑盒被破坏后还残留的雇佣记录会让 builder 一直站在原地却没活干，
+                // 这里同步解除 V2 + V1 的分配，避免每天 startDailyWork 反复尝试恢复。
+                releaseStaleBuilderAssignment(server, npc, taskInfo.buildBoxPos);
                 return;
             }
 
@@ -979,6 +982,34 @@ public class NPCRestHandler {
             LOGGER.error("[NPCRestHandler] 恢复建造任务失败 - NPC: {}",
                 npc.getFullName(), e);
         }
+    }
+
+    /**
+     * 当建造任务恢复失败（建筑盒已不存在等不可恢复情况）时，把 V2/V1 的雇佣分配也清理掉，
+     * 避免 startDailyWork / JobRuntimeService 每 tick 都尝试恢复一个永远恢复不了的任务。
+     */
+    private static void releaseStaleBuilderAssignment(MinecraftServer server, CustomEntity npc, BlockPos buildBoxPos) {
+        if (server == null || npc == null) {
+            return;
+        }
+        try {
+            com.xiaoliang.simukraft.employment.service.EmploymentServices.get(server)
+                    .fireByNpc(new com.xiaoliang.simukraft.employment.service.EmploymentCommands.FireByNpcCommand(npc.getUUID()));
+        } catch (Exception e) {
+            LOGGER.warn("[NPCRestHandler] 清理建筑师 V2 雇佣记录失败 - NPC: {}", npc.getFullName(), e);
+        }
+        try {
+            Map<BlockPos, UUID> hiredBuilders = com.xiaoliang.simukraft.world.BuildBoxHiredData.loadHiredBuilders(server);
+            boolean changed = hiredBuilders.entrySet().removeIf(e ->
+                    npc.getUUID().equals(e.getValue()) || (buildBoxPos != null && buildBoxPos.equals(e.getKey()))
+            );
+            if (changed) {
+                com.xiaoliang.simukraft.world.BuildBoxHiredData.saveHiredBuilders(server, hiredBuilders);
+            }
+        } catch (Exception e) {
+            LOGGER.warn("[NPCRestHandler] 清理建筑师 V1 雇佣记录失败 - NPC: {}", npc.getFullName(), e);
+        }
+        npc.resetToIdle();
     }
 
     /**

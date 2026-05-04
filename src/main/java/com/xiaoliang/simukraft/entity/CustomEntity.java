@@ -1513,6 +1513,9 @@ public class CustomEntity extends PathfinderMob {
                         task.getBuildBoxPos(),
                         null
                 );
+                // 立即持久化建造任务：避免"刚下任务建筑师就下班，第二天起床时 JSON 没有最新任务"
+                // 这种竞态导致的"睡一觉建造任务全丢失"。
+                com.xiaoliang.simukraft.job.jobs.builder.BuilderWorkService.INSTANCE.saveConstructionTask(serverLevel.getServer(), this);
             }
         } else {
             this.currentBuildingName = "";
