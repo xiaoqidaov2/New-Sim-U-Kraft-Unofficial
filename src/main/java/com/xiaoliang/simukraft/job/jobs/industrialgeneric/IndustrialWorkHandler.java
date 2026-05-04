@@ -189,6 +189,10 @@ public class IndustrialWorkHandler {
                 }
             } else {
                 LOGGER.warn(Component.translatable("message.industrial_work_handler.error.invalid_npc", npc, buildingFileName).getString());
+                // 僵尸 ASSIGNED 记录兜底：NPC 数据已经从 NPCDataManager 中清掉（即真正死亡，
+                // 不只是区块卸载）但 V2 雇佣未释放。这里同步调一次 fireByNpc，避免每 tick 都
+                // 走到这条 warn 分支，是 #23"在岗 NPC 死后开建筑盒卡顿"的最后一道兜底。
+                releaseStaleAssignment(level.getServer(), hireInfo.getNpcUuid(), buildingPos);
             }
         }
 
@@ -204,6 +208,28 @@ public class IndustrialWorkHandler {
             return;
         }
         NPCWorkResumeCoordinator.resumeIndustrialWork(npc, level, buildingPos, buildingFileName);
+    }
+
+    /**
+     * 当雇佣记录指向一个已经死亡（NPCDataManager 数据被清掉）的 NPC 时，
+     * 主动调用 EmploymentService.fireByNpc 释放 V2 中的 ASSIGNED 记录，
+     * 避免每 tick 反复尝试 findNPCByUuid 造成卡顿。
+     * 区块卸载导致 NPC 不在线的情况下不会触发，因为此时 NPCDataManager 还有数据。
+     */
+    private static void releaseStaleAssignment(MinecraftServer server, UUID npcUuid, BlockPos buildingPos) {
+        if (server == null || npcUuid == null) {
+            return;
+        }
+        try {
+            if (NPCDataManager.getNPCNameByUUID(server, npcUuid) != null) {
+                return; // NPC 数据还在，可能只是区块未加载，不要误清。
+            }
+            com.xiaoliang.simukraft.employment.service.EmploymentServices.get(server)
+                    .fireByNpc(new com.xiaoliang.simukraft.employment.service.EmploymentCommands.FireByNpcCommand(npcUuid));
+            LOGGER.info("[IndustrialWorkHandler] 已清理僵尸雇佣记录 buildingPos={} npcUuid={}", buildingPos, npcUuid);
+        } catch (Exception e) {
+            LOGGER.error("[IndustrialWorkHandler] 清理僵尸雇佣记录失败 buildingPos={} npcUuid={}", buildingPos, npcUuid, e);
+        }
     }
 
     /**

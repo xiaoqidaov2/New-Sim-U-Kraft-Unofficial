@@ -107,6 +107,11 @@ public class IndustrialHiredData {
                 EmploymentLegacyBridge.loadLatestByWorkBlock(server, WorkBlockType.INDUSTRIAL_CONTROL_BOX).entrySet()) {
             BlockPos pos = entry.getKey();
             var assignment = entry.getValue();
+            // 只把当前还在岗的雇佣关系暴露给 V1 视图——RELEASED（NPC 死亡 / 解雇）的记录不应该再出现，
+            // 否则 IndustrialWorkHandler.handleDailyWork 会一直找不到 NPC 实体并刷屏 warn（#23 卡顿）。
+            if (!assignment.isAssigned()) {
+                continue;
+            }
 
             String buildingFileName = FileUtils.normalizeBuildingFileName(FileUtils.readIndustrialBuildingFileNameCached(server, pos));
             String buildingName = buildingFileName != null

@@ -245,6 +245,9 @@ public class CommercialWorkHandler {
                     handlePlayerSellMode(buildingPos, level, config);
                     anyChange = true;
                 }
+                // 僵尸 ASSIGNED 记录兜底：NPC 已死亡（NPCDataManager 数据已清）但 V2 没释放，
+                // 这里主动调 fireByNpc，避免每 tick 反复 findNPCByUuid 造成卡顿（#23）。
+                releaseStaleAssignment(level.getServer(), hireInfo.getNpcUuid(), buildingPos);
             }
         }
 

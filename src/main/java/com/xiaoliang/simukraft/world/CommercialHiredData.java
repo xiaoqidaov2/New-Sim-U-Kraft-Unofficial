@@ -327,6 +327,10 @@ public class CommercialHiredData {
                 EmploymentLegacyBridge.loadLatestByWorkBlock(server, WorkBlockType.COMMERCIAL_CONTROL_BOX).entrySet()) {
             BlockPos pos = entry.getKey();
             var assignment = entry.getValue();
+            // 同 IndustrialHiredData：过滤掉已 RELEASED 的记录，避免商业建筑反复对死 NPC findByUuid 造成卡顿。
+            if (!assignment.isAssigned()) {
+                continue;
+            }
 
             String buildingFileName = FileUtils.normalizeBuildingFileName(FileUtils.readCommercialBuildingFileNameCached(server, pos));
             String buildingName = buildingFileName != null
