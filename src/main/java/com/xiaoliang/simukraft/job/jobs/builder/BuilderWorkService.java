@@ -199,6 +199,9 @@ public class BuilderWorkService extends AbstractWorkService {
                 new com.xiaoliang.simukraft.employment.service.EmploymentCommands.FireByNpcCommand(npc.getUUID())
         );
 
+        // 立即使JobRuntimeService的雇佣缓存失效，防止workflow继续执行将职业重置为builder
+        com.xiaoliang.simukraft.job.core.JobRuntimeService.get().invalidateAssignmentCache();
+
         BlockPos syncPos = buildBoxPos;
         if (releaseResult.success() && releaseResult.assignment() != null) {
             syncPos = releaseResult.assignment().workplacePos();
