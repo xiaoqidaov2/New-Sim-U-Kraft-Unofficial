@@ -107,13 +107,13 @@ public class SelectBuildingScreen extends LDLibMenuScreen {
         int startX = centerX - totalWidth / 2;
 
         rootGroup.addWidget(createButton(startX, buttonY, BUTTON_WIDTH, BUTTON_HEIGHT, "gui.category.residential",
-                clickData -> Minecraft.getInstance().setScreen(new BuildingListScreen("residential", Minecraft.getInstance().screen))));
+                clickData -> Minecraft.getInstance().setScreen(new BuildingListScreen("residential", Minecraft.getInstance().screen, buildBoxPos))));
         rootGroup.addWidget(createButton(startX + BUTTON_WIDTH + BUTTON_SPACING, buttonY, BUTTON_WIDTH, BUTTON_HEIGHT, "gui.category.commercial",
-                clickData -> Minecraft.getInstance().setScreen(new BuildingListScreen("commercial", Minecraft.getInstance().screen))));
+                clickData -> Minecraft.getInstance().setScreen(new BuildingListScreen("commercial", Minecraft.getInstance().screen, buildBoxPos))));
         rootGroup.addWidget(createButton(startX + (BUTTON_WIDTH + BUTTON_SPACING) * 2, buttonY, BUTTON_WIDTH, BUTTON_HEIGHT, "gui.category.industrial",
-                clickData -> Minecraft.getInstance().setScreen(new BuildingListScreen("industry", Minecraft.getInstance().screen))));
+                clickData -> Minecraft.getInstance().setScreen(new BuildingListScreen("industry", Minecraft.getInstance().screen, buildBoxPos))));
         rootGroup.addWidget(createButton(startX + (BUTTON_WIDTH + BUTTON_SPACING) * 3, buttonY, BUTTON_WIDTH, BUTTON_HEIGHT, "gui.category.other",
-                clickData -> Minecraft.getInstance().setScreen(new BuildingListScreen("other", Minecraft.getInstance().screen))));
+                clickData -> Minecraft.getInstance().setScreen(new BuildingListScreen("other", Minecraft.getInstance().screen, buildBoxPos))));
 
         modularUI.widget(rootGroup);
         modularUI.initWidgets();

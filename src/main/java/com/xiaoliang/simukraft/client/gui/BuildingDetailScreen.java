@@ -1,26 +1,24 @@
 package com.xiaoliang.simukraft.client.gui;
 
-import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.HitResult;
-
 import javax.annotation.Nonnull;
 import java.util.Objects;
 
 public class BuildingDetailScreen extends AbstractTransitionScreen {
     private final BuildingListScreen.BuildingResponseInfo building;
     private final Screen parent;
+    private final BlockPos buildBoxPos;
 
-    public BuildingDetailScreen(BuildingListScreen.BuildingResponseInfo building, Screen parent) {
+    public BuildingDetailScreen(BuildingListScreen.BuildingResponseInfo building, Screen parent, BlockPos buildBoxPos) {
         super(Component.translatable("gui.building_detail.title", building.name()));
         this.building = building;
         this.parent = parent;
+        this.buildBoxPos = buildBoxPos;
     }
 
     @Override
@@ -49,23 +47,9 @@ public class BuildingDetailScreen extends AbstractTransitionScreen {
         Button previewButton = nn(Button.builder(
                 nn(Component.translatable("gui.button.preview")),
                 button -> {
-                    BlockPos buildBoxPos = null;
-                    HitResult hitResult = Minecraft.getInstance().hitResult;
-                    if (hitResult instanceof BlockHitResult blockHitResult) {
-                        buildBoxPos = blockHitResult.getBlockPos();
-                    }
-
-                    if (buildBoxPos != null && minecraft != null) {
+                    if (minecraft != null) {
                         System.out.println("[BuildingDetailScreen] Opening preview for: " + building.name());
                         minecraft.setScreen(new BuildingPreviewScreen(building, this, buildBoxPos));
-                        return;
-                    }
-
-                    if (minecraft != null && minecraft.player != null) {
-                        minecraft.player.displayClientMessage(
-                            nn(Component.translatable("message.simukraft.look_at_buildbox_first").withStyle(ChatFormatting.RED)),
-                            true
-                        );
                     }
                 })
             .bounds(centerX + buttonSpacing / 2, buttonY, buttonWidth, 20)

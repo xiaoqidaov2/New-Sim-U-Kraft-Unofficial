@@ -21,6 +21,7 @@ import com.xiaoliang.simukraft.network.NetworkManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.api.distmarker.Dist;
@@ -69,10 +70,13 @@ public class BuildingListScreen extends LDLibMenuScreen {
 
     enum SortMode { NAME, PRICE, SIZE }
 
-    public BuildingListScreen(String category, Screen parent) {
+    private final BlockPos buildBoxPos;
+
+    public BuildingListScreen(String category, Screen parent, BlockPos buildBoxPos) {
         super(Component.translatable("gui.building_list.title", getCategoryName(category)), parent);
         this.category = category;
         this.parent = parent;
+        this.buildBoxPos = buildBoxPos;
         this.pinnedBuildings = pinManager.getPinnedBuildings();
         NetworkManager.INSTANCE.sendToServer(new BuildingListRequestPacket(category));
     }
@@ -432,7 +436,7 @@ public class BuildingListScreen extends LDLibMenuScreen {
             Minecraft minecraft = this.minecraft;
             if (selectedBuilding == b) {
                 if (minecraft != null) {
-                    minecraft.setScreen(new BuildingDetailScreen(b, this));
+                    minecraft.setScreen(new BuildingDetailScreen(b, this, buildBoxPos));
                 }
             } else {
                 selectedBuilding = b;
