@@ -82,32 +82,10 @@ public class NPCDataManager {
         }
     }
 
-    private static final class SaveJobDataRequest {
-        final MinecraftServer server;
-        final String npcId;
-        final String status;
-        final String job;
-
-        SaveJobDataRequest(MinecraftServer server, String npcId, String status, String job) {
-            this.server = server;
-            this.npcId = npcId;
-            this.status = status;
-            this.job = job;
-        }
+    private record SaveJobDataRequest(MinecraftServer server, String npcId, String status, String job) {
     }
 
-    private static final class SaveSkillDataRequest {
-        final MinecraftServer server;
-        final UUID npcUuid;
-        final int level;
-        final int xp;
-
-        SaveSkillDataRequest(MinecraftServer server, UUID npcUuid, int level, int xp) {
-            this.server = server;
-            this.npcUuid = npcUuid;
-            this.level = level;
-            this.xp = xp;
-        }
+    private record SaveSkillDataRequest(MinecraftServer server, UUID npcUuid, int level, int xp) {
     }
 
     private static void startSaveThread() {
@@ -118,11 +96,11 @@ public class NPCDataManager {
                 try {
                     SaveJobDataRequest request = saveQueue.poll(100, TimeUnit.MILLISECONDS);
                     if (request != null) {
-                        saveJobDataSync(request.server, request.npcId, request.status, request.job);
+                        saveJobDataSync(request.server(), request.npcId(), request.status(), request.job());
                     }
                     SaveSkillDataRequest skillRequest = skillSaveQueue.poll(100, TimeUnit.MILLISECONDS);
                     if (skillRequest != null) {
-                        saveSkillDataSync(skillRequest.server, skillRequest.npcUuid, skillRequest.level, skillRequest.xp);
+                        saveSkillDataSync(skillRequest.server(), skillRequest.npcUuid(), skillRequest.level(), skillRequest.xp());
                     }
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();

@@ -30,7 +30,7 @@ public class ResidentialControlBoxBlock extends Block {
     private static final Logger LOGGER = LogManager.getLogger();
     
     public ResidentialControlBoxBlock() {
-        super(BlockBehaviour.Properties.of()
+        super(Objects.requireNonNull(BlockBehaviour.Properties.of())
                 .mapColor(Objects.requireNonNull(MapColor.METAL))
                 .strength(1.0F)
                 .sound(Objects.requireNonNull(SoundType.METAL)));

@@ -1087,52 +1087,6 @@ public class ResidentManager {
     }
 
     /**
-     * 鏌ユ壘鍙敤鐨勪綇瀹咃紙resident瀛楁涓虹┖鐨剆k鏂囦欢锛?
-     */
-
-    private static Path findAvailableResidence(List<Path> skFiles) {
-        for (Path skFile : skFiles) {
-            if (isResidenceAvailable(skFile)) {
-                return skFile;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * 妫€鏌ヤ綇瀹呮槸鍚﹀彲鐢紙resident瀛楁涓虹┖锛?
-     */
-    private static boolean isResidenceAvailable(Path skFile) {
-        try {
-            if (!Files.exists(skFile)) {
-                return false;
-            }
-
-            List<String> lines = Files.readAllLines(skFile, StandardCharsets.UTF_8);
-            boolean foundResidentLine = false;
-
-            for (String line : lines) {
-                if (line.trim().startsWith("resident:")) {
-                    foundResidentLine = true;
-                    // 妫€鏌esident瀛楁鏄惁涓虹┖
-                    String residentValue = line.substring("resident:".length()).trim();
-                    if (residentValue.isEmpty()) {
-                        return true; // 鎵惧埌鍙敤鐨勪綇瀹?
-                    }
-                    break;
-                }
-            }
-
-            // 濡傛灉娌℃湁鎵惧埌resident瀛楁锛屼篃璁や负鏄彲鐢ㄧ殑锛堥渶瑕佹坊鍔爎esident瀛楁锛?
-            return !foundResidentLine;
-
-        } catch (Exception e) {
-            LOGGER.error("Error checking residence availability: " + skFile.getFileName(), e);
-            return false;
-        }
-    }
-
-    /**
      * 褰撴帶鍒剁琚媶闄ゆ椂锛岄噴鏀句綇瀹呭苟鏍囪NPC涓烘祦娴?
      */
     public static boolean releaseResidenceAndMarkHomeless(MinecraftServer server, String npcName) {
@@ -1304,32 +1258,6 @@ public class ResidentManager {
         } catch (Exception e) {
             LOGGER.error("Error reading resident from file: " + skFile, e);
             return null;
-        }
-    }
-
-    /**
-     * 妫€鏌PC鏄惁灞呬綇鍦ㄧ壒瀹氭枃浠朵腑
-     */
-
-    private static boolean isNPCResidingInFile(Path skFile, String npcName) {
-        try {
-            if (!Files.exists(skFile)) {
-                return false;
-            }
-
-            List<String> lines = Files.readAllLines(skFile, StandardCharsets.UTF_8);
-
-            for (String line : lines) {
-                if (line.trim().startsWith("resident:") && line.contains(npcName)) {
-                    return true;
-                }
-            }
-
-            return false;
-
-        } catch (Exception e) {
-            LOGGER.error("Error checking NPC residence in file: " + skFile.getFileName(), e);
-            return false;
         }
     }
 

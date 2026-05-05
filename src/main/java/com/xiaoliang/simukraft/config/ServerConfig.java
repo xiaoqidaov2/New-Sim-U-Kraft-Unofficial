@@ -2,8 +2,6 @@ package com.xiaoliang.simukraft.config;
 
 import com.xiaoliang.simukraft.Simukraft;
 import net.minecraftforge.common.ForgeConfigSpec;
-import net.minecraftforge.fml.ModLoadingContext;
-import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.loading.FMLPaths;
 
 import java.io.IOException;
@@ -282,10 +280,6 @@ public class ServerConfig {
         builder.pop();
 
         SPEC = builder.build();
-    }
-
-    public static void register() {
-        ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, SPEC);
     }
 
     @SuppressWarnings("unchecked")

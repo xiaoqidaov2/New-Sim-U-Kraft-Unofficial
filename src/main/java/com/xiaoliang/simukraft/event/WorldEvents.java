@@ -1,6 +1,7 @@
 package com.xiaoliang.simukraft.event;
 
 import com.xiaoliang.simukraft.Simukraft;
+import com.xiaoliang.simukraft.employment.domain.WorkBlockType;
 import com.xiaoliang.simukraft.entity.CustomEntity;
 import com.xiaoliang.simukraft.init.ModSoundEvents;
 import com.xiaoliang.simukraft.network.NetworkManager;
@@ -588,6 +589,26 @@ public class WorldEvents {
         commercialIndustrialRestorePlanLoading = false;
         commercialIndustrialRestorePlanReady = false;
         Simukraft.LOGGER.debug("[WorldEvents] 已计划延迟恢复工商业雇佣状态");
+    }
+
+    /**
+     * 解雇后同步移除待恢复队列，避免旧恢复计划把 NPC 状态重新写回工作中。
+     */
+    public static void clearPendingEmploymentRestoration(UUID npcUuid, WorkBlockType workBlockType) {
+        if (npcUuid == null || workBlockType == null) {
+            return;
+        }
+
+        boolean removed = false;
+        if (workBlockType == WorkBlockType.COMMERCIAL_CONTROL_BOX) {
+            removed = pendingCommercialRestorations.remove(npcUuid) != null;
+        } else if (workBlockType == WorkBlockType.INDUSTRIAL_CONTROL_BOX) {
+            removed = pendingIndustrialRestorations.remove(npcUuid) != null;
+        }
+
+        if (removed) {
+            Simukraft.LOGGER.debug("[WorldEvents] 已移除待恢复雇佣记录 npcUuid={}, workBlockType={}", npcUuid, workBlockType);
+        }
     }
 
     /**

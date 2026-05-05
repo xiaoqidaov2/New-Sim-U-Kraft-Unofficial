@@ -8,7 +8,6 @@ import com.xiaoliang.simukraft.employment.domain.EmploymentAssignment;
 import com.xiaoliang.simukraft.employment.domain.WorkBlockType;
 import com.xiaoliang.simukraft.entity.CustomEntity;
 import com.xiaoliang.simukraft.entity.Gender;
-import com.xiaoliang.simukraft.entity.WorkStatus;
 import com.xiaoliang.simukraft.init.ModSoundEvents;
 import com.xiaoliang.simukraft.utils.ContainerUtils;
 import net.minecraft.client.Minecraft;

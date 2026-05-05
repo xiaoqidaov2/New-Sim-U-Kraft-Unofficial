@@ -28,7 +28,6 @@ import java.io.BufferedReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -745,93 +744,6 @@ public class CommercialWorkHandler {
 
         // 实时检查箱子中是否还有原料
         return hasMaterialsInNearbyContainers(pos, overworld, config);
-    }
-
-    /**
-     * 从建筑周围的箱子中获取原料（新增）
-     * 使用 ContainerUtils 在主线程中安全读取
-     */
-    private static Map<String, Integer> getMaterialsFromChests(BlockPos pos, ServerLevel level) {
-        return ContainerUtils.executeOnMainThread(level, () -> {
-            Map<String, Integer> materials = new HashMap<>();
-
-            if (pos == null || level == null) return materials;
-
-            // 查找建筑周围的箱子（5x3x5范围）
-            for (int dx = -5; dx <= 5; dx++) {
-                for (int dy = -2; dy <= 2; dy++) {
-                    for (int dz = -5; dz <= 5; dz++) {
-                        BlockPos checkPos = pos.offset(dx, dy, dz);
-
-                        // 使用 ContainerUtils 检查是否是容器
-                        if (ContainerUtils.isContainer(level, checkPos)) {
-                            // 获取容器中的所有物品
-                            List<ItemStack> items = ContainerUtils.getAllItems(level, checkPos);
-                            for (ItemStack stack : items) {
-                                if (!stack.isEmpty()) {
-                                    var itemKey = ForgeRegistries.ITEMS.getKey(Objects.requireNonNull(stack.getItem()));
-                                    if (itemKey != null) {
-                                        String itemId = itemKey.toString();
-                                        materials.put(itemId, materials.getOrDefault(itemId, 0) + stack.getCount());
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            return materials;
-        });
-    }
-
-    /**
-     * 从建筑周围的箱子中消耗原料（新增）
-     * 使用 ContainerUtils 在主线程中安全消耗
-     */
-    
-    private static void consumeMaterialsFromChests(BlockPos pos, ServerLevel level,
-                                                   java.util.List<CommercialBuildingConfig.MaterialRequirement> requirements) {
-        if (pos == null || level == null || requirements == null) return;
-
-        ContainerUtils.executeOnMainThread(level, () -> {
-            for (CommercialBuildingConfig.MaterialRequirement req : requirements) {
-                if (!req.isConsume()) continue; // 如果不消耗，跳过
-
-                int remainingToConsume = req.getCount();
-                String targetItemId = req.getItemId();
-
-                // 创建要消耗的物品堆
-                ItemStack itemToConsume = parseItemStack(targetItemId);
-                if (itemToConsume.isEmpty()) continue;
-
-                // 查找建筑周围的箱子
-                for (int dx = -5; dx <= 5 && remainingToConsume > 0; dx++) {
-                    for (int dy = -2; dy <= 2 && remainingToConsume > 0; dy++) {
-                        for (int dz = -5; dz <= 5 && remainingToConsume > 0; dz++) {
-                            BlockPos checkPos = pos.offset(dx, dy, dz);
-
-                            // 使用 ContainerUtils 检查是否是容器
-                            if (ContainerUtils.isContainer(level, checkPos)) {
-                                // 统计容器中该物品的数量
-                                int available = ContainerUtils.countItem(level, checkPos, itemToConsume);
-                                if (available > 0) {
-                                    int toConsume = Math.min(remainingToConsume, available);
-                                    ItemStack consumeStack = itemToConsume.copy();
-                                    consumeStack.setCount(toConsume);
-
-                                    // 消耗物品
-                                    if (ContainerUtils.consumeItem(level, checkPos, consumeStack)) {
-                                        remainingToConsume -= toConsume;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            return null;
-        });
     }
 
     /**

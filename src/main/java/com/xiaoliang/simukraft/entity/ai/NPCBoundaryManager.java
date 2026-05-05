@@ -8,7 +8,6 @@ import net.minecraft.world.phys.Vec3;
 
 import javax.annotation.Nullable;
 import java.util.EnumSet;
-import java.util.UUID;
 
 /**
  * NPC边界管理器（menglannnn: 合并原RestrictedAreaGoal、RestrictedGroundPathNavigation、RestrictedRandomStrollGoal功能）
@@ -18,13 +17,6 @@ import java.util.UUID;
 public class NPCBoundaryManager extends Goal {
     private final CustomEntity npc;
     private BlockPos centerPos;
-    private int radiusX;
-    private int radiusZ;
-    private boolean enabled = false;
-    private UUID buildingId = null;
-
-    // 界限解锁时间，23900 tick（约早上5:58），让NPC可以提前出发去工作
-    private static final long BOUNDS_UNLOCK_TIME = 23900L;
 
     public NPCBoundaryManager(CustomEntity npc) {
         this.npc = npc;
@@ -40,11 +32,7 @@ public class NPCBoundaryManager extends Goal {
      */
     public void setRestrictedArea(BlockPos center, int radiusX, int radiusZ, BlockPos controlBoxPos) {
         // simukraft: 暂时彻底停用边界限制
-        this.enabled = false;
         this.centerPos = null;
-        this.buildingId = null;
-        this.radiusX = 0;
-        this.radiusZ = 0;
     }
 
     /**
@@ -58,20 +46,7 @@ public class NPCBoundaryManager extends Goal {
      * 清除限制区域（menglannnn: 通常在NPC结束休息时调用）
      */
     public void clearRestrictedArea() {
-        this.enabled = false;
         this.centerPos = null;
-        this.buildingId = null;
-    }
-
-    /**
-     * 检查是否应该解锁界限（menglannnn: 23900 tick后允许NPC离开家去工作）
-     */
-    private boolean shouldUnlockBounds() {
-        if (npc.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
-            long dayTime = serverLevel.getDayTime() % 24000L;
-            return dayTime >= BOUNDS_UNLOCK_TIME || dayTime < 1000L;
-        }
-        return false;
     }
 
     /**
@@ -113,12 +88,6 @@ public class NPCBoundaryManager extends Goal {
 
     @Override
     public void stop() {
-    }
-
-    /**
-     * 强制返回边界内
-     */
-    private void forceReturnToBounds() {
     }
 
     /**

@@ -153,7 +153,6 @@ public class BuilderMaterialCache {
                         Objects.requireNonNull(containerPos.immutable()),
                         slotSnapshot.slot(),
                         slotSnapshot.usesItemHandler(),
-                        itemId,
                         slotSnapshot.stack().getCount()
                     ));
             }
@@ -300,16 +299,12 @@ public class BuilderMaterialCache {
         private final BlockPos containerPos;
         private final int slot;
         private final boolean usesItemHandler;
-        @Nonnull
-        private final String itemId;
         private int remainingCount;
 
-        private CachedSlotRef(@Nonnull BlockPos containerPos, int slot, boolean usesItemHandler,
-                              @Nonnull String itemId, int remainingCount) {
+        private CachedSlotRef(@Nonnull BlockPos containerPos, int slot, boolean usesItemHandler, int remainingCount) {
             this.containerPos = Objects.requireNonNull(containerPos);
             this.slot = slot;
             this.usesItemHandler = usesItemHandler;
-            this.itemId = Objects.requireNonNull(itemId);
             this.remainingCount = remainingCount;
         }
     }

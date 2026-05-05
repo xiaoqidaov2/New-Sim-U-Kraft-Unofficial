@@ -88,24 +88,9 @@ public class PlayerSelectionScreen extends ModularUIGuiContainer {
 
     // ==================== 成员变量 ====================
 
-    private final BlockPos cityCorePos;
-    private final CityOfficialScreen parentScreen;
-    private final PlayerSelectionUIHolder holder;
-
     // ==================== 构造函数 ====================
-
     public PlayerSelectionScreen(BlockPos cityCorePos, CityOfficialScreen parentScreen) {
         super(createHolderAndUI(cityCorePos, parentScreen), 0);
-        this.cityCorePos = cityCorePos;
-        this.parentScreen = parentScreen;
-        this.holder = ((ModularUI) this.modularUI).holder instanceof PlayerSelectionUIHolder
-                ? (PlayerSelectionUIHolder) ((ModularUI) this.modularUI).holder
-                : null;
-
-        if (this.holder != null) {
-            this.holder.setScreen(this);
-        }
-
         playOpenSound();
     }
 
@@ -267,8 +252,6 @@ public class PlayerSelectionScreen extends ModularUIGuiContainer {
     public static class PlayerSelectionUIHolder implements IUIHolder {
         private final BlockPos cityCorePos;
         private final CityOfficialScreen parentScreen;
-        private PlayerSelectionScreen screen;
-
         // 数据
         private List<PlayerInfo> allPlayers = new ArrayList<>();
         private List<PlayerInfo> filteredPlayers = new ArrayList<>();
@@ -291,10 +274,6 @@ public class PlayerSelectionScreen extends ModularUIGuiContainer {
         public PlayerSelectionUIHolder(BlockPos cityCorePos, CityOfficialScreen parentScreen) {
             this.cityCorePos = cityCorePos;
             this.parentScreen = parentScreen;
-        }
-
-        public void setScreen(PlayerSelectionScreen screen) {
-            this.screen = screen;
         }
 
         public void setSearchBox(TextFieldWidget searchBox) {
@@ -568,12 +547,6 @@ public class PlayerSelectionScreen extends ModularUIGuiContainer {
         }
 
         // ==================== 分页 ====================
-
-        private String getPageInfoText() {
-            int maxPages = (int) Math.ceil((double) filteredPlayers.size() / PLAYERS_PER_PAGE);
-            if (maxPages <= 0) return "";
-            return (currentPage + 1) + " / " + maxPages;
-        }
 
         private void updatePaginationButtons() {
             int maxPages = (int) Math.ceil((double) filteredPlayers.size() / PLAYERS_PER_PAGE);

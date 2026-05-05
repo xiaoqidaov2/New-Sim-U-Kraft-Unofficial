@@ -35,7 +35,6 @@ public class NPCRestHandler {
     private static final int EVENING_FORCE_TELEPORT_TIME = 13000; // 晚上19:00仍未到家则强制传送
     private static final int MORNING_END_TIME = 0; // 早上结束时间（约6:00）
     private static final int MORNING_PREPARE_TIME = 23000; // 早上准备出发时间（约5:00）
-    private static final int REST_CHECK_INTERVAL = 100; // 检查间隔（5秒）
     private static final int MAX_GOING_TO_WORK_TIME = 6000; // 最长去工作时间（游戏刻5分钟）
     private static final int BED_SEARCH_HORIZONTAL_RADIUS = 8;
     private static final int BED_SEARCH_VERTICAL_RADIUS = 4;
@@ -74,8 +73,6 @@ public class NPCRestHandler {
     private static final int REST_STAGE_WAKING_UP = 4;
     private static final int REST_STAGE_WAITING_FOR_BED = 6;
 
-    private static final int REST_STAGE_GOING_TO_WORK = 5; // 新增：正在去工作
-
     // 存储正在去工作的NPC数据
     private static final Map<UUID, GoingToWorkData> goingToWorkNPCs = new ConcurrentHashMap<>();
 
@@ -84,10 +81,8 @@ public class NPCRestHandler {
      */
     private static class RestData {
         public final CustomEntity npc;
-        public final ServerLevel level;
         public BlockPos homePos;
         public int restStage;
-        public long restStartTime;
         public boolean hasArrivedHome;
         public BlockPos bedPos;
         public long nextBedRetryTick;
@@ -95,9 +90,7 @@ public class NPCRestHandler {
 
         public RestData(CustomEntity npc, ServerLevel level) {
             this.npc = npc;
-            this.level = level;
             this.restStage = REST_STAGE_IDLE;
-            this.restStartTime = System.currentTimeMillis();
             this.hasArrivedHome = false;
             this.bedPos = null;
             this.nextBedRetryTick = Long.MIN_VALUE;
@@ -110,8 +103,6 @@ public class NPCRestHandler {
      */
     private static class GoingToWorkData {
         public final CustomEntity npc;
-
-        public final ServerLevel level;
         public final BlockPos workPos;
         public final String job;
         public final WorkStatus previousWorkStatus;
@@ -119,7 +110,6 @@ public class NPCRestHandler {
 
         public GoingToWorkData(CustomEntity npc, ServerLevel level, BlockPos workPos, String job, WorkStatus previousWorkStatus) {
             this.npc = npc;
-            this.level = level;
             this.workPos = workPos;
             this.job = job;
             this.previousWorkStatus = previousWorkStatus;
@@ -744,40 +734,6 @@ public class NPCRestHandler {
 
         if ("warehouse_manager".equals(previousJob)) {
             com.xiaoliang.simukraft.job.jobs.warehousemanager.WarehouseManagerWorkService.INSTANCE.restoreWorkState(npc, npc.getUUID(), level);
-        }
-    }
-
-    /**
-     * 传送NPC到工作岗位
-     */
-    private static void teleportToWorkplace(CustomEntity npc, ServerLevel level, String job) {
-        if (npc == null || level == null || job == null) return;
-
-        // 根据职业获取工作位置
-        BlockPos workPos = getWorkplacePosition(npc, level.getServer(), job);
-
-        if (workPos != null) {
-            // 检查距离，如果超过10格则传送
-            double distance = npc.position().distanceTo(new net.minecraft.world.phys.Vec3(workPos.getX() + 0.5, workPos.getY(), workPos.getZ() + 0.5));
-
-            if (distance > 10.0) {
-                LOGGER.info("[NPCRestHandler] NPC {} 距离工作岗位{}格，传送回工作岗位: {}", 
-                    npc.getFullName(), distance, workPos);
-
-                // 生成传送粒子效果
-                spawnTeleportParticles(npc);
-
-                // 传送NPC到工作岗位
-                npc.teleportTo(workPos.getX() + 0.5, workPos.getY() + 1, workPos.getZ() + 0.5);
-
-                // 在目的地生成传送粒子效果
-                spawnTeleportParticles(npc);
-            } else {
-                LOGGER.info("[NPCRestHandler] NPC {} 距离工作岗位只有{}格，不需要传送", 
-                    npc.getFullName(), distance);
-            }
-        } else {
-            LOGGER.warn("[NPCRestHandler] NPC {} 无法找到工作岗位位置", npc.getFullName());
         }
     }
 

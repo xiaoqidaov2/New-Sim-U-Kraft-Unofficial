@@ -1,6 +1,7 @@
 package com.xiaoliang.simukraft.network;
 
 import com.xiaoliang.simukraft.entity.WorkStatus;
+import com.xiaoliang.simukraft.event.WorldEvents;
 import com.xiaoliang.simukraft.Simukraft;
 import com.xiaoliang.simukraft.employment.domain.JobType;
 import com.xiaoliang.simukraft.employment.domain.WorkBlockType;
@@ -12,6 +13,8 @@ import com.xiaoliang.simukraft.employment.service.LegacyJobTypeMapper;
 import com.xiaoliang.simukraft.entity.CustomEntity;
 import com.xiaoliang.simukraft.world.BuildBoxHiredData;
 import com.xiaoliang.simukraft.world.CommercialHiredData;
+import com.xiaoliang.simukraft.world.FarmlandHiredData;
+import com.xiaoliang.simukraft.world.IndustrialHiredData;
 import com.xiaoliang.simukraft.world.LogisticsHiredData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
@@ -235,7 +238,16 @@ public class EmploymentCommandPacket {
                 }
                 yield result;
             }
-            case FIRE_BY_WORKPLACE -> service.fireByWorkplace(new EmploymentCommands.FireByWorkplaceCommand(actualDimension, workplacePos));
+            case FIRE_BY_WORKPLACE -> {
+                var result = service.fireByWorkplace(new EmploymentCommands.FireByWorkplaceCommand(actualDimension, workplacePos));
+                if (!result.success() && workplacePos != null && server != null) {
+                    var legacyResult = cleanupLegacyDataByWorkplaceAndCreateAssignment(server, workplacePos, actualDimension);
+                    if (legacyResult != null) {
+                        yield legacyResult;
+                    }
+                }
+                yield result;
+            }
             case QUERY_SNAPSHOT -> EmploymentResult.ok("Snapshot queried", null);
         };
     }
@@ -292,6 +304,7 @@ public class EmploymentCommandPacket {
         if (type == EmploymentCommandType.FIRE_BY_NPC || type == EmploymentCommandType.FIRE_BY_WORKPLACE) {
             // 1. 物流系统仍保留独立存储，其余职业关系已统一到 v2 仓储
             cleanupLegacyDataOnFire(server, assignment.npcUuid(), assignment);
+            WorldEvents.clearPendingEmploymentRestoration(assignment.npcUuid(), assignment.workBlockType());
             syncFarmlandClientStateOnFire(server, assignment);
 
             // 2. 取消规划师活跃任务
@@ -539,6 +552,23 @@ public class EmploymentCommandPacket {
                                          com.xiaoliang.simukraft.employment.domain.EmploymentAssignment assignment) {
         try {
             switch (assignment.workBlockType()) {
+                case FARMLAND_BOX -> {
+                    FarmlandHiredData.loadAllFarmlandData(server);
+                    if (FarmlandHiredData.getHiredFarmer(assignment.workplacePos()) != null) {
+                        FarmlandHiredData.clearHiredFarmer(assignment.workplacePos());
+                        FarmlandHiredData.saveAllFarmlandData(server);
+                        Simukraft.LOGGER.info("[EmploymentCommandPacket] 清除FarmlandHiredData记录 - NPC: {}, 农田盒: {}",
+                                npcUuid.toString().substring(0, 8), assignment.workplacePos());
+                    }
+                }
+                case INDUSTRIAL_CONTROL_BOX -> {
+                    var industrialData = IndustrialHiredData.loadHiredEmployees(server);
+                    if (industrialData.remove(assignment.workplacePos()) != null) {
+                        IndustrialHiredData.saveHiredEmployees(server, industrialData);
+                        Simukraft.LOGGER.info("[EmploymentCommandPacket] 清除IndustrialHiredData记录 - NPC: {}, 工业盒: {}",
+                                npcUuid.toString().substring(0, 8), assignment.workplacePos());
+                    }
+                }
                 case COMMERCIAL_CONTROL_BOX -> CommercialHiredData.clearHiredEmployeesCache();
                 case LOGISTICS_SERVER_BOX -> {
                     LogisticsHiredData.removeServerBoxHired(server, assignment.workplacePos());
@@ -602,6 +632,24 @@ public class EmploymentCommandPacket {
     private void cleanupAllLegacyDataByNpc(MinecraftServer server, UUID npcUuid) {
         try {
             CommercialHiredData.clearHiredEmployeesCache();
+            FarmlandHiredData.loadAllFarmlandData(server);
+            boolean farmlandChanged = false;
+            for (var entry : new java.util.ArrayList<>(FarmlandHiredData.getHiredFarmers().entrySet())) {
+                if (entry.getValue().equals(npcUuid)) {
+                    FarmlandHiredData.clearHiredFarmer(entry.getKey());
+                    farmlandChanged = true;
+                }
+            }
+            if (farmlandChanged) {
+                FarmlandHiredData.saveAllFarmlandData(server);
+            }
+
+            var industrialData = IndustrialHiredData.loadHiredEmployees(server);
+            boolean industrialChanged = industrialData.entrySet().removeIf(entry -> entry.getValue().getNpcUuid().equals(npcUuid));
+            if (industrialChanged) {
+                IndustrialHiredData.saveHiredEmployees(server, industrialData);
+            }
+
             BlockPos logisticsPos = LogisticsHiredData.findByNpcUuid(server, npcUuid);
             if (logisticsPos != null) {
                 LogisticsHiredData.removeServerBoxHired(server, logisticsPos);
@@ -694,6 +742,48 @@ public class EmploymentCommandPacket {
         return null;
     }
 
+    private EmploymentResult cleanupLegacyDataByWorkplaceAndCreateAssignment(MinecraftServer server, BlockPos workplacePos, String dimensionId) {
+        try {
+            UUID farmlandNpcUuid = FarmlandHiredData.getHiredFarmer(workplacePos);
+            if (farmlandNpcUuid != null) {
+                Simukraft.LOGGER.info("[EmploymentCommandPacket] 在FarmlandHiredData中找到农民记录，执行legacy解雇清理 - NPC: {}, 农田盒: {}",
+                        farmlandNpcUuid.toString().substring(0, 8), workplacePos);
+                var legacyAssignment = new com.xiaoliang.simukraft.employment.domain.EmploymentAssignment(
+                        farmlandNpcUuid,
+                        dimensionId,
+                        workplacePos,
+                        WorkBlockType.FARMLAND_BOX,
+                        JobType.FARMER,
+                        com.xiaoliang.simukraft.employment.domain.EmploymentStatus.ASSIGNED,
+                        System.currentTimeMillis(),
+                        System.currentTimeMillis()
+                );
+                return EmploymentResult.ok("Fired from FarmlandHiredData legacy", legacyAssignment);
+            }
+
+            var industrialData = IndustrialHiredData.loadHiredEmployees(server);
+            var industrialHire = industrialData.get(workplacePos);
+            if (industrialHire != null && industrialHire.getNpcUuid() != null) {
+                Simukraft.LOGGER.info("[EmploymentCommandPacket] 在IndustrialHiredData中找到工业记录，执行legacy解雇清理 - NPC: {}, 工业盒: {}",
+                        industrialHire.getNpcUuid().toString().substring(0, 8), workplacePos);
+                var legacyAssignment = new com.xiaoliang.simukraft.employment.domain.EmploymentAssignment(
+                        industrialHire.getNpcUuid(),
+                        dimensionId,
+                        workplacePos,
+                        WorkBlockType.INDUSTRIAL_CONTROL_BOX,
+                        LegacyJobTypeMapper.fromLegacy(industrialHire.getJobType(), "industrial"),
+                        com.xiaoliang.simukraft.employment.domain.EmploymentStatus.ASSIGNED,
+                        System.currentTimeMillis(),
+                        System.currentTimeMillis()
+                );
+                return EmploymentResult.ok("Fired from IndustrialHiredData legacy", legacyAssignment);
+            }
+        } catch (Exception e) {
+            Simukraft.LOGGER.error("[EmploymentCommandPacket] legacy cleanup by workplace error", e);
+        }
+        return null;
+    }
+
     /**
      * 从商业建筑配置文件中读取 jobType
      */
@@ -742,6 +832,7 @@ public class EmploymentCommandPacket {
         com.xiaoliang.simukraft.world.FarmlandHiredData.clearHiredFarmer(farmlandPos);
         com.xiaoliang.simukraft.world.FarmlandHiredData.clearSelectedCrop(farmlandPos);
         com.xiaoliang.simukraft.world.FarmlandHiredData.clearSelectedArea(farmlandPos);
+        com.xiaoliang.simukraft.world.FarmlandHiredData.clearSelectedPlot(farmlandPos);
         com.xiaoliang.simukraft.world.FarmlandHiredData.clearBoundChest(farmlandPos);
         com.xiaoliang.simukraft.job.jobs.farmer.FarmerWorkService.INSTANCE.clearTimers(farmlandPos);
         com.xiaoliang.simukraft.world.FarmlandHiredData.saveAllFarmlandData(server);

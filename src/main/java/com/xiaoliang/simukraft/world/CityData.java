@@ -615,12 +615,6 @@ public class CityData extends SavedData {
         return 0.0;
     }
 
-    private ServerLevel getServerLevel(UUID playerId) {
-        // 由于无法直接从UUID获取ServerLevel，我们返回主世界
-        // 实际使用中，这个方法可能需要调整
-        return null;
-    }
-
     private void syncHUDDataForCity(UUID cityId, ServerLevel level) {
         CityInfo city = getCity(cityId);
         if (city != null) {
@@ -741,16 +735,6 @@ public class CityData extends SavedData {
             }
         }
         return false;
-    }
-
-    private ServerLevel getOverworld(UUID cityId) {
-        CityInfo city = getCity(cityId);
-        if (city != null && city.getMayorId() != null) {
-            // 实际使用中，我们需要从游戏中获取服务器实例
-            // 这里简化处理，返回null
-            return null;
-        }
-        return null;
     }
 
     public String getPlayerCityName(String playerName) {

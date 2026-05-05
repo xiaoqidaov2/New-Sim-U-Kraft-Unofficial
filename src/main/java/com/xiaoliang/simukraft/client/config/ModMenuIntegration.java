@@ -4,7 +4,9 @@ import com.xiaoliang.simukraft.client.gui.ldlib.ConfigSelectionMenuScreen;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.client.ConfigScreenHandler;
-import net.minecraftforge.fml.ModLoadingContext;
+import net.minecraftforge.fml.ModContainer;
+
+import java.util.Objects;
 
 /**
  * simukraft: ModMenu集成 - 菜单版本
@@ -13,8 +15,8 @@ import net.minecraftforge.fml.ModLoadingContext;
 @OnlyIn(Dist.CLIENT)
 public class ModMenuIntegration {
 
-    public static void registerConfigScreen() {
-        ModLoadingContext.get().registerExtensionPoint(
+    public static void registerConfigScreen(ModContainer modContainer) {
+        Objects.requireNonNull(modContainer).registerExtensionPoint(
                 ConfigScreenHandler.ConfigScreenFactory.class,
                 () -> new ConfigScreenHandler.ConfigScreenFactory(
                         (minecraft, parent) -> new ConfigSelectionMenuScreen(parent)

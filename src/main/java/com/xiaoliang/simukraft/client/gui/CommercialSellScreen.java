@@ -52,9 +52,6 @@ public class CommercialSellScreen extends ModularUIGuiContainer {
     private static final float WINDOW_HEIGHT_RATIO = 0.7f;      // 窗口高度占屏幕高度的比例
     private static final float HEADER_HEIGHT_RATIO = 0.15f;     // 标题栏高度占窗口高度的比例
     private static final float FOOTER_HEIGHT_RATIO = 0.15f;     // 底部高度占窗口高度的比例
-    private static final float BUTTON_WIDTH_RATIO = 0.18f;      // 按钮宽度占窗口宽度的比例
-    private static final float BUTTON_HEIGHT_RATIO = 0.08f;     // 按钮高度占底部高度的比例
-
     // 最小/最大尺寸限制
     private static final int MIN_WINDOW_WIDTH = 300;
     private static final int MIN_WINDOW_HEIGHT = 240;

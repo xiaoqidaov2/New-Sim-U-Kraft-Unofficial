@@ -192,18 +192,17 @@ public class FarmerWorkService extends AbstractWorkService {
         if (npc.getWorkSubState() == com.xiaoliang.simukraft.entity.WorkSubState.LUNCH_BREAK) {
             return;
         }
-        
+
+        BlockPos farmlandBoxPos = getFarmlandBoxForNpc(level.getServer(), npcUuid);
+        if (farmlandBoxPos == null) return;
+
         if (!"farmer".equals(npc.getJob())) {
             npc.setJob("farmer");
         }
-        
         if (npc.getWorkStatus() == WorkStatus.IDLE) {
             npc.setWorkStatus(WorkStatus.WORKING);
             npc.setWorkSubState(com.xiaoliang.simukraft.entity.WorkSubState.WORKING);
         }
-        
-        BlockPos farmlandBoxPos = getFarmlandBoxForNpc(level.getServer(), npcUuid);
-        if (farmlandBoxPos == null) return;
         
         BlockPos npcPos = npc.blockPosition();
         double distance = npcPos.distSqr(farmlandBoxPos);

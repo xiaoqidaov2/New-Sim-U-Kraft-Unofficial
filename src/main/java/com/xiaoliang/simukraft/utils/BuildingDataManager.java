@@ -92,20 +92,6 @@ public class BuildingDataManager {
         return workingDir.toAbsolutePath().normalize();
     }
 
-    private static String getBaseName(String fileName) {
-        int extensionIndex = fileName.lastIndexOf('.');
-        return extensionIndex >= 0 ? fileName.substring(0, extensionIndex).toLowerCase() : fileName.toLowerCase();
-    }
-
-    private static boolean matchesAny(String baseName, String... candidates) {
-        for (String candidate : candidates) {
-            if (candidate.equals(baseName)) {
-                return true;
-            }
-        }
-        return false;
-    }
-    
     // 静态初始化块，在类加载时检查和复制建筑文件
     static {
         // 确定建筑文件的存储位置

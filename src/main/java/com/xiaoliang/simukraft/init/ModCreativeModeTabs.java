@@ -17,7 +17,8 @@ public class ModCreativeModeTabs {
             DeferredRegister.create(Registries.CREATIVE_MODE_TAB, Simukraft.MOD_ID);
 
     // 创造模式Tab栏背景纹理路径
-    private static final ResourceLocation TAB_BACKGROUND = new ResourceLocation(Simukraft.MOD_ID, "textures/gui/tab_gui.png");
+    private static final ResourceLocation TAB_BACKGROUND =
+            nn(ResourceLocation.fromNamespaceAndPath(Simukraft.MOD_ID, "textures/gui/tab_gui.png"));
 
     //方块物品添加到simukraft_tab里
     public static final RegistryObject<CreativeModeTab> SIMUKRAFT_TAB = CREATIVE_MODE_TABS.register("simukraft_tab",

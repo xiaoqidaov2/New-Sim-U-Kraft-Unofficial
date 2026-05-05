@@ -143,68 +143,6 @@ public class EmployeeListRequestPacket {
     }
 
     /**
-     * 获取NPC的工作地点
-     */
-    private static BlockPos getWorkplacePos(MinecraftServer server, UUID npcUuid, String job) {
-        // 根据职业从各工作方块数据查找工作地点
-        // 首先检查是否是商业建筑职业（统一使用CommercialBuildingManager）
-        if (com.xiaoliang.simukraft.building.CommercialBuildingManager.isCommercialJobType(job)) {
-            return findWorkplaceFromCommercial(server, npcUuid, job);
-        }
-        
-        BlockPos pos = switch (job) {
-            case "builder", "planner" -> findWorkplaceFromBuildBox(server, npcUuid);
-            case "shepherd" -> findWorkplaceFromWoolFarm(server, npcUuid);
-            case "butcher" -> findWorkplaceFromBeefFarm(server, npcUuid);
-            case "farmer" -> findWorkplaceFromFarmland(server, npcUuid);
-            case "warehouse_manager" -> findWorkplaceFromWarehouse(server, npcUuid);
-            default -> null; // 未知类型，需要进一步判断
-        };
-        
-        // 如果找到已知类型的工作地点，直接返回
-        if (pos != null) {
-            return pos;
-        }
-        
-        // 检查是否是工业建筑职业
-        var industrialConfigs = com.xiaoliang.simukraft.building.IndustrialBuildingManager.getConfigsByJobType(job);
-        if (!industrialConfigs.isEmpty()) {
-            return findWorkplaceFromIndustrial(server, npcUuid, job);
-        }
-        
-        // 默认为工业建筑查找
-        return findWorkplaceFromIndustrial(server, npcUuid, job);
-    }
-
-    /**
-     * 从商业建筑数据中查找工作地点（通用）
-     */
-    private static BlockPos findWorkplaceFromCommercial(MinecraftServer server, UUID npcUuid, String jobType) {
-        var employees = com.xiaoliang.simukraft.world.CommercialHiredData.loadHiredEmployees(server);
-        for (var entry : employees.entrySet()) {
-            com.xiaoliang.simukraft.world.CommercialHiredData.CommercialHireInfo hireInfo = entry.getValue();
-            if (hireInfo != null && hireInfo.getNpcUuid().equals(npcUuid) && jobType.equals(hireInfo.getJobType())) {
-                return entry.getKey();
-            }
-        }
-        return BlockPos.ZERO;
-    }
-
-    /**
-     * 从工业建筑数据中查找工作地点（通用）
-     */
-    private static BlockPos findWorkplaceFromIndustrial(MinecraftServer server, UUID npcUuid, String jobType) {
-        var employees = com.xiaoliang.simukraft.world.IndustrialHiredData.loadHiredEmployees(server);
-        for (var entry : employees.entrySet()) {
-            com.xiaoliang.simukraft.world.IndustrialHiredData.IndustrialHireInfo hireInfo = entry.getValue();
-            if (hireInfo != null && hireInfo.getNpcUuid().equals(npcUuid) && jobType.equals(hireInfo.getJobType())) {
-                return entry.getKey();
-            }
-        }
-        return BlockPos.ZERO;
-    }
-
-    /**
      * 获取工业建筑的配置文件名
      */
     private static String getIndustrialBuildingFileName(MinecraftServer server, UUID npcUuid, String jobType) {
@@ -216,62 +154,6 @@ public class EmployeeListRequestPacket {
             }
         }
         return null;
-    }
-
-    private static BlockPos findWorkplaceFromBuildBox(MinecraftServer server, UUID npcUuid) {
-        var builders = com.xiaoliang.simukraft.world.BuildBoxHiredData.loadHiredBuilders(server);
-        for (var entry : builders.entrySet()) {
-            if (entry.getValue().equals(npcUuid)) {
-                return entry.getKey();
-            }
-        }
-        var planners = com.xiaoliang.simukraft.world.BuildBoxHiredData.loadHiredPlanners(server);
-        for (var entry : planners.entrySet()) {
-            if (entry.getValue().equals(npcUuid)) {
-                return entry.getKey();
-            }
-        }
-        return BlockPos.ZERO;
-    }
-
-    private static BlockPos findWorkplaceFromWoolFarm(MinecraftServer server, UUID npcUuid) {
-        var employees = com.xiaoliang.simukraft.world.IndustrialHiredData.loadHiredEmployees(server);
-        for (var entry : employees.entrySet()) {
-            com.xiaoliang.simukraft.world.IndustrialHiredData.IndustrialHireInfo hireInfo = entry.getValue();
-            if (hireInfo != null && hireInfo.getNpcUuid().equals(npcUuid) && "shepherd".equals(hireInfo.getJobType())) {
-                return entry.getKey();
-            }
-        }
-        return BlockPos.ZERO;
-    }
-
-    private static BlockPos findWorkplaceFromBeefFarm(MinecraftServer server, UUID npcUuid) {
-        var employees = com.xiaoliang.simukraft.world.IndustrialHiredData.loadHiredEmployees(server);
-        for (var entry : employees.entrySet()) {
-            com.xiaoliang.simukraft.world.IndustrialHiredData.IndustrialHireInfo hireInfo = entry.getValue();
-            if (hireInfo != null && hireInfo.getNpcUuid().equals(npcUuid) && "butcher".equals(hireInfo.getJobType())) {
-                return entry.getKey();
-            }
-        }
-        return BlockPos.ZERO;
-    }
-
-    private static BlockPos findWorkplaceFromFarmland(MinecraftServer server, UUID npcUuid) {
-        com.xiaoliang.simukraft.world.FarmlandHiredData.loadAllFarmlandData(server);
-        var farmers = com.xiaoliang.simukraft.world.FarmlandHiredData.getHiredFarmers();
-        for (var entry : farmers.entrySet()) {
-            if (entry.getValue().equals(npcUuid)) {
-                return entry.getKey();
-            }
-        }
-        return BlockPos.ZERO;
-    }
-
-
-
-    private static BlockPos findWorkplaceFromWarehouse(MinecraftServer server, UUID npcUuid) {
-        BlockPos pos = com.xiaoliang.simukraft.world.LogisticsHiredData.findByNpcUuid(server, npcUuid);
-        return pos != null ? pos : BlockPos.ZERO;
     }
 
     /**
@@ -361,14 +243,6 @@ public class EmployeeListRequestPacket {
         
         // 默认为工业建筑
         return "industrial";
-    }
-
-    /**
-     * 检查是否为商业建筑职业
-     * 统一使用CommercialBuildingManager检查，避免硬编码
-     */
-    private static boolean isCommercialJob(String job) {
-        return com.xiaoliang.simukraft.building.CommercialBuildingManager.isCommercialJobType(job);
     }
 
     /**

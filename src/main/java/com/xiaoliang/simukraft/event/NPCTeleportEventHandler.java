@@ -12,26 +12,24 @@ import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Mod.EventBusSubscriber(modid = Simukraft.MOD_ID)
 @SuppressWarnings({"null", "deprecation"})
 public class NPCTeleportEventHandler {
     
     // 存储NPC的传送状态
-    private static final Map<Integer, TeleportState> npcTeleportStates = new HashMap<>();
+    private static final Map<Integer, TeleportState> npcTeleportStates = new ConcurrentHashMap<>();
     
     private static class TeleportState {
         BlockPos targetPos;
         int ticksAtTarget;
-        String jobType;
         String buildingFileName; // 新增：建筑文件名
         
-        TeleportState(BlockPos targetPos, String jobType, String buildingFileName) {
+        TeleportState(BlockPos targetPos, String buildingFileName) {
             this.targetPos = targetPos;
             this.ticksAtTarget = 0;
-            this.jobType = jobType;
             this.buildingFileName = buildingFileName;
         }
     }
@@ -79,13 +77,12 @@ public class NPCTeleportEventHandler {
         if (state == null) {
             // 新传送，检查是否传送到工业控制箱
             if (level.getBlockState(currentPos).getBlock() == ModBlocks.INDUSTRIAL_CONTROL_BOX.get()) {
-                String job = npc.getJob();
                 // 获取建筑文件名
                 String buildingFileName = IndustrialWorkHandler.getBuildingFileName(level, currentPos);
                 if (buildingFileName == null) {
                     buildingFileName = "industrial"; // 默认值
                 }
-                npcTeleportStates.put(npcId, new TeleportState(currentPos, job, buildingFileName));
+                npcTeleportStates.put(npcId, new TeleportState(currentPos, buildingFileName));
             }
             return;
         }
@@ -137,33 +134,13 @@ public class NPCTeleportEventHandler {
                         } else {
                             npc.teleportTo(targetPos.getX() + 0.5, targetPos.getY(), targetPos.getZ() + 0.5);
                             npc.stopNewPathfinder();
-                            npcTeleportStates.put(npcId, new TeleportState(targetPos, "farmer", null));
+                            npcTeleportStates.put(npcId, new TeleportState(targetPos, null));
                             Simukraft.LOGGER.info("农民传送：{} 传送到农田盒附近 {}", npc.getFullName(), targetPos);
                         }
                     }
                 }
             }
         }
-    }
-    
-    /**
-     * 农民传送完成后恢复工作状态
-     */
-    private static void onFarmerTeleported(CustomEntity npc, ServerLevel level) {
-        npc.setWorkStatus(com.xiaoliang.simukraft.entity.WorkStatus.WORKING);
-        npc.setWorkSubState(com.xiaoliang.simukraft.entity.WorkSubState.WORKING);
-        
-        net.minecraft.network.chat.Component npcName = npc.getCustomName() != null ? npc.getCustomName() : net.minecraft.network.chat.Component.literal(npc.getFullName());
-        net.minecraft.network.chat.Component message = net.minecraft.network.chat.Component.translatable("message.simukraft.farmer.teleport_complete", npcName);
-        java.util.UUID cityId = npc.getCityId();
-        if (cityId != null) {
-            com.xiaoliang.simukraft.utils.CityMessageUtils.sendToCityGroup(
-                level.getServer(), cityId, message,
-                com.xiaoliang.simukraft.notification.MessageCategory.FARMING
-            );
-        }
-
-        Simukraft.LOGGER.info(message.getString());
     }
     
     /**

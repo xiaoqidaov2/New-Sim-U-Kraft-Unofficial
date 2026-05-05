@@ -90,17 +90,18 @@ public class HireFarmerScreen extends AbstractHireScreen {
 
             // 本地缓存预更新（乐观更新）
             CustomEntity npc = findNpcEntity(selectedNPCId);
+            String npcName = npc != null ? npc.getFullName() : null;
             if (npc != null) {
-                FarmlandData.setHiredFarmer(targetFarmlandBoxPos, npc);
+                FarmlandData.setHiredFarmerFromServer(targetFarmlandBoxPos, selectedNPCId, npcName);
                 npc.setJob("farmer");
             } else {
-                FarmlandData.setHiredEmployee(targetFarmlandBoxPos, selectedNPCId);
+                FarmlandData.setHiredFarmerFromServer(targetFarmlandBoxPos, selectedNPCId, null);
             }
 
             // 发送雇佣完成消息
-            String npcName = npc != null ? npc.getFullName() : nn(Component.translatable("job.farmer")).getString();
+            String displayName = npcName != null ? npcName : nn(Component.translatable("job.farmer")).getString();
             player().displayClientMessage(
-                    nn(Component.translatable("message.simukraft.farmer.hired", npcName).withStyle(style -> style.withColor(0x55FF55))),
+                    nn(Component.translatable("message.simukraft.farmer.hired", displayName).withStyle(style -> style.withColor(0x55FF55))),
                     false
             );
 

@@ -695,14 +695,12 @@ public class LogisticsNetworkScreen extends Screen
     private static class ClientInfo {
         final UUID clientId;
         final BlockPos blockPos;
-        final UUID cityId;
         final List<BlockPos> portPositions;
         String name = "";
 
         ClientInfo(UUID clientId, BlockPos blockPos, UUID cityId, List<BlockPos> portPositions) {
             this.clientId = clientId;
             this.blockPos = blockPos;
-            this.cityId = cityId;
             this.portPositions = new ArrayList<>(portPositions);
         }
 

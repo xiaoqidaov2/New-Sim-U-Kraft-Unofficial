@@ -786,7 +786,6 @@ public class IndustrialControlBoxLDLibScreen extends ModularUIGuiContainer {
 
         // 卡片尺寸（根据缩放因子计算后的实际尺寸）
         private int actualCardWidth = BASE_CARD_WIDTH;
-        private int actualCardHeight = BASE_CARD_HEIGHT;
         private int actualCardSpacing = BASE_CARD_SPACING;
 
         // Tooltip信息
@@ -1045,7 +1044,6 @@ public class IndustrialControlBoxLDLibScreen extends ModularUIGuiContainer {
         // simukraft: 存储实际卡片尺寸和间距
         public void setActualCardDimensions(int width, int height, int spacing) {
             this.actualCardWidth = width;
-            this.actualCardHeight = height;
             this.actualCardSpacing = spacing;
         }
 

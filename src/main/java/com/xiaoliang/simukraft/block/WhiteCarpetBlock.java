@@ -18,7 +18,7 @@ public class WhiteCarpetBlock extends Block {
     protected static final VoxelShape SHAPE = Shapes.box(0.0D, 0.0D, 0.0D, 1.0D, 0.0625D, 1.0D);
 
     public WhiteCarpetBlock() {
-        super(BlockBehaviour.Properties.of()
+        super(Objects.requireNonNull(BlockBehaviour.Properties.of())
                 .mapColor(Objects.requireNonNull(MapColor.WOOL))
                 .strength(0.1F)
                 .sound(Objects.requireNonNull(SoundType.WOOL))

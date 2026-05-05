@@ -42,6 +42,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.ModContainer;
 import net.minecraftforge.fml.ModList;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
@@ -64,9 +65,12 @@ public class Simukraft {
     }
     public static final DeferredRegister<CreativeModeTab> CREATIVE_MODE_TABS = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MOD_ID);
     
+    private static ModContainer modContainer;
+
     public Simukraft(FMLJavaModLoadingContext context) {
         SimukraftLogConfigurator.install();
         IEventBus modEventBus = context.getModEventBus();
+        modContainer = context.getContainer();
         modEventBus.addListener(this::commonSetup);
         modEventBus.addListener(this::addCreative);
 
@@ -81,8 +85,8 @@ public class Simukraft {
         ModRecipeSerializers.RECIPE_SERIALIZERS.register(modEventBus);
 
         // 注册服务器配置
-        ServerConfig.register();
-        ClientConfigSpec.register();
+        context.registerConfig(ModConfig.Type.COMMON, ServerConfig.SPEC);
+        context.registerConfig(ModConfig.Type.CLIENT, ClientConfigSpec.SPEC);
 
         MinecraftForge.EVENT_BUS.register(this);
         MinecraftForge.EVENT_BUS.register(PlayerEvents.class);
@@ -149,7 +153,7 @@ public class Simukraft {
             EntityRenderers.register(Objects.requireNonNull(ModEntities.CUSTOM_ENTITY.get()), CustomEntityRenderer::new);
             EntityRenderers.register(Objects.requireNonNull(ModEntities.FLOATING_BUILD_BOX.get()), FloatingBuildBoxRenderer::new);
             // 注册模组配置界面
-            ModMenuIntegration.registerConfigScreen();
+            ModMenuIntegration.registerConfigScreen(Objects.requireNonNull(modContainer));
 
             // 注册菜单屏幕
             event.enqueueWork(() -> {

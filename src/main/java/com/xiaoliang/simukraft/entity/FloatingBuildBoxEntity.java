@@ -16,9 +16,7 @@ import net.minecraft.world.phys.Vec3;
 public class FloatingBuildBoxEntity extends PathfinderMob {
     private static final EntityDataAccessor<Float> DATA_FLOAT_HEIGHT = SynchedEntityData.defineId(FloatingBuildBoxEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> DATA_FLOAT_SPEED = SynchedEntityData.defineId(FloatingBuildBoxEntity.class, EntityDataSerializers.FLOAT);
-    
-    private float floatHeight = 0.5f; // 悬浮高度
-    private float floatSpeed = 0.02f; // 悬浮速度
+
     private int floatTimer = 0;
     private double baseY; // 基准Y坐标
 
@@ -64,9 +62,10 @@ public class FloatingBuildBoxEntity extends PathfinderMob {
 
     private void handleFloatingAnimation() {
         floatTimer++;
-        
-        // 增加浮动速度，让上下浮动更快
-        float floatOffset = (float) Math.sin(floatTimer * 0.1f) * 0.05f; // 从0.05f增加到0.1f，浮动速度加倍
+
+        // 使用同步数据控制悬浮幅度与速度，保证命令设置和存档值生效。
+        float animationSpeed = Math.max(0.01f, this.getFloatSpeed() * 5.0f);
+        float floatOffset = (float) Math.sin(floatTimer * animationSpeed) * (this.getFloatHeight() * 0.1f);
         
         // 增加旋转速度
         this.setYRot(this.getYRot() + 2.0f); // 从0.5f增加到2.0f
@@ -119,7 +118,6 @@ public class FloatingBuildBoxEntity extends PathfinderMob {
 
     public void setFloatHeight(float height) {
         this.entityData.set(DATA_FLOAT_HEIGHT, height);
-        this.floatHeight = height;
     }
 
     public float getFloatSpeed() {
@@ -128,6 +126,5 @@ public class FloatingBuildBoxEntity extends PathfinderMob {
 
     public void setFloatSpeed(float speed) {
         this.entityData.set(DATA_FLOAT_SPEED, speed);
-        this.floatSpeed = speed;
     }
 }

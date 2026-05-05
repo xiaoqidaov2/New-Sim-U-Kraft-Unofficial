@@ -21,10 +21,6 @@ public class ClientConfig {
     private static Integer cachedPosX = null;
     private static Integer cachedPosY = null;
 
-    public static void register() {
-        ClientConfigSpec.register();
-    }
-
     public enum Anchor {
         TOP_LEFT,
         TOP_RIGHT,

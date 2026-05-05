@@ -76,6 +76,9 @@ public final class NPCWorkResumeCoordinator {
         if (fallbackJob != null && !fallbackJob.isBlank() && !fallbackJob.equals(npc.getJob())) {
             npc.setJob(fallbackJob);
         }
+        if ("unemployed".equals(npc.getJob())) {
+            return false;
+        }
         if (npc.getWorkStatus() != WorkStatus.WORKING) {
             npc.setWorkStatus(WorkStatus.WORKING);
         }

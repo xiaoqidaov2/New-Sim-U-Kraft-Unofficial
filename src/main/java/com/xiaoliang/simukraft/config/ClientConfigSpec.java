@@ -1,8 +1,6 @@
 package com.xiaoliang.simukraft.config;
 
 import net.minecraftforge.common.ForgeConfigSpec;
-import net.minecraftforge.fml.ModLoadingContext;
-import net.minecraftforge.fml.config.ModConfig;
 
 public final class ClientConfigSpec {
     public static final ForgeConfigSpec SPEC;
@@ -41,10 +39,6 @@ public final class ClientConfigSpec {
     }
 
     private ClientConfigSpec() {
-    }
-
-    public static void register() {
-        ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, SPEC);
     }
 
     public static String getDefaultHudAnchor() {

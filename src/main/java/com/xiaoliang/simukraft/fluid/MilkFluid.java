@@ -1,14 +1,21 @@
 package com.xiaoliang.simukraft.fluid;
 
-import net.minecraftforge.fluids.ForgeFlowingFluid;
+import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.block.state.StateDefinition;
-import net.minecraft.world.level.material.Fluid;
-import org.jetbrains.annotations.NotNull;
+import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraftforge.fluids.ForgeFlowingFluid;
+import java.util.Objects;
+import javax.annotation.Nonnull;
 
 public abstract class MilkFluid extends ForgeFlowingFluid {
     protected MilkFluid(Properties properties) {
         super(properties);
+    }
+
+    @Nonnull
+    private static Property<Integer> levelProperty() {
+        return Objects.requireNonNull(LEVEL);
     }
 
     public static class Flowing extends MilkFluid {
@@ -17,18 +24,18 @@ public abstract class MilkFluid extends ForgeFlowingFluid {
         }
 
         @Override
-        protected void createFluidStateDefinition(@NotNull StateDefinition.Builder<Fluid, FluidState> builder) {
-            super.createFluidStateDefinition(builder);
-            builder.add(LEVEL);
+        protected void createFluidStateDefinition(@Nonnull StateDefinition.Builder<Fluid, FluidState> builder) {
+            super.createFluidStateDefinition(Objects.requireNonNull(builder));
+            builder.add(levelProperty());
         }
 
         @Override
-        public int getAmount(@NotNull FluidState state) {
-            return state.getValue(LEVEL);
+        public int getAmount(@Nonnull FluidState state) {
+            return state.getValue(levelProperty());
         }
 
         @Override
-        public boolean isSource(@NotNull FluidState state) {
+        public boolean isSource(@Nonnull FluidState state) {
             return false;
         }
     }
@@ -39,12 +46,12 @@ public abstract class MilkFluid extends ForgeFlowingFluid {
         }
 
         @Override
-        public int getAmount(@NotNull FluidState state) {
+        public int getAmount(@Nonnull FluidState state) {
             return 8;
         }
 
         @Override
-        public boolean isSource(@NotNull FluidState state) {
+        public boolean isSource(@Nonnull FluidState state) {
             return true;
         }
     }

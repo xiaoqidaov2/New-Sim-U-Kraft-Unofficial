@@ -604,7 +604,10 @@ public class WarehouseGridMenu extends AbstractContainerMenu {
         // 解析物品ID获取物品类型
         ItemStack targetItem = ItemStack.EMPTY;
         try {
-            net.minecraft.resources.ResourceLocation resourceLocation = new net.minecraft.resources.ResourceLocation(itemId);
+            net.minecraft.resources.ResourceLocation resourceLocation = net.minecraft.resources.ResourceLocation.tryParse(itemId);
+            if (resourceLocation == null) {
+                return ItemStack.EMPTY;
+            }
             net.minecraft.world.item.Item item = net.minecraftforge.registries.ForgeRegistries.ITEMS.getValue(resourceLocation);
             if (item != null) {
                 targetItem = new ItemStack(item);

@@ -23,7 +23,7 @@ import javax.annotation.Nonnull;
 
 public class NSUKFarmlandBoxBlock extends Block {
     public NSUKFarmlandBoxBlock() {
-        super(BlockBehaviour.Properties.of()
+        super(Objects.requireNonNull(BlockBehaviour.Properties.of())
                 .mapColor(Objects.requireNonNull(MapColor.WOOD))
                 .strength(0.8F)
                 .sound(Objects.requireNonNull(SoundType.WOOD)));
