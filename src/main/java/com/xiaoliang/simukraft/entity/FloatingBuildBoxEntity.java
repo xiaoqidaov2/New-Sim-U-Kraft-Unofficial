@@ -12,7 +12,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class FloatingBuildBoxEntity extends PathfinderMob {
     private static final EntityDataAccessor<Float> DATA_FLOAT_HEIGHT = SynchedEntityData.defineId(FloatingBuildBoxEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> DATA_FLOAT_SPEED = SynchedEntityData.defineId(FloatingBuildBoxEntity.class, EntityDataSerializers.FLOAT);

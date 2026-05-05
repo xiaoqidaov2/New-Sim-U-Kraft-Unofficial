@@ -14,7 +14,7 @@ import java.util.UUID;
  * NPC边界管理器（menglannnn: 合并原RestrictedAreaGoal、RestrictedGroundPathNavigation、RestrictedRandomStrollGoal功能）
  * 统一管理NPC的边界限制，包括AI层面的阻止、寻路层面的限制和随机漫步的限制
  */
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class NPCBoundaryManager extends Goal {
     private final CustomEntity npc;
     private BlockPos centerPos;

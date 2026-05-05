@@ -17,15 +17,9 @@
 	enableExpertMode = false
 
 [npc_leveling]
-	#NPC最高等级
+	#NPC最高等级（影响所有职业的速度上限）
 	#Range: 1 ~ 20
 	maxLevel = 20
-	#每升一级减少的工作时间（tick）
-	#Range: 0 ~ 50
-	speedBonusPerLevel = 5
-	#NPC工作的最短时间（tick），不会被等级提升而减少
-	#Range: 1 ~ 100
-	minSpeedTicks = 5
 
 [materials]
 	#普通模式下是否启用材料通类匹配
@@ -88,7 +82,7 @@
 	#默认包含基岩、命令方块、屏障等保护方块，以及本模组的所有控制盒和建筑盒
 	blockBlacklist = ["minecraft:bedrock", "minecraft:command_block", "minecraft:chain_command_block", "minecraft:repeating_command_block", "minecraft:barrier", "minecraft:structure_block", "minecraft:structure_void", "minecraft:jigsaw", "simukraft:build_box", "simukraft:city_core", "simukraft:residential_control_box", "simukraft:commercial_control_box", "simukraft:industrial_control_box", "simukraft:other_control_box", "simukraft:wool_farm_control_box", "simukraft:building_material_store_control_box", "simukraft:beef_farm_control_box", "simukraft:nsuk_meat_shop_control_box", "simukraft:nsuk_farmland_box", "simukraft:fruit_shop_control_box", "simukraft:bakery_control_box"]
 	#建筑师1级时的基础速度（每秒放置方块数）
-	#20级时速度为5倍（默认20级=5个方块/秒）
+	#20级时速度为20倍（默认20级=20个方块/秒=每tick 1个）
 	#Range: 0.1 ~ 20.0
 	blocksPerSecond = 1.0
 	#建筑师搜索材料的箱子范围（格）

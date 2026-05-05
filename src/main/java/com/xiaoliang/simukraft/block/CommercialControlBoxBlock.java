@@ -74,6 +74,9 @@ public class CommercialControlBoxBlock extends Block {
                 // 存储额外的商业建筑信息到商业数据文件
                 writeCommercialJobType(server, pos, buildingFileName, jobType, cityId);
 
+                // 更新缓存，使新建建筑立即可被NPC识别
+                com.xiaoliang.simukraft.utils.FileUtils.updateSkFileCache("commercial", pos, buildingFileName);
+
                 // 移除已处理的控制盒
                 ConstructionBoxMapping.removePendingBox(level, pos);
 
@@ -242,6 +245,9 @@ public class CommercialControlBoxBlock extends Block {
 
             // 删除对应的商业建筑数据文件
             deleteCommercialDataFile(server, pos);
+
+            // 从缓存移除，避免NPC继续识别已删除的建筑
+            com.xiaoliang.simukraft.utils.FileUtils.removeFromSkFileCache("commercial", pos);
 
             // 使用ControlBoxDataManager删除控制盒数据
             ControlBoxDataManager.deleteControlBox(server, pos, "commercial_control_box");

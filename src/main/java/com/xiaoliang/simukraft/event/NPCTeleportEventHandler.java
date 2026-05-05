@@ -16,7 +16,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Mod.EventBusSubscriber(modid = Simukraft.MOD_ID)
-@SuppressWarnings({"null", "unused", "deprecation"})
+@SuppressWarnings({"null", "deprecation"})
 public class NPCTeleportEventHandler {
     
     // 存储NPC的传送状态

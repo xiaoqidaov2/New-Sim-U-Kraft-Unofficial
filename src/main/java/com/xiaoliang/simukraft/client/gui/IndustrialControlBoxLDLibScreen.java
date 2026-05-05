@@ -45,7 +45,6 @@ import java.util.Objects;
  * 使用网格卡片选择配方，物品图标显示
  */
 @OnlyIn(Dist.CLIENT)
-@SuppressWarnings("unused")
 public class IndustrialControlBoxLDLibScreen extends ModularUIGuiContainer {
 
     // 颜色定义

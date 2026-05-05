@@ -7,12 +7,13 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.FenceBlock;
 import net.minecraft.world.level.block.FenceGateBlock;
-import net.minecraft.world.level.block.LadderBlock;
+import net.minecraft.world.level.block.IronBarsBlock;
 import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
-import net.minecraft.world.level.block.VineBlock;
+import net.minecraft.world.level.block.WallBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -34,7 +35,6 @@ public class NPCPathFinder {
     private static final double COST_DIAGONAL = 1.45D;
     private static final double COST_JUMP = 2.2D;
     private static final double COST_FALL = 1.35D;
-    private static final double COST_CLIMB = 1.0D;
     private static final double COST_DOOR = 1.15D;
     private static final double COST_DANGER = 100.0D;
     private static final double COST_DANGER_NEARBY = 30.0D;
@@ -129,10 +129,6 @@ public class NPCPathFinder {
 
     private List<NPCPathNode> getNeighbors(NPCPathNode node) {
         List<NPCPathNode> neighbors = new ArrayList<>();
-        if (isClimbable(node.pos) || isClimbable(node.pos.below()) || isClimbable(node.pos.above())) {
-            addClimbNeighbor(neighbors, node.pos.above());
-            addClimbNeighbor(neighbors, node.pos.below());
-        }
         addInternalSurfaceNeighbors(neighbors, node);
 
         for (int dx = -1; dx <= 1; dx++) {
@@ -150,13 +146,6 @@ public class NPCPathFinder {
             }
         }
         return neighbors;
-    }
-
-    private void addClimbNeighbor(List<NPCPathNode> neighbors, BlockPos pos) {
-        if (isClimbable(pos) || isClimbable(pos.below())) {
-            NPCPathNode node = createNode(pos, NPCPathNode.NodeType.CLIMB, NPCPathNode.MovementAction.CLIMB);
-            neighbors.add(node);
-        }
     }
 
     private void addInternalSurfaceNeighbors(List<NPCPathNode> neighbors, NPCPathNode from) {
@@ -255,9 +244,7 @@ public class NPCPathFinder {
         if (preferredType == NPCPathNode.NodeType.DOOR) {
             return copyNode(target, NPCPathNode.NodeType.DOOR, NPCPathNode.MovementAction.DOOR);
         }
-        if (preferredType == NPCPathNode.NodeType.CLIMB) {
-            return copyNode(target, NPCPathNode.NodeType.CLIMB, NPCPathNode.MovementAction.CLIMB);
-        }
+
         if (isSameVanillaAutoStepBlock(from, target) && heightDelta <= WALK_STEP_HEIGHT + COLLISION_EPSILON && heightDelta >= -WALK_STEP_HEIGHT - COLLISION_EPSILON) {
             logStepDecision("SAME_AUTO_STEP_TRAVERSE", from, target, heightDelta, preferredType);
             return copyNode(target, NPCPathNode.NodeType.WALKABLE, NPCPathNode.MovementAction.TRAVERSE);
@@ -304,12 +291,12 @@ public class NPCPathFinder {
         if (!isVanillaAutoStepTransition(from.pos, target.pos) && heightDelta <= WALK_STEP_HEIGHT + COLLISION_EPSILON) {
             return;
         }
-        Simukraft.LOGGER.info("[NPCPathFinder][StepTrace] reason={} from={} fromStand=({},{},{}) to={} toStand=({},{},{}) heightDelta={} hypotenuse={} preferredType={} sameAutoStep={} autoStepTransition={}",
-                reason,
-                from.pos, from.standX, from.standY, from.standZ,
-                target.pos, target.standX, target.standY, target.standZ,
-                heightDelta, from.distanceTo(target), preferredType,
-                isSameVanillaAutoStepBlock(from, target), isVanillaAutoStepTransition(from.pos, target.pos));
+        //Simukraft.LOGGER.info("[NPCPathFinder][StepTrace] reason={} from={} fromStand=({},{},{}) to={} toStand=({},{},{}) heightDelta={} hypotenuse={} preferredType={} sameAutoStep={} autoStepTransition={}",
+        //        reason,
+        //        from.pos, from.standX, from.standY, from.standZ,
+        //        target.pos, target.standX, target.standY, target.standZ,
+        //        heightDelta, from.distanceTo(target), preferredType,
+        //        isSameVanillaAutoStepBlock(from, target), isVanillaAutoStepTransition(from.pos, target.pos));
     }
 
     private NPCPathNode createNode(BlockPos pos, NPCPathNode.NodeType type, NPCPathNode.MovementAction action) {
@@ -361,6 +348,10 @@ public class NPCPathFinder {
 
     private void addSurfaceNodesForBlock(List<NPCPathNode> nodes, BlockPos blockPos, BlockPos nodePos, NPCPathNode.NodeType type, NPCPathNode.MovementAction action) {
         BlockState state = level.getBlockState(blockPos);
+        // 墙、栅栏、铁栏杆等不完整方块不能作为站立表面
+        if (isNonSolidBlock(state)) {
+            return;
+        }
         VoxelShape shape = state.getCollisionShape(level, blockPos);
         if (shape.isEmpty()) {
             return;
@@ -521,11 +512,12 @@ public class NPCPathFinder {
         if (isDangerous(footState) || isDangerous(headState) || isDangerous(belowState)) {
             return StandResult.blocked();
         }
-        if (isClimbable(footState) || isClimbable(belowState)) {
-            return StandResult.walkable(NPCPathNode.NodeType.CLIMB);
-        }
         if (isDoorBlock(footState) || isDoorBlock(belowState)) {
             return StandResult.walkable(NPCPathNode.NodeType.DOOR);
+        }
+        // 如果脚下是墙、栅栏等非完整方块，不能站立
+        if (isNonSolidBlock(footState) || isNonSolidBlock(belowState)) {
+            return StandResult.blocked();
         }
         double standY = getStandY(pos);
         if (!hasStableSupportAt(pos, standY)) {
@@ -545,7 +537,7 @@ public class NPCPathFinder {
     }
 
     private boolean isPassableForBody(BlockState state, BlockPos pos) {
-        if (isDoorBlock(state) || isClimbable(state)) {
+        if (isDoorBlock(state)) {
             return true;
         }
         return state.isAir() || !state.getFluidState().isEmpty() || state.getCollisionShape(level, pos).isEmpty();
@@ -656,24 +648,45 @@ public class NPCPathFinder {
     }
 
     private boolean hasHeadroomAt(BlockPos pos, double standX, double standY, double standZ) {
+        // NPC身体宽度约为0.6格，检查身体占据的整个区域
+        double bodyRadius = 0.3D;
+        int minX = (int) Math.floor(standX - bodyRadius);
+        int maxX = (int) Math.floor(standX + bodyRadius);
         int minY = (int) Math.floor(standY + COLLISION_EPSILON);
         int maxY = (int) Math.floor(standY + 1.8D - COLLISION_EPSILON);
+        int minZ = (int) Math.floor(standZ - bodyRadius);
+        int maxZ = (int) Math.floor(standZ + bodyRadius);
+
         for (int y = minY; y <= maxY; y++) {
-            BlockPos checkPos = BlockPos.containing(standX, y, standZ);
-            BlockState state = level.getBlockState(checkPos);
-            if (isDoorBlock(state) || isClimbable(state)) {
-                continue;
-            }
-            VoxelShape shape = state.getCollisionShape(level, checkPos);
-            if (shape.isEmpty()) {
-                continue;
-            }
-            double localMinY = standY - checkPos.getY() + COLLISION_EPSILON;
-            double localX = standX - checkPos.getX();
-            double localZ = standZ - checkPos.getZ();
-            for (AABB box : shape.toAabbs()) {
-                if (containsHorizontal(box, localX, localZ) && box.maxY > localMinY) {
-                    return false;
+            for (int x = minX; x <= maxX; x++) {
+                for (int z = minZ; z <= maxZ; z++) {
+                    BlockPos checkPos = new BlockPos(x, y, z);
+                    BlockState state = level.getBlockState(checkPos);
+                    if (isDoorBlock(state)) {
+                        continue;
+                    }
+                    VoxelShape shape = state.getCollisionShape(level, checkPos);
+                    if (shape.isEmpty()) {
+                        continue;
+                    }
+                    double localMinY = standY - checkPos.getY() + COLLISION_EPSILON;
+                    for (AABB box : shape.toAabbs()) {
+                        // 检查box是否与NPC身体区域在水平方向上有重叠
+                        double npcMinX = standX - bodyRadius;
+                        double npcMaxX = standX + bodyRadius;
+                        double npcMinZ = standZ - bodyRadius;
+                        double npcMaxZ = standZ + bodyRadius;
+                        double boxMinX = checkPos.getX() + box.minX;
+                        double boxMaxX = checkPos.getX() + box.maxX;
+                        double boxMinZ = checkPos.getZ() + box.minZ;
+                        double boxMaxZ = checkPos.getZ() + box.maxZ;
+
+                        boolean horizontalOverlap = npcMaxX > boxMinX + COLLISION_EPSILON && npcMinX < boxMaxX - COLLISION_EPSILON
+                                && npcMaxZ > boxMinZ + COLLISION_EPSILON && npcMinZ < boxMaxZ - COLLISION_EPSILON;
+                        if (horizontalOverlap && box.maxY > localMinY) {
+                            return false;
+                        }
+                    }
                 }
             }
         }
@@ -682,16 +695,18 @@ public class NPCPathFinder {
 
     private boolean isDoorBlock(BlockState state) {
         Block block = state.getBlock();
-        return block instanceof DoorBlock || block instanceof FenceGateBlock || block instanceof TrapDoorBlock;
+        return block instanceof DoorBlock || block instanceof FenceGateBlock;
     }
 
-    private boolean isClimbable(BlockPos pos) {
-        return isClimbable(level.getBlockState(pos));
-    }
-
-    private boolean isClimbable(BlockState state) {
+    /**
+     * menglannnn: 检测方块是否为不可站立/穿过的非完整方块（墙、栅栏、铁栏杆、活板门等）
+     */
+    private boolean isNonSolidBlock(BlockState state) {
         Block block = state.getBlock();
-        return block instanceof LadderBlock || block instanceof VineBlock || block == Blocks.VINE;
+        return block instanceof WallBlock
+            || block instanceof FenceBlock
+            || block instanceof IronBarsBlock
+            || block instanceof TrapDoorBlock;
     }
 
     /**
@@ -840,9 +855,6 @@ public class NPCPathFinder {
             case FALL:
                 cost *= COST_FALL;
                 break;
-            case CLIMB:
-                cost *= COST_CLIMB;
-                break;
             case DOOR:
                 cost *= COST_DOOR;
                 break;
@@ -876,22 +888,19 @@ public class NPCPathFinder {
         }
         int jumpCount = 0;
         int fallCount = 0;
-        int climbCount = 0;
         StringBuilder typesBuilder = new StringBuilder();
         for (NPCPathNode node : path.getNodes()) {
             if (node.type == NPCPathNode.NodeType.JUMP) {
                 jumpCount++;
             } else if (node.type == NPCPathNode.NodeType.FALL) {
                 fallCount++;
-            } else if (node.type == NPCPathNode.NodeType.CLIMB) {
-                climbCount++;
             }
             if (typesBuilder.length() > 0) {
                 typesBuilder.append(" -> ");
             }
             typesBuilder.append(node.type.name()).append("/").append(node.action.name()).append("@").append(node.pos);
         }
-        Simukraft.LOGGER.info("[NPCPathFinder] 路径完成 start={} end={} nodes={} jump={} fall={} climb={} path={}", start, end, path.getTotalNodes(), jumpCount, fallCount, climbCount, typesBuilder);
+        Simukraft.LOGGER.info("[NPCPathFinder] 路径完成 start={} end={} nodes={} jump={} fall={} path={}", start, end, path.getTotalNodes(), jumpCount, fallCount, typesBuilder);
     }
 
     private NPCPath createFailedPath(BlockPos start, BlockPos end) {

@@ -7,7 +7,6 @@ import com.lowdragmc.lowdraglib.gui.texture.ColorBorderTexture;
 import com.lowdragmc.lowdraglib.gui.texture.ColorRectTexture;
 import com.lowdragmc.lowdraglib.gui.texture.GuiTextureGroup;
 import com.lowdragmc.lowdraglib.gui.texture.TextTexture;
-import com.lowdragmc.lowdraglib.gui.util.ClickData;
 import com.lowdragmc.lowdraglib.gui.widget.ButtonWidget;
 import com.lowdragmc.lowdraglib.gui.widget.ImageWidget;
 import com.lowdragmc.lowdraglib.gui.widget.TextFieldWidget;
@@ -15,7 +14,6 @@ import com.lowdragmc.lowdraglib.gui.widget.WidgetGroup;
 import com.lowdragmc.lowdraglib.utils.Size;
 import com.xiaoliang.simukraft.building.CommercialBuildingConfig;
 import com.xiaoliang.simukraft.init.ModSoundEvents;
-import com.xiaoliang.simukraft.network.CommercialBuyPacket;
 import com.xiaoliang.simukraft.network.NetworkManager;
 import com.xiaoliang.simukraft.network.RequestStockSyncPacket;
 import com.xiaoliang.simukraft.world.CommercialHiredData;
@@ -34,31 +32,26 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 
 import javax.annotation.Nonnull;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * 统一商业建筑购买界面 - 使用LDLib框架
- * 面向玩家出售模式
+ * menglan: NPC出售信息界面
+ * 当商店模式为NPC_SELL时，右键NPC显示商店信息（不可购买）
+ * 显示：商品、原材料、价格、今日营业额、库存
  */
 @OnlyIn(Dist.CLIENT)
-@SuppressWarnings({"null"})
-public class CommercialBuyScreen extends ModularUIGuiContainer {
+@SuppressWarnings({"null", "unused"})
+public class NPCSellInfoScreen extends ModularUIGuiContainer {
 
     // ==================== 布局常量 ====================
-    // 使用相对比例，基于 GUI 缩放后的实际尺寸计算
+    private static final float WINDOW_WIDTH_RATIO = 0.65f;
+    private static final float WINDOW_HEIGHT_RATIO = 0.7f;
+    private static final float HEADER_HEIGHT_RATIO = 0.15f;
+    private static final float FOOTER_HEIGHT_RATIO = 0.15f;
 
-    private static final float WINDOW_WIDTH_RATIO = 0.65f;      // 窗口宽度占屏幕宽度的比例
-    private static final float WINDOW_HEIGHT_RATIO = 0.7f;      // 窗口高度占屏幕高度的比例
-    private static final float HEADER_HEIGHT_RATIO = 0.15f;     // 标题栏高度占窗口高度的比例
-    private static final float FOOTER_HEIGHT_RATIO = 0.15f;     // 底部高度占窗口高度的比例
-    private static final float BUTTON_WIDTH_RATIO = 0.18f;      // 按钮宽度占窗口宽度的比例
-    private static final float BUTTON_HEIGHT_RATIO = 0.08f;     // 按钮高度占底部高度的比例
-
-    // 最小/最大尺寸限制
     private static final int MIN_WINDOW_WIDTH = 300;
     private static final int MIN_WINDOW_HEIGHT = 240;
     private static final int MAX_WINDOW_WIDTH = 600;
@@ -81,17 +74,17 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
     private static final int COLOR_TEXT_GREEN = 0xFF66FF88;
     private static final int COLOR_TEXT_YELLOW = 0xFFFFFF66;
     private static final int COLOR_TEXT_RED = 0xFFFF6666;
+    private static final int COLOR_TEXT_CYAN = 0xFF66CCFF;
 
     // ==================== 成员变量 ====================
-
-    private final BuyUIHolder holder;
+    private final InfoUIHolder holder;
 
     // ==================== 构造函数 ====================
 
-    public CommercialBuyScreen(BlockPos pos, String buildingFileName) {
+    public NPCSellInfoScreen(BlockPos pos, String buildingFileName) {
         super(createHolderAndUI(pos, buildingFileName), 0);
-        this.holder = ((ModularUI) this.modularUI).holder instanceof BuyUIHolder
-                ? (BuyUIHolder) ((ModularUI) this.modularUI).holder
+        this.holder = ((ModularUI) this.modularUI).holder instanceof InfoUIHolder
+                ? (InfoUIHolder) ((ModularUI) this.modularUI).holder
                 : null;
 
         playOpenSound();
@@ -104,7 +97,6 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
 
     @Override
     public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTicks) {
-        // 渲染背景遮罩
         guiGraphics.fillGradient(0, 0, this.width, this.height, 0xC8000000, 0xC8000000);
         super.render(nn(guiGraphics), mouseX, mouseY, partialTicks);
     }
@@ -119,7 +111,7 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
         return nn(value);
     }
 
-    // ==================== 尺寸计算工具方法 ====================
+    // ==================== 尺寸计算 ====================
 
     private static int calculateWindowWidth(Minecraft mc) {
         int screenWidth = mc.getWindow().getGuiScaledWidth();
@@ -133,24 +125,16 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
         return Math.max(MIN_WINDOW_HEIGHT, Math.min(MAX_WINDOW_HEIGHT, height));
     }
 
-    // 公共方法：当收到服务器库存同步时调用
-    public void onStockSyncReceived() {
-        if (holder != null) {
-            holder.updateStockFromClientData();
-        }
-    }
-
     private static ModularUI createHolderAndUI(BlockPos pos, String buildingFileName) {
-        BuyUIHolder holder = new BuyUIHolder(pos, buildingFileName);
+        InfoUIHolder holder = new InfoUIHolder(pos, buildingFileName);
         return holder.createModularUI();
     }
 
     // ==================== UI 创建 ====================
 
-    private static ModularUI createUI(BuyUIHolder holder) {
+    private static ModularUI createUI(InfoUIHolder holder) {
         Minecraft mc = Minecraft.getInstance();
 
-        // 计算动态尺寸
         int windowWidth = calculateWindowWidth(mc);
         int windowHeight = calculateWindowHeight(mc);
         int headerHeight = Math.max(40, (int)(windowHeight * HEADER_HEIGHT_RATIO));
@@ -159,12 +143,12 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
 
         ModularUI modularUI = new ModularUI(new Size(windowWidth, windowHeight), holder, nn(mc.player));
 
-        // 根容器 - LDLib 会自动居中，所以位置设为 (0, 0)
+        // 根容器
         WidgetGroup rootGroup = new WidgetGroup();
         rootGroup.setSelfPosition(0, 0);
         rootGroup.setSize(windowWidth, windowHeight);
 
-        // 主窗口背景（带圆角）
+        // 主窗口背景
         WidgetGroup windowGroup = new WidgetGroup();
         windowGroup.setSelfPosition(0, 0);
         windowGroup.setSize(windowWidth, windowHeight);
@@ -174,7 +158,7 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
         ));
         rootGroup.addWidget(windowGroup);
 
-        // 标题栏背景
+        // 标题栏
         WidgetGroup headerGroup = new WidgetGroup();
         headerGroup.setSelfPosition(0, 0);
         headerGroup.setSize(windowWidth, headerHeight);
@@ -187,7 +171,7 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
         ImageWidget titleWidget = new ImageWidget(0, headerHeight / 6, windowWidth, 16, titleTexture);
         headerGroup.addWidget(titleWidget);
 
-        // 搜索框 - 使用圆角背景，支持输入
+        // 搜索框
         int searchBoxWidth = (int)(windowWidth * 0.36f);
         int searchBoxHeight = (int)(headerHeight * 0.4f);
         TextFieldWidget searchBox = new TextFieldWidget();
@@ -203,26 +187,29 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
         headerGroup.addWidget(searchBox);
         holder.setSearchBox(searchBox);
 
-        // 搜索按钮 - 点击执行搜索（放大镜图标，与搜索框同高）
-        ButtonWidget searchButton = createSmallButton((int)(windowWidth * 0.39f), headerHeight / 2, searchBoxHeight, searchBoxHeight, "\uD83D\uDD0D",
+        // 搜索按钮
+        ButtonWidget searchButton = createSmallButton(
+                (int)(windowWidth * 0.39f), headerHeight / 2, searchBoxHeight, searchBoxHeight, "\uD83D\uDD0D",
                 clickData -> holder.performSearch());
         headerGroup.addWidget(searchButton);
 
-        // 刷新按钮（圆箭头图标，与搜索框同高）
-        ButtonWidget refreshButton = createSmallButton((int)(windowWidth * 0.39f) + searchBoxHeight + 2, headerHeight / 2, searchBoxHeight, searchBoxHeight, "\u27F3",
+        // 刷新按钮
+        ButtonWidget refreshButton = createSmallButton(
+                (int)(windowWidth * 0.39f) + searchBoxHeight + 2, headerHeight / 2, searchBoxHeight, searchBoxHeight, "\u27F3",
                 clickData -> holder.refreshStockFromServer());
         headerGroup.addWidget(refreshButton);
 
-        // 分页按钮 - 相对位置
+        // 分页按钮
         int pageBtnWidth = Math.max(20, (int)(windowWidth * 0.06f));
         int pageBtnHeight = Math.max(14, (int)(headerHeight * 0.32f));
-        // 向左翻页按钮向左移动10像素
-        ButtonWidget prevButton = createSmallButton(windowWidth - pageBtnWidth * 3 - 20, headerHeight / 2 + 2, pageBtnWidth, pageBtnHeight, "◀",
+        ButtonWidget prevButton = createSmallButton(
+                windowWidth - pageBtnWidth * 3 - 20, headerHeight / 2 + 2, pageBtnWidth, pageBtnHeight, "◀",
                 clickData -> holder.prevPage());
         headerGroup.addWidget(prevButton);
         holder.setPrevButton(prevButton);
 
-        ButtonWidget nextButton = createSmallButton(windowWidth - pageBtnWidth - 5, headerHeight / 2 + 2, pageBtnWidth, pageBtnHeight, "▶",
+        ButtonWidget nextButton = createSmallButton(
+                windowWidth - pageBtnWidth - 5, headerHeight / 2 + 2, pageBtnWidth, pageBtnHeight, "▶",
                 clickData -> holder.nextPage());
         headerGroup.addWidget(nextButton);
         holder.setNextButton(nextButton);
@@ -230,7 +217,8 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
         // 页码显示
         TextTexture pageTexture = new TextTexture("1 / 1", 0xFFCCCCCC);
         pageTexture.setType(TextTexture.TextType.NORMAL);
-        ImageWidget pageLabel = new ImageWidget(windowWidth - pageBtnWidth * 2 - 15, headerHeight / 2 + 2, pageBtnWidth + 10, pageBtnHeight, pageTexture);
+        ImageWidget pageLabel = new ImageWidget(
+                windowWidth - pageBtnWidth * 2 - 15, headerHeight / 2 + 2, pageBtnWidth + 10, pageBtnHeight, pageTexture);
         headerGroup.addWidget(pageLabel);
         holder.setPageLabel(pageLabel);
 
@@ -243,18 +231,16 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
         listHeader.setSize((int)(windowWidth * 0.976f), (int)(listHeight * 0.15f));
         windowGroup.addWidget(listHeader);
 
-        // 相对列位置
+        // 相对列位置 - 与交易界面保持一致
         int colName = (int)(windowWidth * 0.07f);
-        int colPrice = (int)(windowWidth * 0.35f);
-        int colStock = (int)(windowWidth * 0.475f);
-        int colQty = (int)(windowWidth * 0.60f);
-        int colSubtotal = (int)(windowWidth * 0.88f);
+        int colMaterial = (int)(windowWidth * 0.30f);
+        int colPrice = (int)(windowWidth * 0.48f);
+        int colStock = (int)(windowWidth * 0.60f);
 
-        listHeader.addWidget(createHeaderLabel(colName, 0, (int)(windowWidth * 0.15f), (int)(listHeight * 0.13f), "物品"));
-        listHeader.addWidget(createHeaderLabel(colPrice, 0, (int)(windowWidth * 0.10f), (int)(listHeight * 0.13f), "单价"));
-        listHeader.addWidget(createHeaderLabel(colStock, 0, (int)(windowWidth * 0.10f), (int)(listHeight * 0.13f), "库存"));
-        listHeader.addWidget(createHeaderLabel(colQty + (int)(windowWidth * 0.05f), 0, (int)(windowWidth * 0.15f), (int)(listHeight * 0.13f), "数量"));
-        listHeader.addWidget(createHeaderLabel(colSubtotal, 0, (int)(windowWidth * 0.125f), (int)(listHeight * 0.13f), "小计"));
+        listHeader.addWidget(createHeaderLabel(colName, 0, (int)(windowWidth * 0.20f), (int)(listHeight * 0.13f), "商品"));
+        listHeader.addWidget(createHeaderLabel(colMaterial, 0, (int)(windowWidth * 0.15f), (int)(listHeight * 0.13f), "原材料"));
+        listHeader.addWidget(createHeaderLabel(colPrice, 0, (int)(windowWidth * 0.10f), (int)(listHeight * 0.13f), "售价"));
+        listHeader.addWidget(createHeaderLabel(colStock, 0, (int)(windowWidth * 0.12f), (int)(listHeight * 0.13f), "库存"));
 
         // 分隔线
         WidgetGroup separator = new WidgetGroup();
@@ -283,46 +269,24 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
         footerGroup.setSize(windowWidth, (int)(footerHeight * 0.95f));
         windowGroup.addWidget(footerGroup);
 
-        // 总计（居中显示在底部上方）
-        TextTexture totalTexture = new TextTexture("总计: 0.00 元", COLOR_TEXT_GOLD);
-        totalTexture.setType(TextTexture.TextType.NORMAL);
-        ImageWidget totalLabel = new ImageWidget(0, (int)(footerHeight * 0.05f), windowWidth, (int)(footerHeight * 0.25f), totalTexture);
-        footerGroup.addWidget(totalLabel);
-        holder.setTotalLabel(totalLabel);
+        // 提示文字
+        TextTexture hintTexture = new TextTexture("此商店由NPC运营，仅可查看信息", COLOR_TEXT_CYAN);
+        hintTexture.setType(TextTexture.TextType.NORMAL);
+        ImageWidget hintLabel = new ImageWidget(0, (int)(footerHeight * 0.05f), windowWidth, (int)(footerHeight * 0.25f), hintTexture);
+        footerGroup.addWidget(hintLabel);
 
-        // 按钮区域 - 使用更合理的布局
+        // 返回按钮
         int btnY = (int)(footerHeight * 0.35f);
         int btnHeight = Math.max(16, (int)(footerHeight * 0.5f));
         int sideMargin = Math.max(10, (int)(windowWidth * 0.02f));
-        int btnSpacing = Math.max(8, (int)(windowWidth * 0.015f));
-        
-        // 返回按钮（左侧）
         int backBtnWidth = Math.max(50, (int)(windowWidth * 0.12f));
         ButtonWidget backButton = createButton(sideMargin, btnY, backBtnWidth, btnHeight, "gui.button.back",
                 clickData -> holder.onBack());
         footerGroup.addWidget(backButton);
 
-        // 重置按钮（左侧，返回按钮右侧）- 清空搜索，显示所有物品
-        int resetBtnWidth = Math.max(50, (int)(windowWidth * 0.12f));
-        ButtonWidget resetButton = createButton(sideMargin + backBtnWidth + btnSpacing, btnY, resetBtnWidth, btnHeight, "gui.commercial_buy.reset",
-                clickData -> {
-                    holder.clearSearch();
-                });
-        footerGroup.addWidget(resetButton);
-
-        // 购买按钮（右侧）
-        int purchaseBtnWidth = Math.max(60, (int)(windowWidth * 0.15f));
-        ButtonWidget purchaseButton = createButton(windowWidth - purchaseBtnWidth - sideMargin, btnY, purchaseBtnWidth, btnHeight, "gui.button.purchase",
-                clickData -> holder.purchaseItems());
-        purchaseButton.setActive(false);
-        footerGroup.addWidget(purchaseButton);
-        holder.setPurchaseButton(purchaseButton);
-
         // 初始化
         modularUI.widget(rootGroup);
         modularUI.initWidgets();
-
-        // 初始化 holder（在 initWidgets 之后，确保所有 widget 已初始化）
         holder.init();
 
         return modularUI;
@@ -336,7 +300,7 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
     }
 
     private static ButtonWidget createSmallButton(int x, int y, int width, int height, String text,
-                                                   java.util.function.Consumer<ClickData> onPress) {
+                                                   java.util.function.Consumer<com.lowdragmc.lowdraglib.gui.util.ClickData> onPress) {
         ButtonWidget button = new ButtonWidget();
         button.setSelfPosition(x, y);
         button.setSize(width, height);
@@ -364,7 +328,7 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
     }
 
     private static ButtonWidget createButton(int x, int y, int width, int height, String textKey,
-                                              java.util.function.Consumer<ClickData> onPress) {
+                                              java.util.function.Consumer<com.lowdragmc.lowdraglib.gui.util.ClickData> onPress) {
         ButtonWidget button = new ButtonWidget();
         button.setSelfPosition(x, y);
         button.setSize(width, height);
@@ -391,24 +355,15 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
         return button;
     }
 
-    // ==================== 物品行组件 ====================
+    // ==================== 信息行组件 ====================
 
-    private static class TradeItemRow extends WidgetGroup {
-        private final TradeItem tradeItem;
-        private final BuyUIHolder holder;
-        private int quantity = 0;
+    private static class InfoItemRow extends WidgetGroup {
+        private final TradeItemInfo tradeItem;
 
-        // Widget 引用，用于动态更新
-        private ImageWidget qtyLabel;
-        private ImageWidget subtotalLabel;
-        private ButtonWidget decreaseBtn;
-        private ButtonWidget increaseBtn;
-
-        public TradeItemRow(int x, int y, int width, int height, TradeItem tradeItem, BuyUIHolder holder) {
+        public InfoItemRow(int x, int y, int width, int height, TradeItemInfo tradeItem) {
             this.setSelfPosition(x, y);
             this.setSize(width, height);
             this.tradeItem = tradeItem;
-            this.holder = holder;
 
             rebuildWidgets();
         }
@@ -416,137 +371,59 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
         private void rebuildWidgets() {
             this.clearAllWidgets();
 
-            boolean inStock = tradeItem.isInStock();
-            int maxQty = tradeItem.getMaxQuantity();
-            int availableStock = tradeItem.retail ? tradeItem.currentStock : tradeItem.getStockInStacks();
-
-            // 背景 - 零库存使用统一的颜色
+            boolean inStock = tradeItem.currentStock > 0;
             int bgColor = inStock ? COLOR_ROW_EVEN : COLOR_ROW_OUT_OF_STOCK;
             this.setBackground(new ColorRectTexture(bgColor));
 
             int width = getSize().width;
             int height = getSize().height;
 
-            // 相对位置计算
             int iconSize = Math.min(16, height - 4);
             int textHeight = Math.max(8, height / 3);
-            int btnSize = Math.max(14, height / 2);
-            int qtyWidth = Math.max(35, width / 7);
 
             // 物品图标
-            ItemIconWidget iconWidget = new ItemIconWidget((int)(width * 0.015f), (height - iconSize) / 2, iconSize, iconSize, tradeItem.item);
+            ItemIconWidget iconWidget = new ItemIconWidget(
+                    (int)(width * 0.015f), (height - iconSize) / 2, iconSize, iconSize, tradeItem.item);
             this.addWidget(iconWidget);
 
-            // 物品名称
+            // 商品名称
             String name = tradeItem.displayName;
             int maxNameLen = Math.max(8, width / 25);
             if (name.length() > maxNameLen) name = name.substring(0, maxNameLen - 1) + "…";
             TextTexture nameTexture = new TextTexture(name, inStock ? COLOR_TEXT_NORMAL : COLOR_TEXT_GRAY);
             nameTexture.setType(TextTexture.TextType.LEFT);
-            ImageWidget nameLabel = new ImageWidget((int)(width * 0.075f), (height - textHeight) / 2, (int)(width * 0.25f), textHeight, nameTexture);
+            ImageWidget nameLabel = new ImageWidget(
+                    (int)(width * 0.075f), (height - textHeight) / 2, (int)(width * 0.20f), textHeight, nameTexture);
             this.addWidget(nameLabel);
 
-            // 单价
-            TextTexture priceTexture = new TextTexture(String.format(Locale.US, "%.2f", tradeItem.sellPrice), COLOR_TEXT_GOLD);
+            // 原材料
+            String materialText = tradeItem.materialName != null ? tradeItem.materialName : "无";
+            int maxMatLen = Math.max(6, width / 30);
+            if (materialText.length() > maxMatLen) materialText = materialText.substring(0, maxMatLen - 1) + "…";
+            TextTexture matTexture = new TextTexture(materialText, COLOR_TEXT_CYAN);
+            matTexture.setType(TextTexture.TextType.LEFT);
+            ImageWidget matLabel = new ImageWidget(
+                    (int)(width * 0.29f), (height - textHeight) / 2, (int)(width * 0.15f), textHeight, matTexture);
+            this.addWidget(matLabel);
+
+            // 售价
+            TextTexture priceTexture = new TextTexture(
+                    String.format(Locale.US, "%.2f", tradeItem.sellPrice), COLOR_TEXT_GOLD);
             priceTexture.setType(TextTexture.TextType.LEFT);
-            ImageWidget priceLabel = new ImageWidget((int)(width * 0.34f), (height - textHeight) / 2, (int)(width * 0.12f), textHeight, priceTexture);
+            ImageWidget priceLabel = new ImageWidget(
+                    (int)(width * 0.47f), (height - textHeight) / 2, (int)(width * 0.10f), textHeight, priceTexture);
             this.addWidget(priceLabel);
 
-            // 库存 - 零库存统一使用红色
+            // 库存
             int stockColor = inStock ? COLOR_TEXT_GREEN : COLOR_TEXT_RED;
             if (inStock && tradeItem.currentStock < tradeItem.maxStock * 0.3) stockColor = COLOR_TEXT_YELLOW;
             TextTexture stockTexture = new TextTexture(tradeItem.getStockDisplay(), stockColor);
             stockTexture.setType(TextTexture.TextType.LEFT);
-            ImageWidget stockLabel = new ImageWidget((int)(width * 0.47f), (height - textHeight) / 2, (int)(width * 0.12f), textHeight, stockTexture);
+            ImageWidget stockLabel = new ImageWidget(
+                    (int)(width * 0.59f), (height - textHeight) / 2, (int)(width * 0.12f), textHeight, stockTexture);
             this.addWidget(stockLabel);
 
-            // 数量控制
-            int qtyY = (height - btnSize) / 2;
-            int qtyBtnX = (int)(width * 0.60f);
 
-            // 减号按钮
-            decreaseBtn = createSmallButton(qtyBtnX, qtyY, btnSize, btnSize, "−",
-                    clickData -> {
-                        if (quantity > 0) {
-                            quantity--;
-                            holder.updateSelectedQuantity(tradeItem.itemId, quantity);
-                            updateDisplay();
-                            holder.updateTotalPrice();
-                        }
-                    });
-            decreaseBtn.setActive(quantity > 0);
-            this.addWidget(decreaseBtn);
-
-            // 数量显示
-            TextTexture qtyTexture = new TextTexture(quantity + " " + tradeItem.getUnit(), quantity > 0 ? COLOR_TEXT_GREEN : 0xFFCCCCCC);
-            qtyTexture.setType(TextTexture.TextType.NORMAL);
-            qtyLabel = new ImageWidget(qtyBtnX + btnSize + 2, qtyY, qtyWidth, btnSize, qtyTexture);
-            this.addWidget(qtyLabel);
-
-            // 加号按钮
-            increaseBtn = createSmallButton(qtyBtnX + btnSize + qtyWidth + 4, qtyY, btnSize, btnSize, "+",
-                    clickData -> {
-                        if (quantity < maxQty && quantity < availableStock) {
-                            quantity++;
-                            holder.updateSelectedQuantity(tradeItem.itemId, quantity);
-                            updateDisplay();
-                            holder.updateTotalPrice();
-                        }
-                    });
-            increaseBtn.setActive(inStock && quantity < maxQty && quantity < availableStock);
-            this.addWidget(increaseBtn);
-
-            // 小计
-            TextTexture subtotalTexture = new TextTexture(String.format(Locale.US, "%.2f", getSubtotal()),
-                    quantity > 0 ? COLOR_TEXT_GOLD : 0xFF666666);
-            subtotalTexture.setType(TextTexture.TextType.LEFT);
-            subtotalLabel = new ImageWidget((int)(width * 0.88f), (height - textHeight) / 2, (int)(width * 0.15f), textHeight, subtotalTexture);
-            this.addWidget(subtotalLabel);
-        }
-
-        // 动态更新显示，不重建整个列表
-        public void updateDisplay() {
-            boolean inStock = tradeItem.isInStock();
-            int maxQty = tradeItem.getMaxQuantity();
-            int availableStock = tradeItem.retail ? tradeItem.currentStock : tradeItem.getStockInStacks();
-
-            // 更新数量显示
-            TextTexture qtyTexture = new TextTexture(quantity + " " + tradeItem.getUnit(), quantity > 0 ? COLOR_TEXT_GREEN : 0xFFCCCCCC);
-            qtyTexture.setType(TextTexture.TextType.NORMAL);
-            qtyLabel.setImage(qtyTexture);
-
-            // 更新小计显示
-            TextTexture subtotalTexture = new TextTexture(String.format(Locale.US, "%.2f", getSubtotal()),
-                    quantity > 0 ? COLOR_TEXT_GOLD : 0xFF666666);
-            subtotalTexture.setType(TextTexture.TextType.LEFT);
-            subtotalLabel.setImage(subtotalTexture);
-
-            // 更新按钮状态
-            decreaseBtn.setActive(quantity > 0);
-            increaseBtn.setActive(inStock && quantity < maxQty && quantity < availableStock);
-        }
-
-        // 刷新库存显示
-        public void refreshStock() {
-            rebuildWidgets();
-        }
-
-        public int getQuantity() {
-            return quantity;
-        }
-
-        public void setQuantity(int qty) {
-            this.quantity = qty;
-            holder.updateSelectedQuantity(tradeItem.itemId, qty);
-            updateDisplay();
-        }
-
-        public double getSubtotal() {
-            return tradeItem.sellPrice * quantity;
-        }
-
-        public TradeItem getTradeItem() {
-            return tradeItem;
         }
     }
 
@@ -562,48 +439,34 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
         @Override
         public void drawInBackground(@Nonnull GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
             super.drawInBackground(graphics, mouseX, mouseY, partialTicks);
-
-            int x = getPosition().x;
-            int y = getPosition().y;
-
-            // 渲染物品图标
-            graphics.renderItem(new ItemStack(item), x, y);
+            graphics.renderItem(new ItemStack(item), getPosition().x, getPosition().y);
         }
     }
 
     // ==================== UI Holder 类 ====================
 
-    public static class BuyUIHolder implements IUIHolder {
+    public static class InfoUIHolder implements IUIHolder {
         private final BlockPos controlBoxPos;
         private final String buildingFileName;
         private final String buildingName;
         private final int restockInterval;
 
-        // 数据
-        private final List<TradeItem> allTradeItems = new ArrayList<>();
-        private List<TradeItem> filteredTradeItems = new ArrayList<>();
-        private final List<TradeItemRow> itemRows = new ArrayList<>();
-        private final Map<String, Integer> selectedQuantities = new HashMap<>();
+        private final List<TradeItemInfo> allTradeItems = new ArrayList<>();
+        private List<TradeItemInfo> filteredTradeItems = new ArrayList<>();
 
-        // 分页
         private int currentPage = 0;
         private int itemsPerPage = 6;
         private int totalPages = 1;
 
-        // Widget 引用
         private WidgetGroup listGroup;
         private ButtonWidget prevButton;
         private ButtonWidget nextButton;
-        private ButtonWidget purchaseButton;
         private ImageWidget pageLabel;
-        private ImageWidget totalLabel;
         private TextFieldWidget searchBox;
 
-        // 搜索
         private String searchText = "";
-        private String lastSearchText = "";
 
-        public BuyUIHolder(BlockPos pos, String buildingFileName) {
+        public InfoUIHolder(BlockPos pos, String buildingFileName) {
             this.controlBoxPos = pos;
             this.buildingFileName = buildingFileName;
 
@@ -613,10 +476,8 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
                 this.restockInterval = config.getRestockInterval();
                 loadTradeItems(config);
             } else {
-                // 如果配置无法加载，使用默认值
                 this.buildingName = buildingFileName != null ? buildingFileName : "未知建筑";
                 this.restockInterval = 12000;
-                // 尝试从库存数据加载物品
                 loadTradeItemsFromStock();
             }
 
@@ -625,7 +486,7 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
         }
 
         public ModularUI createModularUI() {
-            return CommercialBuyScreen.createUI(this);
+            return NPCSellInfoScreen.createUI(this);
         }
 
         @Override
@@ -647,56 +508,15 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
         public void markAsDirty() {
         }
 
-        // ==================== 初始化 ====================
-
         public void init() {
             if (searchBox != null) {
-                searchBox.setTextResponder(text -> {
-                    this.onSearchChanged(text);
-                });
+                searchBox.setTextResponder(text -> this.onSearchChanged(text));
                 searchBox.setCurrentString("");
-                // 确保搜索框可以接收输入
                 searchBox.setActive(true);
             }
             refreshStockFromServer();
             rebuildItemList();
             updatePaginationButtons();
-        }
-
-        // 执行搜索
-        public void performSearch() {
-            if (searchBox != null) {
-                String text = searchBox.getCurrentString();
-                this.onSearchChanged(text);
-            }
-        }
-
-        public void setListGroup(WidgetGroup listGroup) {
-            this.listGroup = listGroup;
-        }
-
-        public void setPrevButton(ButtonWidget prevButton) {
-            this.prevButton = prevButton;
-        }
-
-        public void setNextButton(ButtonWidget nextButton) {
-            this.nextButton = nextButton;
-        }
-
-        public void setPurchaseButton(ButtonWidget purchaseButton) {
-            this.purchaseButton = purchaseButton;
-        }
-
-        public void setPageLabel(ImageWidget pageLabel) {
-            this.pageLabel = pageLabel;
-        }
-
-        public void setTotalLabel(ImageWidget totalLabel) {
-            this.totalLabel = totalLabel;
-        }
-
-        public void setSearchBox(TextFieldWidget searchBox) {
-            this.searchBox = searchBox;
         }
 
         // ==================== 数据加载 ====================
@@ -718,36 +538,48 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
 
                     if (item != null) {
                         String displayName = item.getDefaultInstance().getHoverName().getString();
-                        int maxStock = trade.getMaxStock();
-                        int restockAmount = trade.getRestockAmount();
 
-                        TradeItem tradeItem = new TradeItem(
+                        // 查找原材料
+                        String materialName = null;
+                        if (config.getMaterials() != null && !config.getMaterials().isEmpty()) {
+                            // 显示第一个原材料作为代表
+                            var firstMat = config.getMaterials().get(0);
+                            if (firstMat.getItemId() != null) {
+                                Item matItem = itemRegistry.getOptional(
+                                        ResourceLocation.tryParse(firstMat.getItemId())
+                                ).orElse(null);
+                                if (matItem != null) {
+                                    materialName = matItem.getDefaultInstance().getHoverName().getString();
+                                    if (config.getMaterials().size() > 1) {
+                                        materialName += "等";
+                                    }
+                                }
+                            }
+                        }
+
+                        TradeItemInfo tradeItem = new TradeItemInfo(
                                 trade.getItemId(),
                                 item,
                                 displayName,
                                 trade.getSellPrice(),
-                                maxStock,
-                                restockAmount,
-                                trade.isRetail()
+                                trade.getMaxStock(),
+                                trade.isRetail(),
+                                materialName
                         );
 
                         CommercialHiredData.StockInfo stockInfo = stockInfoMap.get(trade.getItemId());
                         if (stockInfo != null) {
                             tradeItem.currentStock = stockInfo.getCurrentStock();
-                            tradeItem.lastRestockTick = stockInfo.getLastRestockTime();
-                            tradeItem.nextRestockTick = tradeItem.lastRestockTick + restockInterval;
-                        } else {
-                            // 如果没有收到库存数据，显示为0（库存未初始化或数据未同步）
-                            tradeItem.currentStock = 0;
+                            tradeItem.todaySold = stockInfo.getDailyBoughtAmount();
                         }
 
                         allTradeItems.add(tradeItem);
                     }
                 }
             }
+
         }
 
-        // 从库存数据加载交易物品（当配置无法加载时使用）
         private void loadTradeItemsFromStock() {
             Minecraft mc = Minecraft.getInstance();
             if (mc.level == null) return;
@@ -761,28 +593,19 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
                 String itemId = entry.getKey();
                 CommercialHiredData.StockInfo stockInfo = entry.getValue();
 
-                Item item = itemRegistry.getOptional(
-                        ResourceLocation.tryParse(itemId)
-                ).orElse(null);
-
+                Item item = itemRegistry.getOptional(ResourceLocation.tryParse(itemId)).orElse(null);
                 if (item != null) {
                     String displayName = item.getDefaultInstance().getHoverName().getString();
-                    int maxStock = stockInfo.getMaxStock();
 
-                    // 创建交易物品，使用默认价格（可以从服务器同步或配置文件读取）
-                    TradeItem tradeItem = new TradeItem(
-                            itemId,
-                            item,
-                            displayName,
-                            10.0, // 默认售价
-                            maxStock,
-                            maxStock / 2, // 默认补货量
-                            true // 零售模式
-                    );
+                    TradeItemInfo tradeItem = new TradeItemInfo(
+                            itemId, item, displayName, 10.0, stockInfo.getMaxStock(), true, null);
+                    tradeItem.currentStock = stockInfo.getCurrentStock();
+                    tradeItem.todaySold = stockInfo.getDailyBoughtAmount();
 
                     allTradeItems.add(tradeItem);
                 }
             }
+
         }
 
         // ==================== 列表重建 ====================
@@ -791,68 +614,43 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
             if (listGroup == null) return;
 
             listGroup.clearAllWidgets();
-            itemRows.clear();
 
-            // 使用 listGroup 的实际尺寸计算每页显示数量
             int rowWidth = listGroup.getSize().width - 4;
             int listHeight = listGroup.getSize().height;
             int rowHeight = Math.max(28, listHeight / 6);
-            
-            // 根据列表高度动态计算每页可显示的物品数量
+
             int calculatedItemsPerPage = Math.max(1, listHeight / rowHeight);
-            
-            // 确保当前页码有效
             int maxPage = Math.max(0, (filteredTradeItems.size() - 1) / calculatedItemsPerPage);
             currentPage = Math.min(currentPage, maxPage);
-            
+
             int startIndex = currentPage * calculatedItemsPerPage;
             int endIndex = Math.min(startIndex + calculatedItemsPerPage, filteredTradeItems.size());
 
             int yOffset = 0;
-
             for (int i = startIndex; i < endIndex; i++) {
-                TradeItem item = filteredTradeItems.get(i);
-                TradeItemRow row = new TradeItemRow(2, yOffset, rowWidth, rowHeight, item, this);
-
-                row.setQuantity(getSelectedQuantity(item.itemId));
-
+                TradeItemInfo item = filteredTradeItems.get(i);
+                InfoItemRow row = new InfoItemRow(2, yOffset, rowWidth, rowHeight, item);
                 listGroup.addWidget(row);
-                itemRows.add(row);
                 yOffset += rowHeight;
             }
 
-            // 更新分页信息
             itemsPerPage = calculatedItemsPerPage;
             updateTotalPages();
             updatePaginationButtons();
-            
-            // 更新总计显示
-            updateTotalPrice();
-        }
-
-        // 刷新库存显示（用于库存同步时）
-        private void refreshStockDisplay() {
-            if (listGroup == null || itemRows.isEmpty()) return;
-
-            for (TradeItemRow row : itemRows) {
-                TradeItem item = row.getTradeItem();
-                if (item != null) {
-                    row.refreshStock();
-                }
-            }
-            updateTotalPrice();
         }
 
         // ==================== 搜索 ====================
 
-        public void onSearchChanged(String text) {
+        public void performSearch() {
+            if (searchBox != null) {
+                onSearchChanged(searchBox.getCurrentString());
+            }
+        }
+
+        private void onSearchChanged(String text) {
             if (text == null) text = "";
             this.searchText = text.toLowerCase().trim();
 
-            // 检查 listGroup 是否已初始化
-            if (listGroup == null) return;
-
-            // 过滤物品
             if (searchText.isEmpty()) {
                 filteredTradeItems = new ArrayList<>(allTradeItems);
             } else {
@@ -864,37 +662,7 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
             }
 
             currentPage = 0;
-
-            // 使用 listGroup 的实际尺寸计算每页显示数量
-            int rowWidth = listGroup.getSize().width - 4;
-            int listHeight = listGroup.getSize().height;
-            int rowHeight = Math.max(28, listHeight / 6);
-            itemsPerPage = Math.max(1, listHeight / rowHeight);
-            
-            updateTotalPages();
-
-            // 清空并重建列表
-            listGroup.clearAllWidgets();
-            itemRows.clear();
-
-            int startIndex = currentPage * itemsPerPage;
-            int endIndex = Math.min(startIndex + itemsPerPage, filteredTradeItems.size());
-
-            int yOffset = 0;
-
-            for (int i = startIndex; i < endIndex; i++) {
-                TradeItem item = filteredTradeItems.get(i);
-                TradeItemRow row = new TradeItemRow(2, yOffset, rowWidth, rowHeight, item, this);
-
-                row.setQuantity(getSelectedQuantity(item.itemId));
-
-                listGroup.addWidget(row);
-                itemRows.add(row);
-                yOffset += rowHeight;
-            }
-
-            updateTotalPrice();
-            updatePaginationButtons();
+            rebuildItemList();
         }
 
         // ==================== 分页 ====================
@@ -908,7 +676,6 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
             if (currentPage > 0) {
                 currentPage--;
                 rebuildItemList();
-                updatePaginationButtons();
             }
         }
 
@@ -916,15 +683,6 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
             if (currentPage < totalPages - 1) {
                 currentPage++;
                 rebuildItemList();
-                updatePaginationButtons();
-            }
-        }
-
-        public void goToPage(int page) {
-            if (page >= 0 && page < totalPages && page != currentPage) {
-                currentPage = page;
-                rebuildItemList();
-                updatePaginationButtons();
             }
         }
 
@@ -938,91 +696,6 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
             }
         }
 
-        // ==================== 价格和购买 ====================
-
-        public void updateTotalPrice() {
-            double total = 0.0;
-            for (TradeItem item : allTradeItems) {
-                int quantity = getSelectedQuantity(item.itemId);
-                if (quantity > 0) {
-                    total += item.sellPrice * quantity;
-                }
-            }
-
-            if (totalLabel != null) {
-                TextTexture texture = new TextTexture(String.format(Locale.US, "总计: %.2f 元", total), COLOR_TEXT_GOLD);
-                texture.setType(TextTexture.TextType.NORMAL);
-                totalLabel.setImage(texture);
-            }
-
-            if (purchaseButton != null) {
-                purchaseButton.setActive(total > 0);
-            }
-        }
-
-        public void resetQuantities() {
-            selectedQuantities.clear();
-            rebuildItemList();
-            updateTotalPrice();
-        }
-
-        // 清空搜索，显示所有物品
-        public void clearSearch() {
-            if (searchBox != null) {
-                searchBox.setCurrentString("");
-            }
-            // 直接重置过滤列表，不依赖 onSearchChanged 的 listGroup 检查
-            this.searchText = "";
-            this.filteredTradeItems = new ArrayList<>(allTradeItems);
-            this.currentPage = 0;
-            updateTotalPages();
-            rebuildItemList();
-            updatePaginationButtons();
-        }
-
-        public void purchaseItems() {
-            Minecraft mc = Minecraft.getInstance();
-            Player player = mc.player;
-            if (player == null) return;
-
-            Map<String, CommercialBuyPacket.BuyItemInfo> itemsMap = new HashMap<>();
-            double totalPrice = 0.0;
-
-            for (TradeItem tradeItem : allTradeItems) {
-                int qty = getSelectedQuantity(tradeItem.itemId);
-                if (qty > 0) {
-                    itemsMap.put(tradeItem.itemId, new CommercialBuyPacket.BuyItemInfo(qty, tradeItem.retail));
-                    totalPrice += tradeItem.sellPrice * qty;
-                }
-            }
-
-            if (itemsMap.isEmpty()) {
-                player.sendSystemMessage(nn(Component.translatable("message.commercial_buy.no_selection")));
-                return;
-            }
-
-            if (!hasEnoughInventorySpace(player, itemsMap)) {
-                player.sendSystemMessage(nn(Component.translatable("message.commercial_buy.no_space")));
-                return;
-            }
-
-            NetworkManager.INSTANCE.sendToServer(
-                    new CommercialBuyPacket(controlBoxPos, buildingFileName, itemsMap, totalPrice)
-            );
-
-            mc.getSoundManager().play(
-                    nn(SimpleSoundInstance.forUI(nn(ModSoundEvents.MONEY_COLLECT.get()), 1.0F, 1.0F))
-            );
-
-            selectedQuantities.clear();
-            mc.setScreen(null);
-        }
-
-        private boolean hasEnoughInventorySpace(Player player, Map<String, CommercialBuyPacket.BuyItemInfo> itemsMap) {
-            // 简化检查，实际实现需要更复杂的逻辑
-            return true;
-        }
-
         // ==================== 库存同步 ====================
 
         public void refreshStockFromServer() {
@@ -1031,27 +704,25 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
             );
         }
 
-        // 从客户端数据更新库存显示
         public void updateStockFromClientData() {
             Map<String, CommercialHiredData.StockInfo> stockMap = CommercialClientData.getStock(controlBoxPos);
             if (stockMap == null || stockMap.isEmpty()) return;
 
-            boolean stockChanged = false;
-            for (TradeItem item : allTradeItems) {
+            boolean changed = false;
+            for (TradeItemInfo item : allTradeItems) {
                 CommercialHiredData.StockInfo stockInfo = stockMap.get(item.itemId);
                 if (stockInfo != null) {
-                    if (item.currentStock != stockInfo.getCurrentStock()) {
+                    if (item.currentStock != stockInfo.getCurrentStock() ||
+                            item.todaySold != stockInfo.getDailyBoughtAmount()) {
                         item.currentStock = stockInfo.getCurrentStock();
-                        item.lastRestockTick = stockInfo.getLastRestockTime();
-                        item.nextRestockTick = item.lastRestockTick + restockInterval;
-                        stockChanged = true;
+                        item.todaySold = stockInfo.getDailyBoughtAmount();
+                        changed = true;
                     }
                 }
             }
 
-            // 如果库存有变化，刷新显示
-            if (stockChanged) {
-                refreshStockDisplay();
+            if (changed) {
+                rebuildItemList();
             }
         }
 
@@ -1059,67 +730,46 @@ public class CommercialBuyScreen extends ModularUIGuiContainer {
             Minecraft.getInstance().setScreen(null);
         }
 
-        private int getSelectedQuantity(String itemId) {
-            return selectedQuantities.getOrDefault(itemId, 0);
-        }
+        // ==================== Setter ====================
 
-        private void updateSelectedQuantity(String itemId, int quantity) {
-            if (quantity > 0) {
-                selectedQuantities.put(itemId, quantity);
-            } else {
-                selectedQuantities.remove(itemId);
-            }
-        }
+        public void setListGroup(WidgetGroup listGroup) { this.listGroup = listGroup; }
+        public void setPrevButton(ButtonWidget prevButton) { this.prevButton = prevButton; }
+        public void setNextButton(ButtonWidget nextButton) { this.nextButton = nextButton; }
+        public void setPageLabel(ImageWidget pageLabel) { this.pageLabel = pageLabel; }
+        public void setSearchBox(TextFieldWidget searchBox) { this.searchBox = searchBox; }
     }
 
-    // ==================== 交易物品类 ====================
+    // ==================== 交易物品信息类 ====================
 
-    public static class TradeItem {
+    public static class TradeItemInfo {
         public final String itemId;
         public final Item item;
         public final String displayName;
         public final double sellPrice;
         public final int maxStock;
-        public final int restockAmount;
-        public final boolean retail; // 零售模式：true=一个一个卖，false=整组卖
+        public final boolean retail;
+        public final String materialName;
         public int currentStock;
-        public long lastRestockTick;
-        public long nextRestockTick;
+        public int todaySold;
 
-        public TradeItem(String itemId, Item item, String displayName, double sellPrice, int maxStock, int restockAmount, boolean retail) {
+        public TradeItemInfo(String itemId, Item item, String displayName, double sellPrice,
+                             int maxStock, boolean retail, String materialName) {
             this.itemId = itemId;
             this.item = item;
             this.displayName = displayName;
             this.sellPrice = sellPrice;
             this.maxStock = maxStock;
-            this.restockAmount = restockAmount;
             this.retail = retail;
-            this.currentStock = 0; // 默认库存为0，等待服务器同步
-            this.lastRestockTick = 0;
-            this.nextRestockTick = 12000;
-        }
-
-        public boolean isInStock() {
-            return currentStock > 0;
+            this.materialName = materialName;
+            this.currentStock = 0;
+            this.todaySold = 0;
         }
 
         public String getStockDisplay() {
             if (retail) {
                 return String.format("%d/%d 个", currentStock, maxStock);
             }
-            return String.format("%d/%d 组", getStockInStacks(), getMaxStockInStacks());
-        }
-
-        public int getStockInStacks() {
-            return currentStock / 64;
-        }
-
-        public int getMaxStockInStacks() {
-            return maxStock / 64;
-        }
-
-        public int getMaxQuantity() {
-            return retail ? maxStock : 64;
+            return String.format("%d/%d 组", currentStock / 64, maxStock / 64);
         }
 
         public String getUnit() {

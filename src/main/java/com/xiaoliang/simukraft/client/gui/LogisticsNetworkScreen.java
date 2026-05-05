@@ -695,7 +695,6 @@ public class LogisticsNetworkScreen extends Screen
     private static class ClientInfo {
         final UUID clientId;
         final BlockPos blockPos;
-        @SuppressWarnings("unused")
         final UUID cityId;
         final List<BlockPos> portPositions;
         String name = "";

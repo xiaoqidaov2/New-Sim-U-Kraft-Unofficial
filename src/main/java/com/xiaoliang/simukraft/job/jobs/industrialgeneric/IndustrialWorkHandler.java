@@ -3,7 +3,6 @@ package com.xiaoliang.simukraft.job.jobs.industrialgeneric;
 import com.xiaoliang.simukraft.building.ControlBoxDataManager;
 import com.xiaoliang.simukraft.building.IndustrialBuildingConfig;
 import com.xiaoliang.simukraft.building.IndustrialBuildingManager;
-import com.xiaoliang.simukraft.config.ServerConfig;
 import com.xiaoliang.simukraft.entity.CustomEntity;
 import com.xiaoliang.simukraft.utils.CityMessageUtils;
 import com.xiaoliang.simukraft.utils.ContainerUtils;
@@ -714,32 +713,17 @@ public class IndustrialWorkHandler {
     }
     
     /**
-     * 获取等级对应的工作刻间隔（tick）
-     * 等级越高，工作刻间隔越短，工作速度越快
+     * menglan: 获取等级对应的工作刻间隔（tick）
+     * 使用新的统一速度系统：1级=40tick间隔，20级=8tick间隔
+     * @param level NPC等级
+     * @return 工作刻间隔（tick）
      */
     public static long getWorkTickInterval(int level) {
         int safeLevel = Math.max(1, level);
-        int baseTicks = 40;
-        int bonusPerLevel = getNpcSpeedBonusPerLevelSafe();
-        int minTicks = getNpcMinSpeedTicksSafe();
-        int adjusted = baseTicks - bonusPerLevel * (safeLevel - 1);
-        return Math.max(minTicks, adjusted);
-    }
-
-    private static int getNpcSpeedBonusPerLevelSafe() {
-        try {
-            return ServerConfig.getNpcSpeedBonusPerLevel();
-        } catch (IllegalStateException ignored) {
-            return 5;
-        }
-    }
-
-    private static int getNpcMinSpeedTicksSafe() {
-        try {
-            return ServerConfig.getNpcMinSpeedTicks();
-        } catch (IllegalStateException ignored) {
-            return 5;
-        }
+        int maxLevel = 20;
+        float progress = (float) (safeLevel - 1) / (maxLevel - 1);
+        // 1级=40tick, 20级=8tick，线性减少
+        return Math.max(8, (int)(40 - progress * 32));
     }
 
     /**

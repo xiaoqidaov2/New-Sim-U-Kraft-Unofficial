@@ -436,21 +436,9 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
             startY += 24;
 
             addIntOption(parent, width, startY, "npcMaxLevel",
-                    "最高等级", "NPC可达到的最高等级",
+                    "最高等级", "NPC可达到的最高等级(影响所有职业速度)",
                     ServerConfig.NPC_MAX_LEVEL.get(), 1, 20,
                     value -> configValues.put("npcMaxLevel", new IntConfigValue(value)));
-            startY += ITEM_HEIGHT;
-
-            addIntOption(parent, width, startY, "npcSpeedBonusPerLevel",
-                    "每级加速", "每升一级减少的工作时间(tick)",
-                    ServerConfig.NPC_SPEED_BONUS_PER_LEVEL.get(), 0, 50,
-                    value -> configValues.put("npcSpeedBonusPerLevel", new IntConfigValue(value)));
-            startY += ITEM_HEIGHT;
-
-            addIntOption(parent, width, startY, "npcMinSpeedTicks",
-                    "最短时间", "NPC工作的最短时间(tick)",
-                    ServerConfig.NPC_MIN_SPEED_TICKS.get(), 1, 100,
-                    value -> configValues.put("npcMinSpeedTicks", new IntConfigValue(value)));
         }
 
         private void buildPlannerPage(WidgetGroup parent, int width, int startY) {
@@ -523,7 +511,7 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
 
             // menglan: 使用更直观的每秒方块数配置
             addDoubleOption(parent, width, startY, "builderBlocksPerSecond",
-                    "1级速度", "1级建筑师每秒放置方块数(20级=5倍)",
+                    "1级速度", "1级建筑师每秒放置方块数(20级=20倍=每tick1个)",
                     ServerConfig.BUILDER_BLOCKS_PER_SECOND.get(), 0.1, 20.0,
                     value -> configValues.put("builderBlocksPerSecond", new DoubleConfigValue(value)));
             startY += ITEM_HEIGHT + SECTION_SPACING;
@@ -919,8 +907,6 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
                     int intValue = ((IntConfigValue) value).value;
                     switch (key) {
                         case "npcMaxLevel" -> ServerConfig.NPC_MAX_LEVEL.set(intValue);
-                        case "npcSpeedBonusPerLevel" -> ServerConfig.NPC_SPEED_BONUS_PER_LEVEL.set(intValue);
-                        case "npcMinSpeedTicks" -> ServerConfig.NPC_MIN_SPEED_TICKS.set(intValue);
                         case "plannerRemoveSpeedBase" -> ServerConfig.PLANNER_REMOVE_SPEED_BASE.set(intValue);
                         case "plannerReplaceSpeedBase" -> ServerConfig.PLANNER_REPLACE_SPEED_BASE.set(intValue);
                         case "plannerFillSpeedBase" -> ServerConfig.PLANNER_FILL_SPEED_BASE.set(intValue);

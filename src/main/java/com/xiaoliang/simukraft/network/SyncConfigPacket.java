@@ -105,8 +105,6 @@ public class SyncConfigPacket {
 
             // NPC等级配置
             case "npcMaxLevel" -> ServerConfig.NPC_MAX_LEVEL.set(intValue);
-            case "npcSpeedBonusPerLevel" -> ServerConfig.NPC_SPEED_BONUS_PER_LEVEL.set(intValue);
-            case "npcMinSpeedTicks" -> ServerConfig.NPC_MIN_SPEED_TICKS.set(intValue);
 
             // 规划师配置
             case "plannerRemoveSpeedBase" -> ServerConfig.PLANNER_REMOVE_SPEED_BASE.set(intValue);

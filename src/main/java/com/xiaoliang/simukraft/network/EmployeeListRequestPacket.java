@@ -21,7 +21,7 @@ import java.util.function.Supplier;
  * 客户端请求服务器发送当前城市的雇佣数据
  * 从V2雇佣存储中读取所有有工作的NPC
  */
-@SuppressWarnings( "unused")
+
 public class EmployeeListRequestPacket {
 
     public EmployeeListRequestPacket() {

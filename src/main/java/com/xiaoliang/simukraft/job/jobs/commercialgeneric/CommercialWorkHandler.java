@@ -734,7 +734,6 @@ public class CommercialWorkHandler {
      * 从建筑周围的箱子中获取原料（新增）
      * 使用 ContainerUtils 在主线程中安全读取
      */
-    @SuppressWarnings("unused")
     private static Map<String, Integer> getMaterialsFromChests(BlockPos pos, ServerLevel level) {
         return ContainerUtils.executeOnMainThread(level, () -> {
             Map<String, Integer> materials = new HashMap<>();
@@ -773,7 +772,7 @@ public class CommercialWorkHandler {
      * 从建筑周围的箱子中消耗原料（新增）
      * 使用 ContainerUtils 在主线程中安全消耗
      */
-    @SuppressWarnings("unused")
+    
     private static void consumeMaterialsFromChests(BlockPos pos, ServerLevel level,
                                                    java.util.List<CommercialBuildingConfig.MaterialRequirement> requirements) {
         if (pos == null || level == null || requirements == null) return;
@@ -1056,21 +1055,15 @@ public class CommercialWorkHandler {
     }
 
     /**
-     * 获取等级对应的效率加成
+     * menglan: 获取等级对应的效率加成
+     * 使用新的统一系统：1级=1.0倍，20级=3.0倍（线性增长）
      */
     public static float getEfficiencyByLevel(int level) {
-        if (level <= 1) {
-            return 1.0f;
-        }
-        return switch (level) {
-            case 2 -> 1.1f;
-            case 3 -> 1.25f;
-            case 4 -> 1.4f;
-            case 5 -> 1.6f;
-            case 6 -> 1.8f;
-            case 7 -> 2.0f;
-            default -> Math.min(3.0f, 2.0f + (level - 7) * 0.1f);
-        };
+        int safeLevel = Math.max(1, level);
+        int maxLevel = com.xiaoliang.simukraft.config.ServerConfig.getNpcMaxLevel();
+        float progress = (float) (safeLevel - 1) / (maxLevel - 1);
+        // 1级=1.0, 20级=3.0
+        return 1.0f + progress * 2.0f;
     }
 
     /**

@@ -1089,7 +1089,7 @@ public class ResidentManager {
     /**
      * 鏌ユ壘鍙敤鐨勪綇瀹咃紙resident瀛楁涓虹┖鐨剆k鏂囦欢锛?
      */
-    @SuppressWarnings("unused")
+
     private static Path findAvailableResidence(List<Path> skFiles) {
         for (Path skFile : skFiles) {
             if (isResidenceAvailable(skFile)) {
@@ -1310,7 +1310,7 @@ public class ResidentManager {
     /**
      * 妫€鏌PC鏄惁灞呬綇鍦ㄧ壒瀹氭枃浠朵腑
      */
-    @SuppressWarnings("unused")
+
     private static boolean isNPCResidingInFile(Path skFile, String npcName) {
         try {
             if (!Files.exists(skFile)) {

@@ -268,10 +268,21 @@ public class NPCInteractionHandler {
 
     @OnlyIn(Dist.CLIENT)
     private static void openCommercialTradeSelectScreen(BlockPos workPos, String buildingFileName) {
-        // 打开交易选择界面
-        Minecraft.getInstance().setScreen(
-            new com.xiaoliang.simukraft.client.gui.CommercialTradeSelectScreen(workPos, buildingFileName)
-        );
+        // 检查商店模式
+        com.xiaoliang.simukraft.building.CommercialBuildingConfig.ShopMode shopMode =
+                com.xiaoliang.simukraft.client.gui.CommercialClientData.getShopMode(buildingFileName);
+
+        if (shopMode == com.xiaoliang.simukraft.building.CommercialBuildingConfig.ShopMode.NPC_SELL) {
+            // NPC_SELL模式：打开信息查看界面（不可购买）
+            Minecraft.getInstance().setScreen(
+                new com.xiaoliang.simukraft.client.gui.NPCSellInfoScreen(workPos, buildingFileName)
+            );
+        } else {
+            // 其他模式：打开交易选择界面
+            Minecraft.getInstance().setScreen(
+                new com.xiaoliang.simukraft.client.gui.CommercialTradeSelectScreen(workPos, buildingFileName)
+            );
+        }
 
         // 播放打开界面音效
         Minecraft.getInstance().getSoundManager().play(

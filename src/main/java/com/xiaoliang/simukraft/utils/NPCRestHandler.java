@@ -35,7 +35,6 @@ public class NPCRestHandler {
     private static final int EVENING_FORCE_TELEPORT_TIME = 13000; // 晚上19:00仍未到家则强制传送
     private static final int MORNING_END_TIME = 0; // 早上结束时间（约6:00）
     private static final int MORNING_PREPARE_TIME = 23000; // 早上准备出发时间（约5:00）
-    @SuppressWarnings("unused")
     private static final int REST_CHECK_INTERVAL = 100; // 检查间隔（5秒）
     private static final int MAX_GOING_TO_WORK_TIME = 6000; // 最长去工作时间（游戏刻5分钟）
     private static final int BED_SEARCH_HORIZONTAL_RADIUS = 8;
@@ -74,7 +73,7 @@ public class NPCRestHandler {
     private static final int REST_STAGE_SLEEPING = 3;
     private static final int REST_STAGE_WAKING_UP = 4;
     private static final int REST_STAGE_WAITING_FOR_BED = 6;
-    @SuppressWarnings("unused")
+
     private static final int REST_STAGE_GOING_TO_WORK = 5; // 新增：正在去工作
 
     // 存储正在去工作的NPC数据
@@ -85,11 +84,9 @@ public class NPCRestHandler {
      */
     private static class RestData {
         public final CustomEntity npc;
-        @SuppressWarnings("unused")
         public final ServerLevel level;
         public BlockPos homePos;
         public int restStage;
-        @SuppressWarnings("unused")
         public long restStartTime;
         public boolean hasArrivedHome;
         public BlockPos bedPos;
@@ -113,7 +110,7 @@ public class NPCRestHandler {
      */
     private static class GoingToWorkData {
         public final CustomEntity npc;
-        @SuppressWarnings("unused")
+
         public final ServerLevel level;
         public final BlockPos workPos;
         public final String job;
@@ -753,7 +750,6 @@ public class NPCRestHandler {
     /**
      * 传送NPC到工作岗位
      */
-    @SuppressWarnings("unused")
     private static void teleportToWorkplace(CustomEntity npc, ServerLevel level, String job) {
         if (npc == null || level == null || job == null) return;
 

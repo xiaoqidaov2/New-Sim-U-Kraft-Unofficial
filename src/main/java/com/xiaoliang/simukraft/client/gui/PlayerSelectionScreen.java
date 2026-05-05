@@ -39,7 +39,7 @@ import java.util.Objects;
  * 使用LDLib框架实现
  */
 @OnlyIn(Dist.CLIENT)
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings("null")
 public class PlayerSelectionScreen extends ModularUIGuiContainer {
     @Nonnull
     private static <T> T nn(T value) {

@@ -82,7 +82,6 @@ public class NPCDataManager {
         }
     }
 
-    @SuppressWarnings("unused")
     private static final class SaveJobDataRequest {
         final MinecraftServer server;
         final String npcId;

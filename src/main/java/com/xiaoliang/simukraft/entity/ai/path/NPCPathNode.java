@@ -29,7 +29,6 @@ public class NPCPathNode implements Comparable<NPCPathNode> {
         STEP_UP,       // 一格抬脚翻越
         JUMP,          // 需要跳跃
         FALL,          // 需要下落
-        CLIMB,         // 需要攀爬（梯子/藤蔓）
         DOOR,          // 门
         WATER,         // 水中
         AIR            // 空中（需要特殊处理）
@@ -40,7 +39,6 @@ public class NPCPathNode implements Comparable<NPCPathNode> {
         ASCEND,
         DESCEND,
         FALL,
-        CLIMB,
         DOOR
     }
     

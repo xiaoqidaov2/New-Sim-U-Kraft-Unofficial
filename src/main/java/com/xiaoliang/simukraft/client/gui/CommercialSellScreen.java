@@ -42,7 +42,7 @@ import java.util.stream.Collectors;
  * 玩家出售物品给NPC
  */
 @OnlyIn(Dist.CLIENT)
-@SuppressWarnings({"null", "unused"})
+@SuppressWarnings({"null"})
 public class CommercialSellScreen extends ModularUIGuiContainer {
 
     // ==================== 布局常量 ====================

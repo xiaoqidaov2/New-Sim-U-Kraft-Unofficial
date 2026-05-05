@@ -77,6 +77,9 @@ public class IndustrialControlBoxBlock extends Block {
                 // 存储额外的工业建筑信息到工业数据文件
                 writeIndustrialJobType(server, pos, buildingFileName, jobType, cityId);
 
+                // 更新缓存，使新建建筑立即可被NPC识别
+                com.xiaoliang.simukraft.utils.FileUtils.updateSkFileCache("industrial", pos, buildingFileName);
+
                 // 移除已处理的控制盒
                 ConstructionBoxMapping.removePendingBox(level, pos);
 
@@ -242,6 +245,9 @@ public class IndustrialControlBoxBlock extends Block {
 
             // 删除对应的工业建筑数据文件
             deleteIndustrialDataFile(server, pos);
+
+            // 从缓存移除，避免NPC继续识别已删除的建筑
+            com.xiaoliang.simukraft.utils.FileUtils.removeFromSkFileCache("industrial", pos);
 
             // 使用ControlBoxDataManager删除控制盒数据
             ControlBoxDataManager.deleteControlBox(server, pos, "industrial_control_box");

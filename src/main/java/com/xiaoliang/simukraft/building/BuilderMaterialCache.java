@@ -301,7 +301,6 @@ public class BuilderMaterialCache {
         private final int slot;
         private final boolean usesItemHandler;
         @Nonnull
-        @SuppressWarnings("unused")
         private final String itemId;
         private int remainingCount;
 

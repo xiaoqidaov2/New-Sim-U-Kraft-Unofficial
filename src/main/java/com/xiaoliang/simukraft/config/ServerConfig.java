@@ -484,22 +484,44 @@ public class ServerConfig {
 
     // ==================== 规划师配置获取方法 ====================
 
+    /**
+     * menglan: 获取规划师拆除速度（tick/方块）
+     * 使用新的统一速度系统：1级=基础值，20级=基础值/5
+     */
     public static int getPlannerRemoveSpeed(int level) {
         int baseSpeed = getCached("plannerRemoveSpeedBase", PLANNER_REMOVE_SPEED_BASE);
-        int bonus = getCached("npcSpeedBonusPerLevel", NPC_SPEED_BONUS_PER_LEVEL) * (level - 1);
-        return Math.max(getCached("npcMinSpeedTicks", NPC_MIN_SPEED_TICKS), baseSpeed - bonus);
+        return calculateSpeedByLevel(baseSpeed, level);
     }
 
+    /**
+     * menglan: 获取规划师替换速度（tick/方块）
+     */
     public static int getPlannerReplaceSpeed(int level) {
         int baseSpeed = getCached("plannerReplaceSpeedBase", PLANNER_REPLACE_SPEED_BASE);
-        int bonus = getCached("npcSpeedBonusPerLevel", NPC_SPEED_BONUS_PER_LEVEL) * (level - 1);
-        return Math.max(getCached("npcMinSpeedTicks", NPC_MIN_SPEED_TICKS), baseSpeed - bonus);
+        return calculateSpeedByLevel(baseSpeed, level);
     }
 
+    /**
+     * menglan: 获取规划师填充速度（tick/方块）
+     */
     public static int getPlannerFillSpeed(int level) {
         int baseSpeed = getCached("plannerFillSpeedBase", PLANNER_FILL_SPEED_BASE);
-        int bonus = getCached("npcSpeedBonusPerLevel", NPC_SPEED_BONUS_PER_LEVEL) * (level - 1);
-        return Math.max(getCached("npcMinSpeedTicks", NPC_MIN_SPEED_TICKS), baseSpeed - bonus);
+        return calculateSpeedByLevel(baseSpeed, level);
+    }
+
+    /**
+     * menglan: 统一的速度计算：1级=基础值，20级=基础值/5（最快5倍）
+     * @param baseSpeed 1级时的基础速度（tick）
+     * @param level NPC等级
+     * @return 计算后的速度（tick）
+     */
+    private static int calculateSpeedByLevel(int baseSpeed, int level) {
+        int safeLevel = Math.max(1, level);
+        int maxLevel = getCached("npcMaxLevel", NPC_MAX_LEVEL);
+        float progress = (float) (safeLevel - 1) / (maxLevel - 1);
+        // 1级=1倍, 20级=0.2倍（最快5倍）
+        double multiplier = 1.0 - progress * 0.8;
+        return Math.max(5, (int)(baseSpeed * multiplier));
     }
 
     public static boolean shouldDropItemsOnRemove() {
@@ -534,6 +556,7 @@ public class ServerConfig {
 
     /**
      * menglan: 获取建筑师每秒放置方块数（根据等级线性增长）
+     * 1级=基础值, 20级=基础值×20倍（每tick 1个）
      * @param level NPC等级
      * @return 每秒放置方块数
      */
@@ -541,7 +564,7 @@ public class ServerConfig {
         double baseSpeed = getCached("builderBlocksPerSecond", BUILDER_BLOCKS_PER_SECOND);
         int maxLevel = getCached("npcMaxLevel", NPC_MAX_LEVEL);
         float progress = (float) (level - 1) / (maxLevel - 1);
-        return baseSpeed * (1 + progress * 4); // 1级=1倍, 20级=5倍
+        return baseSpeed * (1 + progress * 19); // 1级=1倍, 20级=20倍
     }
 
     /**
