@@ -10,12 +10,12 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.FlowingFluid;
 import org.jetbrains.annotations.NotNull;
 
+@SuppressWarnings("null")
 public class MilkLiquidBlock extends LiquidBlock {
     public MilkLiquidBlock(java.util.function.Supplier<? extends FlowingFluid> fluid, Properties properties) {
         super(fluid, properties);
     }
-
-    @SuppressWarnings("deprecation")
+    
     @Override
     public void onPlace(@NotNull BlockState state, @NotNull Level level, @NotNull BlockPos pos, @NotNull BlockState oldState, boolean isMoving) {
         super.onPlace(state, level, pos, oldState, isMoving);
@@ -24,7 +24,6 @@ public class MilkLiquidBlock extends LiquidBlock {
         }
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     public void randomTick(@NotNull BlockState state, @NotNull ServerLevel level, @NotNull BlockPos pos, @NotNull RandomSource random) {
         super.randomTick(state, level, pos, random);

@@ -556,6 +556,8 @@ public class NPCWorkStatusPacket {
                     if (message.newStatus == com.xiaoliang.simukraft.entity.WorkStatus.IDLE) {
                         // 客户端清除所有关联记�?
                         clearClientSideRecords(targetNPC);
+                        // menglannnn: 重置NPC职业为unemployed
+                        targetNPC.setJob("unemployed");
                     } else {
                         // 客户端设置关联记�?
                         if (message.buildBoxPos != null) {
