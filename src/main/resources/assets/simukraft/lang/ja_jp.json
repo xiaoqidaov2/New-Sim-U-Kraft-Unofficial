@@ -434,7 +434,7 @@
   "message.simukraft.building_material_merchant.fired": "建材商人を解雇しました：%s",
   "message.simukraft.build_direction_instruction": "建築時は身体と顔を建築する方向に向けて建築物を選択してください！建築は右から左に行われます！建築予定エリア内を整理してください（雑草や他のブロックを含む）！建築中は建築エリアを妨害しないでください！",
   "message.simukraft.no_idle_npcs": "待機中のNPCが見つかりません",
-  "message.simukraft.welcome": "新:シムシティ(New:SimuKraft) v1.0.5a16をダウンロードしプレイいただきありがとうございます！本modはNSUK新シムシティ開発チームによりリブート開発されています。",
+  "message.simukraft.welcome": "新:シムシティ(New:SimuKraft) v1.0.5b1をダウンロードしプレイいただきありがとうございます！本modはNSUK新シムシティ開発チームによりリブート開発されています。",
   "message.simukraft.welcome.divider": "------------------------------",
   "message.simukraft.welcome.refactor_edition": "公式問題フィードバックQQグループ：1046985079 | 638462178 | 1084921979。\n【もし有料で購入された場合、おめでとうございます、騙されています！】",
   "message.simukraft.current_mode": "現在のシムシティゲームモード：%s",

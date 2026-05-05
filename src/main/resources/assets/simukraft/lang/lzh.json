@@ -434,7 +434,7 @@
   "message.simukraft.building_material_merchant.fired": "已黜建材商贾：%s",
   "message.simukraft.build_direction_instruction": "营屋之时，须身面所建之向以择屋！营造之法乃自右及左！请清所营之地（含杂草及他砖）！营造之时勿扰其域！",
   "message.simukraft.no_idle_npcs": "未见闲 NPC",
-  "message.simukraft.welcome": "感汝下载并戏 新：模拟巨邑（New:SimuKraft）v1.0.5a16！此模乃 NSUK新模拟巨邑开发组 重置开发。",
+  "message.simukraft.welcome": "感汝下载并戏 新：模拟巨邑（New:SimuKraft）v1.0.5b1！此模乃 NSUK新模拟巨邑开发组 重置开发。",
   "message.simukraft.welcome.divider": "------------------------------",
   "message.simukraft.welcome.refactor_edition": "官方问难讨论 QQ 群：1046985079 ｜ 638462178 ｜ 1084921979。\n【若汝以银购此物，贺汝，汝被诓矣！】",
   "message.simukraft.current_mode": "今模拟邑之戏模式：%s",
