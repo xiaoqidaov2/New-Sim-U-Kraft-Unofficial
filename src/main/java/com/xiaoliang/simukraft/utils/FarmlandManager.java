@@ -256,11 +256,8 @@ public final class FarmlandManager {
             npc.setWorkStatus(WorkStatus.IDLE);
             npc.resetToIdle();
             CustomEntity finalNpc = npc;
-            // menglannnn: 使用五参数构造函数传递NPC名称和职业，确保客户端正确同步
-            String npcName = finalNpc.getFullName();
-            String npcJob = finalNpc.getJob();
             server.getPlayerList().getPlayers().forEach(p -> 
-                NetworkManager.sendToPlayer(new NPCWorkStatusPacket(finalNpc.getUUID(), WorkStatus.IDLE, boxPos, npcName, npcJob), p)
+                NetworkManager.sendToPlayer(new NPCWorkStatusPacket(finalNpc.getUUID(), WorkStatus.IDLE, boxPos), p)
             );
         }
 
