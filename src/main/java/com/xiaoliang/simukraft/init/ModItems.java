@@ -37,7 +37,7 @@ public class ModItems {
     public static final RegistryObject<Item> FRENCH_FRIES = ITEMS.register("french_fries",
             () -> new BuffFoodItem(new Item.Properties().food(ModFoods.FRENCH_FRIES)));
 
-    // 奶酪块
+    // 奶酪
     public static final RegistryObject<Item> CHEESE_CHUNK = ITEMS.register("cheese_chunk",
             () -> new BuffFoodItem(new Item.Properties().food(ModFoods.CHEESE_CHUNK)));
 

@@ -21,9 +21,12 @@ import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.core.BlockPos;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
+import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.apache.logging.log4j.LogManager;
@@ -39,6 +42,35 @@ public class PlayerEvents {
     private static final Logger LOGGER = LogManager.getLogger();
     private static final ResourceLocation FIRST_DREAM_ADVANCEMENT_ID =
             ResourceLocation.fromNamespaceAndPath(Simukraft.MOD_ID, "story/first_dream");
+
+    @SubscribeEvent
+    public static void onPlayerRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
+        Player player = event.getEntity();
+        Level level = event.getLevel();
+        BlockPos clickedPos = event.getPos();
+        net.minecraft.core.Direction face = event.getFace();
+        if (face == null) return;
+        ItemStack itemStack = event.getItemStack();
+
+        if (!level.isClientSide && itemStack.getItem() == net.minecraft.world.item.Items.MILK_BUCKET) {
+            BlockPos targetPos = clickedPos;
+            if (!level.getBlockState(targetPos).canBeReplaced()) {
+                targetPos = clickedPos.relative(face);
+            }
+            net.minecraft.world.level.block.state.BlockState targetState = level.getBlockState(targetPos);
+            if (targetState.canBeReplaced() || targetState.isAir()) {
+                level.setBlockAndUpdate(targetPos, com.xiaoliang.simukraft.init.ModBlocks.MILK_BLOCK.get().defaultBlockState());
+                net.minecraft.sounds.SoundEvent soundevent = net.minecraft.sounds.SoundEvents.BUCKET_EMPTY;
+                level.playSound(null, targetPos, soundevent, net.minecraft.sounds.SoundSource.BLOCKS, 1.0F, 1.0F);
+                if (!player.isCreative()) {
+                    player.setItemInHand(event.getHand(), new ItemStack(net.minecraft.world.item.Items.BUCKET));
+                }
+                event.setCanceled(true);
+                event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
+            }
+        }
+    }
+
     private static final String FIRST_DREAM_CRITERION = "first_join";
     private static final String FIRST_DREAM_PLAYED_TAG = "simukraft_first_dream_played";
     // 玩家刚进世界时客户端尚未完全稳定，先延迟一小段时间再播音效更可靠

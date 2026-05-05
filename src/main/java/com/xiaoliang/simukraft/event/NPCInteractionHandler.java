@@ -248,20 +248,6 @@ public class NPCInteractionHandler {
 
     @OnlyIn(Dist.CLIENT)
     private static void openNPCScreen(Player player, CustomEntity npc) {
-        if (npc.getWorkStatus() == WorkStatus.WORKING) {
-            WorkUiContext workUiContext = resolveWorkUiContext(npc);
-            if (workUiContext != null) {
-                if (workUiContext.workBlockType == WorkBlockType.COMMERCIAL_CONTROL_BOX) {
-                    openCommercialTradeSelectScreen(workUiContext.workplacePos, workUiContext.buildingFileName);
-                    return;
-                }
-                if (workUiContext.workBlockType == WorkBlockType.INDUSTRIAL_CONTROL_BOX) {
-                    openIndustrialControlBoxScreen(workUiContext.workplacePos, workUiContext.buildingFileName);
-                    return;
-                }
-            }
-        }
-
         // 打开普通NPC属性界面
         openScreenWithReflection(false, npc);
     }

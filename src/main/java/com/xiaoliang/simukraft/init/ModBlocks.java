@@ -91,6 +91,16 @@ public class ModBlocks {
     public static final RegistryObject<Item> NSUK_FARMLAND_BOX_ITEM = ModItems.ITEMS.register("nsuk_farmland_box",
             () -> new BlockItem(nn(NSUK_FARMLAND_BOX.get()), new Item.Properties()));
 
+    // 奶酪块
+    public static final RegistryObject<Block> CHEESE_BLOCK = BLOCKS.register("cheese_block", 
+            () -> new Block(net.minecraft.world.level.block.state.BlockBehaviour.Properties.copy(net.minecraft.world.level.block.Blocks.SLIME_BLOCK).sound(net.minecraft.world.level.block.SoundType.SLIME_BLOCK)));
+    public static final RegistryObject<Item> CHEESE_BLOCK_ITEM = ModItems.ITEMS.register("cheese_block",
+            () -> new BlockItem(nn(CHEESE_BLOCK.get()), new Item.Properties()));
+
+    // 牛奶液体方块
+    public static final RegistryObject<net.minecraft.world.level.block.LiquidBlock> MILK_BLOCK = BLOCKS.register("milk_fluid",
+            () -> new com.xiaoliang.simukraft.block.MilkLiquidBlock(ModFluids.SOURCE_MILK, net.minecraft.world.level.block.state.BlockBehaviour.Properties.copy(net.minecraft.world.level.block.Blocks.WATER).noLootTable().randomTicks()));
+
     private static <T> T nn(T value) {
         return Objects.requireNonNull(value);
     }
