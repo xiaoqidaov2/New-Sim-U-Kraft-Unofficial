@@ -657,6 +657,9 @@ public class NPCPathFinder {
         int minZ = (int) Math.floor(standZ - bodyRadius);
         int maxZ = (int) Math.floor(standZ + bodyRadius);
 
+        // menglannnn: 计算NPC站立的支撑方块位置
+        BlockPos supportPos = BlockPos.containing(standX, standY - COLLISION_EPSILON, standZ);
+
         for (int y = minY; y <= maxY; y++) {
             for (int x = minX; x <= maxX; x++) {
                 for (int z = minZ; z <= maxZ; z++) {
@@ -670,6 +673,36 @@ public class NPCPathFinder {
                         continue;
                     }
                     double localMinY = standY - checkPos.getY() + COLLISION_EPSILON;
+
+                    // menglannnn: 对于NPC站立的支撑方块（如楼梯、台阶），允许其碰撞形状与NPC身体相交
+                    // 只检查是否有高于NPC头部的碰撞部分真正阻挡
+                    if (checkPos.equals(supportPos)) {
+                        boolean blocksHead = false;
+                        for (AABB box : shape.toAabbs()) {
+                            if (box.maxY > localMinY + 1.8D - COLLISION_EPSILON) {
+                                double npcMinX = standX - bodyRadius;
+                                double npcMaxX = standX + bodyRadius;
+                                double npcMinZ = standZ - bodyRadius;
+                                double npcMaxZ = standZ + bodyRadius;
+                                double boxMinX = checkPos.getX() + box.minX;
+                                double boxMaxX = checkPos.getX() + box.maxX;
+                                double boxMinZ = checkPos.getZ() + box.minZ;
+                                double boxMaxZ = checkPos.getZ() + box.maxZ;
+
+                                boolean horizontalOverlap = npcMaxX > boxMinX + COLLISION_EPSILON && npcMinX < boxMaxX - COLLISION_EPSILON
+                                        && npcMaxZ > boxMinZ + COLLISION_EPSILON && npcMinZ < boxMaxZ - COLLISION_EPSILON;
+                                if (horizontalOverlap) {
+                                    blocksHead = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (blocksHead) {
+                            return false;
+                        }
+                        continue;
+                    }
+
                     for (AABB box : shape.toAabbs()) {
                         // 检查box是否与NPC身体区域在水平方向上有重叠
                         double npcMinX = standX - bodyRadius;

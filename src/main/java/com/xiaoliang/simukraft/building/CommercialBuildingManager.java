@@ -40,7 +40,7 @@ public class CommercialBuildingManager {
     
     // 已知的商业建筑ID列表（用于从类路径复制）
     private static final String[] KNOWN_BUILDING_IDS = {
-        "JCSD", "RP", "SGD", "MBD", "YY", "YH"
+        "JCSD", "SGD", "YY", "YH"
     };
     
     /**

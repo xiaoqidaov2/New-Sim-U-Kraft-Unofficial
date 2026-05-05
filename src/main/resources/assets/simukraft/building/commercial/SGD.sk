@@ -1,7 +1,0 @@
-name:水果店
-size:11 x 9 x 5
-amount:21.00元
-author:XiaoLiang
-description:专门售卖各种新鲜水果蔬菜类产品的小型店铺。
-tags:price_medium,material_low,stage_early
-job_type:fruit_shop_owner

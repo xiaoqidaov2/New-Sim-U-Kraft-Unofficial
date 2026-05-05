@@ -1,7 +1,0 @@
-name:肉铺
-size:8 x 9 x 6
-amount:10.56元
-author:XiaoLiang
-description:专门售卖肉类产品的小型店铺，主要销售鲜肉。（城市可多个）
-tags:price_low,material_low,stage_early
-job_type:meat_shop_owner

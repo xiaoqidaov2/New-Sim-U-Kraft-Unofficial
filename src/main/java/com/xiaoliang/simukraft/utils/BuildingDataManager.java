@@ -549,102 +549,47 @@ public class BuildingDataManager {
     // 从类路径复制建筑文件到目标路径
     private static void copyFilesFromClasspath(String category, Path targetPath) {
         try {
-            // 确保目标目录存在
             Files.createDirectories(targetPath);
-            
-            // 已知的建筑文件名列表
-            String[] knownBuildingFiles = {
-                // residential category files
-                "2br.nbt", "2br.sk", "2srb.nbt", "2srb.sk", "bhb.nbt", "bhb.sk", "cc.nbt", "cc.sk",
-                "dh.nbt", "dh.sk", "dlwh.nbt", "dlwh.sk", "gt.nbt", "gt.sk", "hsv.nbt", "hsv.sk",
-                "kmsmr.nbt", "kmsmr.sk", "mc.nbt", "mc.sk", "mh.nbt", "mh.sk",
-                "ncat.nbt", "ncat.sk", "rbrh.nbt", "rbrh.sk", "rewh.nbt", "rewh.sk", "sbc.nbt", "sbc.sk",
-                "sc.nbt", "sc.sk", "szfv2.nbt", "szfv2.sk", "td.nbt", "td.sk", "u1.nbt", "u1.sk", 
-                "wm.nbt", "wm.sk", "wtsv.nbt", "wtsv.sk",
-                "bot.nbt", "bot.sk", "cxfz.nbt", "cxfz.sk", "dxmbzz.nbt", "dxmbzz.sk", "dxmzbs.nbt", "dxmzbs.sk",
-                "gfdxzz.nbt", "gfdxzz.sk", "hp.nbt", "hp.sk", "jtmzj.nbt", "jtmzj.sk", "klp.nbt", "klp.sk",
-                "klpzj.nbt", "klpzj.sk", "lindixiaowu.nbt", "lindixiaowu.sk", "mlxw.nbt", "mlxw.sk",
-                "moguwu.nbt", "moguwu.sk", "mw.nbt", "mw.sk", "ptdxfz.nbt", "ptdxfz.sk", "ptdxfz2.nbt", "ptdxfz2.sk",
-                "ptdxfz3.nbt", "ptdxfz3.sk", "shxw.nbt", "shxw.sk", "smxxzz.nbt", "smxxzz.sk",
-                "ssxw.nbt", "ssxw.sk", "sygl.nbt", "sygl.sk", "syxw.nbt", "syxw.sk", "tfz.nbt", "tfz.sk",
-                "tsgzz.nbt", "tsgzz.sk", "xiandaishuangcengbieshu.nbt", "xiandaishuangcengbieshu.sk",
-                "xiandaisancengbieshu.nbt", "xiandaisancengbieshu.sk", "ymdbs.nbt", "ymdbs.sk",
-                "ysyt.nbt", "ysyt.sk", "ysxzz.nbt", "ysxzz.sk", "zf.nbt", "zf.sk",
-                "zhiyuxiaowu.nbt", "zhiyuxiaowu.sk", "zzl.nbt", "zzl.sk", "zkssxw.nbt", "zkssxw.sk",
-                "szf.nbt", "szf.sk", "shuwu.nbt", "shuwu.sk", "tonghua.nbt", "tonghua.sk", "xiandaibieshu.nbt", "xiandaibieshu.sk",
-                "huanggong.nbt", "huanggong.sk", "shenshe.nbt", "shenshe.sk", "ao.nbt", "ao.sk", "house1.nbt", "house1.sk", "house2.nbt", "house2.sk", "house3.nbt", "house3.sk",
-                "house4.nbt", "house4.sk", "dfz1.nbt", "dfz1.sk", "ecdd.nbt", "ecdd.sk", "ecddxj.nbt", "ecddxj.sk", "scdddj.nbt", "scdddj.sk", "scsd.nbt", "scsd.sk", "xfz.nbt", "xfz.sk",
-                "dcymf.nbt", "dcymf.sk", "dhz.nbt", "dhz.sk", "jjxw.nbt", "jjxw.sk", "srdbs.nbt", "srdbs.sk", "szxw.nbt", "szxw.sk", "tjysf.nbt", "tjysf.sk",
-                "medievalcastle.nbt", "medievalcastle.sk", "qingLing001.nbt", "qingLing001.sk", "qingLing002.nbt", "qingLing002.sk",
-                "qingLing003.nbt", "qingLing003.sk", "qingLing012.nbt", "qingLing012.sk", "qingLing013.nbt", "qingLing013.sk", "qingLing014.nbt", "qingLing014.sk",
-                "tzb1.nbt", "tzb1.sk", "tzb2.nbt", "tzb2.sk", "tzb3.nbt", "tzb3.sk", "tzb4.nbt", "tzb4.sk", "tzb5.nbt", "tzb5.sk", "tzb6.nbt", "tzb6.sk",
-                "tzb7.nbt", "tzb7.sk", "tzb8.nbt", "tzb8.sk", "tzb9.nbt", "tzb9.sk", "tzb10.nbt", "tzb10.sk", "cc2.nbt", "cc2.sk", "cxfz2.nbt", "cxfz2.sk",
-                // commercial category files (支持大小写两种形式)
-                "jcsd.nbt", "jcsd.sk", "JCSD.nbt", "JCSD.sk",
-                "rp.nbt", "rp.sk", "RP.nbt", "RP.sk",
-                "sgd.nbt", "sgd.sk", "SGD.nbt", "SGD.sk",
-                "mbd.nbt", "mbd.sk", "MBD.nbt", "MBD.sk",
-                "yy.nbt", "yy.sk", "YY.nbt", "YY.sk",
-                "yh.nbt", "yh.sk", "YH.nbt", "YH.sk",
-                // industry category files (支持大小写两种形式)
-                "nnj.nbt", "nnj.sk", "nnj.json", "NNJ.nbt", "NNJ.sk", "NNJ.json",
-                "yyj.nbt", "yyj.sk", "yyj.json", "YYJ.nbt", "YYJ.sk", "YYJ.json",
-                "jjj.nbt", "jjj.sk", "jjj.json", "JJJ.nbt", "JJJ.sk", "JJJ.json",
-                "yrj.nbt", "yrj.sk", "yrj.json", "YRJ.nbt", "YRJ.sk", "YRJ.json",
-                "zzj.nbt", "zzj.sk", "zzj.json", "ZZJ.nbt", "ZZJ.sk", "ZZJ.json",
-                // other category files
-                "slszg.nbt", "slszg.sk", "fengyehuiguangjiaotang.nbt", "fengyehuiguangjiaotang.sk", "fengyejianyu.nbt", "fengyejianyu.sk", "fengyeluorichengbao.nbt", "fengyeluorichengbao.sk",
-                "fengyeshiluotiankongyiji.nbt", "fengyeshiluotiankongyiji.sk", "fengyexinghuantianqiongta.nbt", "fengyexinghuantianqiongta.sk", "fengyezhongyanjitan.nbt", "fengyezhongyanjitan.sk",
-                "huanyinglaidaomonidadushi.nbt", "huanyinglaidaomonidadushi.sk", "shizhongxin.nbt", "shizhongxin.sk",
-            };
 
-            
-            // 筛选当前类别的文件
-            List<String> categoryFiles = new ArrayList<>();
-            for (String fileName : knownBuildingFiles) {
-                String baseName = getBaseName(fileName);
-                if (category.equals("residential") && matchesAny(baseName,
-                    "2br", "2srb", "bhb", "cc", "dh", "dlwh", "gt", "hsv", "kmsmr", "mc", "mh", "ncat",
-                    "rbrh", "rewh", "sbc", "sc", "szfv2", "td", "u1", "wm", "wtsv", "bot", "cxfz", "dxmbzz",
-                    "dxmzbs", "gfdxzz", "hp", "jtmzj", "klp", "klpzj", "lindixiaowu", "mlxw", "moguwu", "mw",
-                    "ptdxfz", "ptdxfz2", "ptdxfz3", "shxw", "smxxzz", "ssxw", "sygl", "syxw", "tfz", "tsgzz",
-                    "xiandaishuangcengbieshu", "xiandaisancengbieshu", "ymdbs", "ysyt", "ysxzz", "zf",
-                    "zhiyuxiaowu", "zzl", "shuwu", "tonghua", "xiandaibieshu", "szf", "zkssxw", "huanggong",
-                    "shenshe", "ao", "house1", "house2", "house3", "house4", "dfz1", "ecdd", "ecddxj",
-                    "scdddj", "scsd", "xfz", "dcymf", "dhz", "jjxw", "srdbs", "szxw", "tjysf",
-                    "medievalcastle", "qingling001", "qingling002", "qingling003", "qingling012",
-                    "qingling013", "qingling014", "tzb1", "tzb2", "tzb3", "tzb4", "tzb5", "tzb6", "tzb7",
-                    "tzb8", "tzb9", "tzb10", "cc2", "cxfz2")) {
-                    categoryFiles.add(fileName);
-                } else if (category.equals("commercial") && matchesAny(baseName,
-                    "jcsd", "rp", "sgd", "mbd", "yy", "yh")) {
-                    categoryFiles.add(fileName);
-                } else if (category.equals("industry") && matchesAny(baseName,
-                    "nnj", "yyj", "jjj", "yrj", "zzj")) {
-                    categoryFiles.add(fileName);
-                } else if (category.equals("other") && matchesAny(baseName,
-                    "slszg", "fengyehuiguangjiaotang", "fengyejianyu", "fengyeluorichengbao",
-                    "fengyeshiluotiankongyiji", "fengyexinghuantianqiongta", "fengyezhongyanjitan",
-                    "huanyinglaidaomonidadushi", "shizhongxin")) {
-                    categoryFiles.add(fileName);
-                }
+            // menglannnn: 动态扫描类路径中的建筑文件，替代硬编码列表
+            java.net.URL resourceUrl = BuildingDataManager.class.getClassLoader()
+                .getResource(BUILDING_ROOT_PATH + "/" + category);
+
+            if (resourceUrl == null) {
+                LOGGER.warn("[BuildingDataManager] 类路径中未找到类别 '{}' 的资源目录", category);
+                return;
             }
-            
-            // 复制文件
-            for (String fileName : categoryFiles) {
+
+            java.io.InputStream is = BuildingDataManager.class.getClassLoader()
+                .getResourceAsStream(BUILDING_ROOT_PATH + "/" + category);
+
+            if (is == null) {
+                LOGGER.warn("[BuildingDataManager] 无法读取类别 '{}' 的目录内容", category);
+                return;
+            }
+
+            java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(is));
+            String fileName;
+            int copyCount = 0;
+
+            while ((fileName = reader.readLine()) != null) {
+                fileName = fileName.trim();
+                if (fileName.isEmpty()) {
+                    continue;
+                }
+
                 String resourcePath = BUILDING_ROOT_PATH + "/" + category + "/" + fileName;
                 Path targetFilePath = targetPath.resolve(fileName);
-                
-                // 检查文件是否已经存在
+
                 if (Files.exists(targetFilePath)) {
                     continue;
                 }
-                
-                // 尝试从类路径加载资源
+
                 java.io.InputStream inputStream = BuildingDataManager.class.getClassLoader().getResourceAsStream(resourcePath);
                 if (inputStream != null) {
                     try {
                         Files.copy(inputStream, targetFilePath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                        copyCount++;
                     } catch (Exception e) {
                         LOGGER.error("[BuildingDataManager] 复制文件失败: {} -> {}: {}", resourcePath, targetFilePath, e.getMessage());
                     } finally {
@@ -654,7 +599,10 @@ public class BuildingDataManager {
                     LOGGER.error("[BuildingDataManager] 无法从类路径加载资源: {}", resourcePath);
                 }
             }
-            
+            reader.close();
+
+            LOGGER.info("[BuildingDataManager] 从类路径复制类别 '{}' 完成，共复制 {} 个文件", category, copyCount);
+
         } catch (Exception e) {
             LOGGER.error("[BuildingDataManager] 从类路径复制建筑文件失败: {}", e.getMessage());
         }
