@@ -53,6 +53,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
@@ -2190,8 +2191,9 @@ public class CustomEntity extends PathfinderMob {
         BlockPos frontPos = this.blockPosition().relative(this.getDirection());
         BlockState frontState = this.level().getBlockState(frontPos);
 
-        // 检查前方是否是门
-        if (frontState.getBlock() instanceof DoorBlock) {
+        // 检查前方是否是门（menglannnn: 排除铁门，铁门需要红石信号才能打开）
+        Block block = frontState.getBlock();
+        if (block instanceof DoorBlock && block != Blocks.IRON_DOOR) {
             // 检查门是否关闭
             if (!frontState.getValue(DoorBlock.OPEN)) {
                 // 打开门

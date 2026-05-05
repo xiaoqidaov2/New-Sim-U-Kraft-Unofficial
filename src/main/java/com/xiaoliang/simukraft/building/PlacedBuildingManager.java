@@ -2,6 +2,8 @@ package com.xiaoliang.simukraft.building;
 
 import com.xiaoliang.simukraft.client.preview.SchematicNBTLoader;
 import com.xiaoliang.simukraft.client.preview.SchematicNBTLoader.SchematicBlock;
+import com.xiaoliang.simukraft.employment.service.EmploymentCommands;
+import com.xiaoliang.simukraft.employment.service.EmploymentServices;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -296,6 +298,19 @@ public class PlacedBuildingManager {
         }
 
         LOGGER.info("[PlacedBuildingManager] 开始拆除建筑: {} ({})", building.buildingName, buildingId);
+
+        // menglannnn: 拆除建筑前先解雇该建筑的所有员工
+        // 直接移除方块不会触发onRemove方法，需要手动解雇
+        MinecraftServer server = level.getServer();
+        if (server != null) {
+            String dimensionId = level.dimension().location().toString();
+            var releaseResult = EmploymentServices.get(server).onWorkBlockRemoved(
+                    new EmploymentCommands.WorkBlockRemovedCommand(dimensionId, building.controlBoxPos)
+            );
+            if (releaseResult.success()) {
+                LOGGER.info("[PlacedBuildingManager] 已解雇建筑 {} 的员工", building.buildingName);
+            }
+        }
 
         // 按从外到内、从上到下的顺序拆除
         List<BlockEntry> sortedBlocks = new ArrayList<>(building.blocks);

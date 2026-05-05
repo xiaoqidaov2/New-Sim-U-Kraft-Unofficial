@@ -1407,7 +1407,9 @@ public class NPCMoveController {
         BlockState state = level.getBlockState(doorPos);
         Block block = state.getBlock();
 
-        if (block instanceof DoorBlock) {
+        // menglannnn: 修复NPC可以打开铁门的问题
+        // 铁门需要红石信号才能打开，NPC不应该能直接打开
+        if (block instanceof DoorBlock && block != Blocks.IRON_DOOR) {
             if (!state.getValue(DoorBlock.OPEN)) {
                 openDoor(doorPos, state);
             }
