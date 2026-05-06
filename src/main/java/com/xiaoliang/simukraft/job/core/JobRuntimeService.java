@@ -11,6 +11,7 @@ import com.xiaoliang.simukraft.job.api.JobResult;
 import com.xiaoliang.simukraft.job.api.JobResultType;
 import com.xiaoliang.simukraft.job.api.JobRuntimeState;
 import com.xiaoliang.simukraft.utils.NPCDataManager;
+import com.xiaoliang.simukraft.utils.NPCEntityLocator;
 import com.xiaoliang.simukraft.utils.NPCRestHandler;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -253,15 +254,12 @@ public final class JobRuntimeService {
             return cached;
         }
 
-        for (ServerLevel level : server.getAllLevels()) {
-            // 使用更高效的 getEntity 方法
-            net.minecraft.world.entity.Entity entity = level.getEntity(npcUuid);
-            if (entity instanceof CustomEntity customNpc && customNpc.isAlive() && !customNpc.isRemoved()) {
-                npcCache.put(npcUuid, customNpc);
-                return customNpc;
-            }
+        CustomEntity restoredNpc = NPCEntityLocator.findNpc(server, npcUuid, true);
+        if (restoredNpc != null) {
+            npcCache.put(npcUuid, restoredNpc);
+            return restoredNpc;
         }
-        
+
         npcCache.remove(npcUuid);
         return null;
     }

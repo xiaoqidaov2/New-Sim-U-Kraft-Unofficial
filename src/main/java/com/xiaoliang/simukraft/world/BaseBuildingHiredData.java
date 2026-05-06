@@ -1,9 +1,8 @@
 package com.xiaoliang.simukraft.world;
 
 import com.xiaoliang.simukraft.entity.CustomEntity;
+import com.xiaoliang.simukraft.utils.NPCEntityLocator;
 import net.minecraft.server.MinecraftServer;
-
-import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -18,12 +17,6 @@ public final class BaseBuildingHiredData {
      * 静态辅助方法，用于从服务器中查找NPC
      */
     public static CustomEntity findNPCByUuid(MinecraftServer server, UUID npcUuid) {
-        for (var level : server.getAllLevels()) {
-            var entity = level.getEntity(Objects.requireNonNull(npcUuid));
-            if (entity instanceof CustomEntity npc) {
-                return npc;
-            }
-        }
-        return null;
+        return NPCEntityLocator.findNpc(server, npcUuid, true);
     }
 }

@@ -4,6 +4,7 @@ import com.xiaoliang.simukraft.Simukraft;
 import com.xiaoliang.simukraft.employment.bridge.EmploymentLegacyBridge;
 import com.xiaoliang.simukraft.employment.domain.EmploymentAssignment;
 import com.xiaoliang.simukraft.entity.CustomEntity;
+import com.xiaoliang.simukraft.utils.NPCDataManager;
 import com.xiaoliang.simukraft.world.CityPermissionManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
@@ -104,7 +105,8 @@ public class EmployeeListRequestPacket {
                     workplaceType = getWorkplaceTypeByJob(job);
                 }
 
-                employees.put(npcUuid, new EmployeeData(npcUuid, job, workplacePos, workplaceType, buildingFileName));
+                String npcName = resolveNpcName(server, npcUuid);
+                employees.put(npcUuid, new EmployeeData(npcUuid, npcName, job, workplacePos, workplaceType, buildingFileName));
             }
 
         } catch (Exception e) {
@@ -172,7 +174,15 @@ public class EmployeeListRequestPacket {
                 }
             }
         }
-        return false;
+        String npcCityIdStr = NPCDataManager.getNPCCityId(server, npcUuid);
+        if (npcCityIdStr == null || npcCityIdStr.isEmpty()) {
+            return false;
+        }
+        try {
+            return cityId.equals(UUID.fromString(npcCityIdStr));
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 
     /**
@@ -189,22 +199,36 @@ public class EmployeeListRequestPacket {
         return null;
     }
 
+    private static String resolveNpcName(MinecraftServer server, UUID npcUuid) {
+        CustomEntity npc = findNPCByUuid(server, npcUuid);
+        if (npc != null && npc.getFullName() != null && !npc.getFullName().isBlank()) {
+            return npc.getFullName();
+        }
+        String storedName = NPCDataManager.getNPCNameByUUID(server, npcUuid);
+        if (storedName != null && !storedName.isBlank() && !"未知NPC".equals(storedName)) {
+            return storedName;
+        }
+        return "NPC";
+    }
+
     /**
      * 雇员数据内部类
      */
     public static class EmployeeData {
         public final UUID uuid;
+        public final String name;
         public final String job;
         public final net.minecraft.core.BlockPos workplacePos;
         public final String workplaceType;
         public final String buildingFileName; // 工业建筑配置文件名
 
-        public EmployeeData(UUID uuid, String job, net.minecraft.core.BlockPos workplacePos, String workplaceType) {
-            this(uuid, job, workplacePos, workplaceType, null);
+        public EmployeeData(UUID uuid, String name, String job, net.minecraft.core.BlockPos workplacePos, String workplaceType) {
+            this(uuid, name, job, workplacePos, workplaceType, null);
         }
 
-        public EmployeeData(UUID uuid, String job, net.minecraft.core.BlockPos workplacePos, String workplaceType, String buildingFileName) {
+        public EmployeeData(UUID uuid, String name, String job, net.minecraft.core.BlockPos workplacePos, String workplaceType, String buildingFileName) {
             this.uuid = uuid;
+            this.name = name;
             this.job = job;
             this.workplacePos = workplacePos;
             this.workplaceType = workplaceType;

@@ -212,7 +212,10 @@ public class EmployeeInfoScreen extends AbstractTransitionScreen {
      * 获取NPC名称
      */
     @Nonnull
-    private String getNPCName(@Nonnull UUID npcUuid) {
+    private String getNPCName(@Nonnull UUID npcUuid, @Nullable String serverName) {
+        if (serverName != null && !serverName.isBlank()) {
+            return serverName;
+        }
         var minecraft = Minecraft.getInstance();
         if (minecraft.level != null) {
             // 遍历所有实体查找匹配的UUID
@@ -222,8 +225,7 @@ public class EmployeeInfoScreen extends AbstractTransitionScreen {
                 }
             }
         }
-        // 如果找不到实体，返回UUID的前8位
-        return "NPC " + npcUuid.toString().substring(0, 8);
+        return "未知NPC";
     }
 
     /**
@@ -236,7 +238,7 @@ public class EmployeeInfoScreen extends AbstractTransitionScreen {
             var empData = entry.getValue();
             Simukraft.LOGGER.debug("[EmployeeInfoScreen] Employee: {}, job: {}, workplace: {}, buildingFile: {}", empData.uuid, empData.job, empData.workplaceType, empData.buildingFileName);
             UUID employeeUuid = nn(empData.uuid);
-            String name = getNPCName(employeeUuid);
+            String name = getNPCName(employeeUuid, empData.name);
             employees.add(new EmployeeInfo(
                 employeeUuid,
                 name,

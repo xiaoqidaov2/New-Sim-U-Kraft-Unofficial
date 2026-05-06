@@ -121,7 +121,7 @@ public record CitizenListRequestPacket(BlockPos cityCorePos) {
                             citizenInfos.add(new CitizenListResponsePacket.CitizenInfo(
                                 npcUuid,
                                 npc.getName().getString(),
-                                npc.getNpcId(),
+                                resolveStableNpcNumber(server, npcUuid, npc.getNpcId()),
                                 hasResidence,
                                 job,  // 发送原始英文职业，让客户端进行翻译
                                 skinPath,
@@ -163,7 +163,7 @@ public record CitizenListRequestPacket(BlockPos cityCorePos) {
                 citizenInfos.add(new CitizenListResponsePacket.CitizenInfo(
                         npcUuid,
                         npcName,
-                        Math.abs(npcUuid.hashCode()),
+                        resolveStableNpcNumber(server, npcUuid, -1),
                         ResidentManager.hasResidenceAssigned(server, npcUuid),
                         job,
                         NPCDataManager.getNPCSkinPath(server, npcUuid),
@@ -212,5 +212,19 @@ public record CitizenListRequestPacket(BlockPos cityCorePos) {
 
         // 4. 如果没有找到，返回null（调用方会处理为unemployed）
         return null;
+    }
+
+    private static int resolveStableNpcNumber(MinecraftServer server, UUID npcUuid, int loadedNpcId) {
+        if (loadedNpcId > 0) {
+            return loadedNpcId;
+        }
+        String storedNpcId = NPCDataManager.getNPCIdByUUID(server, npcUuid);
+        if (storedNpcId != null && storedNpcId.startsWith("npc")) {
+            try {
+                return Integer.parseInt(storedNpcId.substring(3));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return Math.abs(npcUuid.hashCode());
     }
 }

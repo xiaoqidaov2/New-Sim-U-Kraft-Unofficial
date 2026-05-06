@@ -26,6 +26,7 @@ public class EmployeeListResponsePacket {
         int size = buf.readInt();
         for (int i = 0; i < size; i++) {
             UUID uuid = buf.readUUID();
+            String name = buf.readUtf();
             String job = buf.readUtf();
             BlockPos pos = buf.readBlockPos();
             String workplaceType = buf.readUtf();
@@ -34,7 +35,7 @@ public class EmployeeListResponsePacket {
             if (buildingFileName.isEmpty()) {
                 buildingFileName = null;
             }
-            employees.put(uuid, new EmployeeListRequestPacket.EmployeeData(uuid, job, pos, workplaceType, buildingFileName));
+            employees.put(uuid, new EmployeeListRequestPacket.EmployeeData(uuid, name, job, pos, workplaceType, buildingFileName));
         }
     }
 
@@ -43,6 +44,7 @@ public class EmployeeListResponsePacket {
         for (var entry : employees.entrySet()) {
             var data = entry.getValue();
             buf.writeUUID(data.uuid);
+            buf.writeUtf(data.name);
             buf.writeUtf(data.job);
             buf.writeBlockPos(data.workplacePos);
             buf.writeUtf(data.workplaceType);

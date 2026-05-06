@@ -17,14 +17,13 @@ import com.xiaoliang.simukraft.world.FarmlandHiredData;
 import com.xiaoliang.simukraft.world.IndustrialHiredData;
 import com.xiaoliang.simukraft.world.LogisticsHiredData;
 import com.xiaoliang.simukraft.utils.NPCDataManager;
+import com.xiaoliang.simukraft.utils.NPCEntityLocator;
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraftforge.network.NetworkEvent;
@@ -561,85 +560,7 @@ public class EmploymentCommandPacket {
         if (server == null || assignment == null) {
             return null;
         }
-        var lastKnownLocation = com.xiaoliang.simukraft.utils.NPCDataManager.getNPCLastKnownLocation(server, assignment.npcUuid());
-        if (lastKnownLocation == null) {
-            BlockPos residencePos = com.xiaoliang.simukraft.utils.ResidentManager.getNPCResidenceControlBoxPos(server, assignment.npcUuid());
-            if (residencePos == null) {
-                Simukraft.LOGGER.warn("[EmploymentCommandPacket] 未找到NPC最后位置和住宅位置，无法恢复未加载实体 npcUuid={}", assignment.npcUuid());
-                return null;
-            }
-            ServerLevel overworld = server.overworld();
-            if (overworld == null) {
-                Simukraft.LOGGER.warn("[EmploymentCommandPacket] 主世界不可用，无法按住宅位置恢复未加载实体 npcUuid={}", assignment.npcUuid());
-                return null;
-            }
-            ChunkPos residenceChunk = new ChunkPos(residencePos);
-            boolean forcedResidenceChunk = false;
-            try {
-                if (!overworld.hasChunk(residenceChunk.x, residenceChunk.z)) {
-                    overworld.setChunkForced(residenceChunk.x, residenceChunk.z, true);
-                    forcedResidenceChunk = true;
-                }
-                overworld.getChunk(residenceChunk.x, residenceChunk.z);
-                CustomEntity restoredFromResidence = BuildBoxHiredData.findNPCByUuid(server, assignment.npcUuid());
-                if (restoredFromResidence != null) {
-                    Simukraft.LOGGER.info("[EmploymentCommandPacket] 已按住宅位置恢复未加载NPC实体 npcUuid={}, residencePos={}, workplace={}",
-                            assignment.npcUuid(), residencePos, assignment.workplacePos());
-                    return restoredFromResidence;
-                }
-            } catch (Exception e) {
-                Simukraft.LOGGER.error("[EmploymentCommandPacket] 按住宅位置恢复未加载区块NPC实体失败 npcUuid={}", assignment.npcUuid(), e);
-            } finally {
-                if (forcedResidenceChunk) {
-                    overworld.setChunkForced(residenceChunk.x, residenceChunk.z, false);
-                }
-            }
-            Simukraft.LOGGER.warn("[EmploymentCommandPacket] 住宅区块已加载但仍未找到NPC实体 npcUuid={}, residencePos={}",
-                    assignment.npcUuid(), residencePos);
-            return null;
-        }
-
-        ResourceLocation dimensionKey = ResourceLocation.tryParse(lastKnownLocation.dimensionId());
-        if (dimensionKey == null) {
-            Simukraft.LOGGER.warn("[EmploymentCommandPacket] NPC最后位置维度非法，无法恢复未加载实体 npcUuid={}, dimension={}",
-                    assignment.npcUuid(), lastKnownLocation.dimensionId());
-            return null;
-        }
-
-        ServerLevel sourceLevel = server.getLevel(net.minecraft.resources.ResourceKey.create(
-                net.minecraft.core.registries.Registries.DIMENSION, dimensionKey
-        ));
-        if (sourceLevel == null) {
-            Simukraft.LOGGER.warn("[EmploymentCommandPacket] 无法获取NPC源维度，无法恢复未加载实体 npcUuid={}, dimension={}",
-                    assignment.npcUuid(), lastKnownLocation.dimensionId());
-            return null;
-        }
-
-        ChunkPos chunkPos = new ChunkPos(lastKnownLocation.blockPos());
-        boolean forcedHere = false;
-        try {
-            if (!sourceLevel.hasChunk(chunkPos.x, chunkPos.z)) {
-                sourceLevel.setChunkForced(chunkPos.x, chunkPos.z, true);
-                forcedHere = true;
-            }
-            sourceLevel.getChunk(chunkPos.x, chunkPos.z);
-            CustomEntity restoredNpc = BuildBoxHiredData.findNPCByUuid(server, assignment.npcUuid());
-            if (restoredNpc == null) {
-                Simukraft.LOGGER.warn("[EmploymentCommandPacket] 强制加载源区块后仍未找到NPC实体 npcUuid={}, chunk={}",
-                        assignment.npcUuid(), chunkPos);
-                return null;
-            }
-            Simukraft.LOGGER.info("[EmploymentCommandPacket] 已从未加载区块恢复NPC实体 npcUuid={}, sourcePos={}, workplace={}",
-                    assignment.npcUuid(), lastKnownLocation.blockPos(), assignment.workplacePos());
-            return restoredNpc;
-        } catch (Exception e) {
-            Simukraft.LOGGER.error("[EmploymentCommandPacket] 恢复未加载区块NPC实体失败 npcUuid={}", assignment.npcUuid(), e);
-            return null;
-        } finally {
-            if (forcedHere) {
-                sourceLevel.setChunkForced(chunkPos.x, chunkPos.z, false);
-            }
-        }
+        return NPCEntityLocator.findNpc(server, assignment.npcUuid(), assignment.workplacePos(), true);
     }
 
     /**
