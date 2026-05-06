@@ -1640,16 +1640,19 @@
   "notify.title.restock": "店铺补货",
   "notify.content.restock": "NPC %s 已完成对 %s 的补货，共补货 %s。",
 
-  "tooltip.simukraft.manifest.empty": "§7空清单 - 潜行+右键点击建筑盒获取材料清单",
+  "tooltip.simukraft.manifest.empty": "§7空清单 - 潜行+右键点击建筑盒、商业或工业控制箱获取需求清单",
   "tooltip.simukraft.manifest.building": "§7建筑: §f%s",
+  "tooltip.simukraft.manifest.recipe": "§7配方: §f%s",
   "tooltip.simukraft.manifest.progress": "§7进度: §a%d§7/§a%d §7(§e%d%%§7)",
 
-  "gui.manifest.title": "建造材料清单",
-  "gui.manifest.title_with_building": "建造清单 - %s",
-  "gui.manifest.empty_title": "建造清单",
+  "gui.manifest.title": "清单",
+  "gui.manifest.title_with_building": "清单 - %s",
+  "gui.manifest.empty_title": "清单",
   "gui.manifest.progress": "进度: %d / %d",
-  "gui.manifest.no_materials": "§7暂无材料数据",
+  "gui.manifest.no_materials": "§7暂无需求数据",
+  "gui.manifest.materials_title": "通用原材料",
+  "gui.manifest.default_recipe": "默认配方",
   "gui.close": "关闭",
 
-  "message.simukraft.manifest.filled": "§a清单已填充！右键打开查看材料需求。"
+  "message.simukraft.manifest.filled": "§a清单已填充！右键打开查看需求。"
 }

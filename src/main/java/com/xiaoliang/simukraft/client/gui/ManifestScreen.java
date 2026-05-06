@@ -12,6 +12,7 @@ import net.minecraft.world.item.Items;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import javax.annotation.Nonnull;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -23,6 +24,7 @@ public class ManifestScreen extends Screen {
 
     private final ItemStack manifestStack;
     private List<ManifestItem.MaterialEntry> materials;
+    private List<PageSlice> pages;
     private int currentPage = 0;
     private int itemsPerPage = 6;
 
@@ -76,6 +78,7 @@ public class ManifestScreen extends Screen {
         super(Component.translatable("gui.manifest.title"));
         this.manifestStack = manifestStack;
         this.materials = ManifestItem.getMaterials(manifestStack);
+        this.pages = new ArrayList<>();
     }
 
     @Override
@@ -92,6 +95,8 @@ public class ManifestScreen extends Screen {
 
         // 根据内容高度计算每页显示行数
         itemsPerPage = Math.max(4, contentHeight / ROW_HEIGHT);
+        pages = buildPages();
+        currentPage = Math.min(currentPage, Math.max(0, pages.size() - 1));
 
         // 计算纸张区域位置（用于放置翻页按钮）
         int paperX = clipboardX + CLIP_SIDE_WIDTH;
@@ -130,9 +135,9 @@ public class ManifestScreen extends Screen {
      * 更新翻页按钮可见性
      */
     private void updatePageButtons() {
-        int maxPage = Math.max(0, (materials.size() - 1) / itemsPerPage);
+        int maxPage = Math.max(0, pages.size() - 1);
         this.prevPageButton.visible = currentPage > 0;
-        this.nextPageButton.visible = currentPage < maxPage && materials.size() > 0;
+        this.nextPageButton.visible = currentPage < maxPage && !pages.isEmpty();
     }
 
     @Override
@@ -217,38 +222,74 @@ public class ManifestScreen extends Screen {
     private void renderContent(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         // 标题（无阴影）
         String buildingName = ManifestItem.getBuildingName(manifestStack);
+        String recipeName = ManifestItem.getRecipeName(manifestStack);
         Component title = buildingName.isEmpty()
                 ? Component.translatable("gui.manifest.empty_title")
-                : Component.literal(buildingName);
+                : Component.literal(recipeName.isEmpty() ? buildingName : buildingName + " - " + recipeName);
         int titleWidth = this.font.width(title);
         int titleX = contentX + (contentWidth - titleWidth) / 2;
         guiGraphics.drawString(this.font, title, titleX, contentY - 20, COLOR_TITLE, false);
 
         // 材料列表
-        if (materials.isEmpty()) {
+        if (pages.isEmpty()) {
             Component emptyText = Component.translatable("gui.manifest.no_materials");
             int emptyWidth = this.font.width(emptyText);
             guiGraphics.drawString(this.font, emptyText,
                     contentX + (contentWidth - emptyWidth) / 2, contentY + 30, 0xFF999999, false);
         } else {
-            int startIndex = currentPage * itemsPerPage;
-            int endIndex = Math.min(startIndex + itemsPerPage, materials.size());
+            List<TableRow> pageRows = pages.get(currentPage).rows();
 
-            for (int i = startIndex; i < endIndex; i++) {
-                int rowIndex = i - startIndex;
-                int rowY = contentY + rowIndex * ROW_HEIGHT;
-                renderMaterialRow(guiGraphics, contentX, rowY, contentWidth,
-                        materials.get(i), mouseX, mouseY);
+            for (int i = 0; i < pageRows.size(); i++) {
+                int rowY = contentY + i * ROW_HEIGHT;
+                TableRow row = pageRows.get(i);
+                if (row.isHeader()) {
+                    renderProductHeader(guiGraphics, contentX, rowY, contentWidth, row.productItemId());
+                } else if (row.material() != null) {
+                    renderMaterialRow(guiGraphics, contentX, rowY, contentWidth,
+                            row.material(), mouseX, mouseY);
+                }
             }
 
             // 页码（无阴影）
-            int maxPage = Math.max(1, (materials.size() - 1) / itemsPerPage + 1);
+            int maxPage = Math.max(1, pages.size());
             Component pageText = Component.literal("第" + (currentPage + 1) + "页/共" + maxPage + "页");
             int pageWidth = this.font.width(pageText);
             guiGraphics.drawString(this.font, pageText,
                     contentX + (contentWidth - pageWidth) / 2,
                     contentY + itemsPerPage * ROW_HEIGHT + 4, COLOR_PAGE_TEXT, false);
         }
+    }
+
+    private void renderProductHeader(GuiGraphics guiGraphics, int x, int y, int width, String productItemId) {
+        int headerY = y + 3;
+        guiGraphics.fill(x, y + 2, x + width, y + ROW_HEIGHT - 2, 0x118B6914);
+        guiGraphics.renderOutline(x, y + 2, width, ROW_HEIGHT - 4, 0x668B6914);
+
+        if (productItemId.startsWith("#")) {
+            Component title = Component.translatable(productItemId.substring(1));
+            int titleWidth = this.font.width(title);
+            int titleX = x + (width - titleWidth) / 2;
+            guiGraphics.drawString(this.font, title, titleX, headerY + 5, COLOR_TITLE, false);
+            return;
+        }
+
+        if (productItemId.startsWith("$")) {
+            String recipeText = this.font.plainSubstrByWidth(productItemId.substring(1), width - 12);
+            int titleWidth = this.font.width(recipeText);
+            int titleX = x + (width - titleWidth) / 2;
+            guiGraphics.drawString(this.font, recipeText, titleX, headerY + 5, COLOR_TITLE, false);
+            return;
+        }
+
+        ItemStack productStack = createItemStack(productItemId);
+        guiGraphics.renderItem(productStack, x + 6, y + (ROW_HEIGHT - ITEM_ICON_SIZE) / 2);
+
+        Component productName = getItemDisplayName(productItemId);
+        int availableWidth = width - ITEM_ICON_SIZE - 16;
+        String productText = this.font.plainSubstrByWidth(productName.getString(), availableWidth);
+        int titleWidth = this.font.width(productText);
+        int titleX = x + (width - titleWidth) / 2;
+        guiGraphics.drawString(this.font, productText, titleX, headerY + 5, COLOR_TITLE, false);
     }
 
     /**
@@ -348,18 +389,16 @@ public class ManifestScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (button == 0) {
-            int startIndex = currentPage * itemsPerPage;
-            int endIndex = Math.min(startIndex + itemsPerPage, materials.size());
+        if (button == 0 && !pages.isEmpty()) {
+            List<TableRow> pageRows = pages.get(currentPage).rows();
 
-            for (int i = startIndex; i < endIndex; i++) {
-                int rowIndex = i - startIndex;
-                int rowY = contentY + rowIndex * ROW_HEIGHT;
+            for (int i = 0; i < pageRows.size(); i++) {
+                int rowY = contentY + i * ROW_HEIGHT;
+                TableRow row = pageRows.get(i);
 
-                // 检查是否点击了行区域
-                if (mouseX >= contentX && mouseX <= contentX + contentWidth &&
+                if (!row.isHeader() && row.material() != null && mouseX >= contentX && mouseX <= contentX + contentWidth &&
                         mouseY >= rowY && mouseY <= rowY + ROW_HEIGHT) {
-                    toggleChecked(i);
+                    toggleChecked(row.material().index());
                     return true;
                 }
             }
@@ -372,10 +411,62 @@ public class ManifestScreen extends Screen {
      * 切换勾选状态
      */
     private void toggleChecked(int index) {
-        ManifestItem.MaterialEntry entry = materials.get(index);
-        boolean newChecked = !entry.checked();
-        ManifestItem.setChecked(manifestStack, index, newChecked);
+        ManifestItem.setChecked(manifestStack, index, !isChecked(index));
         materials = ManifestItem.getMaterials(manifestStack);
+        pages = buildPages();
+    }
+
+    private List<PageSlice> buildPages() {
+        List<ManifestItem.ProductGroup> productGroups = ManifestItem.getProductGroups(manifestStack);
+        if (!productGroups.isEmpty()) {
+            return buildGroupedPages(productGroups);
+        }
+
+        List<TableRow> materialRows = new ArrayList<>();
+        for (ManifestItem.MaterialEntry material : materials) {
+            materialRows.add(TableRow.material(material));
+        }
+        return splitRows(materialRows);
+    }
+
+    private List<PageSlice> buildGroupedPages(List<ManifestItem.ProductGroup> productGroups) {
+        List<PageSlice> result = new ArrayList<>();
+        for (ManifestItem.ProductGroup group : productGroups) {
+            List<TableRow> groupRows = new ArrayList<>();
+            groupRows.add(TableRow.header(group.productItemId()));
+            for (ManifestItem.MaterialEntry material : group.materials()) {
+                groupRows.add(TableRow.material(material));
+            }
+            result.addAll(splitRows(groupRows));
+        }
+
+        if (!materials.isEmpty() && productGroups.stream().anyMatch(group -> !group.productItemId().startsWith("$"))) {
+            List<TableRow> globalRows = new ArrayList<>();
+            globalRows.add(TableRow.header("#gui.manifest.materials_title"));
+            for (ManifestItem.MaterialEntry material : materials) {
+                globalRows.add(TableRow.material(material));
+            }
+            result.addAll(splitRows(globalRows));
+        }
+        return result;
+    }
+
+    private List<PageSlice> splitRows(List<TableRow> sourceRows) {
+        List<PageSlice> result = new ArrayList<>();
+        for (int start = 0; start < sourceRows.size(); start += itemsPerPage) {
+            int end = Math.min(start + itemsPerPage, sourceRows.size());
+            result.add(new PageSlice(new ArrayList<>(sourceRows.subList(start, end))));
+        }
+        return result;
+    }
+
+    private boolean isChecked(int index) {
+        for (ManifestItem.MaterialEntry material : materials) {
+            if (material.index() == index) {
+                return material.checked();
+            }
+        }
+        return false;
     }
 
     private void prevPage() {
@@ -386,10 +477,43 @@ public class ManifestScreen extends Screen {
     }
 
     private void nextPage() {
-        int maxPage = Math.max(0, (materials.size() - 1) / itemsPerPage);
+        int maxPage = Math.max(0, pages.size() - 1);
         if (currentPage < maxPage) {
             currentPage++;
             updatePageButtons();
+        }
+    }
+
+    private record PageSlice(List<TableRow> rows) {
+    }
+
+    private static class TableRow {
+        private final String productItemId;
+        private final ManifestItem.MaterialEntry material;
+
+        private TableRow(String productItemId, ManifestItem.MaterialEntry material) {
+            this.productItemId = productItemId;
+            this.material = material;
+        }
+
+        static TableRow header(String productItemId) {
+            return new TableRow(productItemId, null);
+        }
+
+        static TableRow material(ManifestItem.MaterialEntry material) {
+            return new TableRow(null, material);
+        }
+
+        boolean isHeader() {
+            return productItemId != null;
+        }
+
+        String productItemId() {
+            return productItemId;
+        }
+
+        ManifestItem.MaterialEntry material() {
+            return material;
         }
     }
 
