@@ -193,7 +193,8 @@ public class FarmerWorkService extends AbstractWorkService {
         if (npc == null || npcUuid == null || level == null) return;
         if (npc.isTeleportingForWork()) return;
         
-        if (npc.getWorkSubState() == com.xiaoliang.simukraft.entity.WorkSubState.LUNCH_BREAK) {
+        if (npc.getWorkSubState() == com.xiaoliang.simukraft.entity.WorkSubState.LUNCH_BREAK
+                || npc.getWorkSubState() == com.xiaoliang.simukraft.entity.WorkSubState.BUYING_FOOD) {
             return;
         }
 

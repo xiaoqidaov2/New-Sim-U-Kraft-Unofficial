@@ -541,8 +541,9 @@ public class CommercialWorkHandler {
             return;
         }
 
-        // simukraft: 午休期间不传送NPC到工作位置
-        if (npc.getWorkSubState() == com.xiaoliang.simukraft.entity.WorkSubState.LUNCH_BREAK) {
+        // simukraft: 午休和自行吃饭期间不传送NPC到工作位置
+        if (npc.getWorkSubState() == com.xiaoliang.simukraft.entity.WorkSubState.LUNCH_BREAK
+                || npc.getWorkSubState() == com.xiaoliang.simukraft.entity.WorkSubState.BUYING_FOOD) {
             return;
         }
 

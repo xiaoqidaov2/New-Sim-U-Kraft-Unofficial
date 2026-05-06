@@ -16,6 +16,11 @@ import java.nio.file.StandardCopyOption;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraftforge.registries.ForgeRegistries;
+
 /**
  * 商业建筑配置管理器
  * 负责从JSON和SK文件加载商业建筑配置
@@ -291,6 +296,55 @@ public class CommercialBuildingManager {
         // 通过查找是否有对应的商业建筑配置来判断
         List<CommercialBuildingConfig> configs = getConfigsByJobType(jobType);
         return !configs.isEmpty();
+    }
+
+    /**
+     * 判断某个商业职业是否属于“售卖可食用商品”的店员。
+     * 满足该条件的店员在受雇期间饥饿值恒定为 20。
+     */
+    public static boolean isFoodSellingJob(String jobType) {
+        if (jobType == null || jobType.isBlank()) {
+            return false;
+        }
+        if (!initialized) {
+            init(null);
+        }
+
+        for (CommercialBuildingConfig config : getConfigsByJobType(jobType)) {
+            if (config == null) {
+                continue;
+            }
+            CommercialBuildingConfig.ShopMode mode = config.getShopMode();
+            if (mode != CommercialBuildingConfig.ShopMode.NPC_SELL
+                    && mode != CommercialBuildingConfig.ShopMode.MIXED) {
+                continue;
+            }
+            if (hasEdibleSellTrade(config)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasEdibleSellTrade(CommercialBuildingConfig config) {
+        if (config == null || config.getTrades() == null) {
+            return false;
+        }
+        for (CommercialBuildingConfig.TradeItem trade : config.getTrades()) {
+            if (trade == null || trade.getSellPrice() <= 0 || trade.getItemId() == null || trade.getItemId().isBlank()) {
+                continue;
+            }
+            ResourceLocation itemId = ResourceLocation.tryParse(trade.getItemId());
+            Item item = itemId == null ? null : ForgeRegistries.ITEMS.getValue(itemId);
+            if (item == null) {
+                continue;
+            }
+            ItemStack stack = item.getDefaultInstance();
+            if (stack.isEdible()) {
+                return true;
+            }
+        }
+        return false;
     }
     
     /**

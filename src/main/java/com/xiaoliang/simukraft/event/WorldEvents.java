@@ -73,6 +73,7 @@ public class WorldEvents {
 
         // simukraft: 处理NPC午休逻辑
         com.xiaoliang.simukraft.utils.LunchBreakManager.handleLunchBreak(serverLevel);
+        com.xiaoliang.simukraft.utils.SelfFeedingManager.handleSelfFeeding(serverLevel);
 
         // 处理延迟的收钱音效和房租收集
         processPendingMoneySounds(serverLevel);

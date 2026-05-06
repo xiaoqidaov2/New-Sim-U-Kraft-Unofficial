@@ -241,7 +241,24 @@ public class NPCInteractionHandler {
 
     @OnlyIn(Dist.CLIENT)
     private static void openNPCScreen(Player player, CustomEntity npc) {
-        // 打开普通NPC属性界面
+        WorkUiContext workUiContext = resolveWorkUiContext(npc);
+        if (workUiContext != null) {
+            String buildingFileName = workUiContext.buildingFileName();
+            if (workUiContext.workBlockType() == WorkBlockType.COMMERCIAL_CONTROL_BOX
+                    && buildingFileName != null
+                    && !buildingFileName.isBlank()) {
+                openCommercialTradeSelectScreen(workUiContext.workplacePos(), buildingFileName);
+                return;
+            }
+            if (workUiContext.workBlockType() == WorkBlockType.INDUSTRIAL_CONTROL_BOX
+                    && buildingFileName != null
+                    && !buildingFileName.isBlank()) {
+                openIndustrialControlBoxScreen(workUiContext.workplacePos(), buildingFileName);
+                return;
+            }
+        }
+
+        // 没有受雇工作上下文时，才回退到普通NPC属性界面
         openScreenWithReflection(false, npc);
     }
 

@@ -4,6 +4,7 @@ import com.xiaoliang.simukraft.building.ControlBoxDataManager;
 import com.xiaoliang.simukraft.building.IndustrialBuildingConfig;
 import com.xiaoliang.simukraft.building.IndustrialBuildingManager;
 import com.xiaoliang.simukraft.entity.CustomEntity;
+import com.xiaoliang.simukraft.entity.WorkSubState;
 import com.xiaoliang.simukraft.utils.CityMessageUtils;
 import com.xiaoliang.simukraft.utils.ContainerUtils;
 import com.xiaoliang.simukraft.utils.FileUtils;
@@ -119,6 +120,10 @@ public class IndustrialWorkHandler {
                 // 计算当前时间（currentDay已在方法开头定义）
                 long timeOfDay = gameTime % 24000;
 
+                if (npc.getWorkSubState() == WorkSubState.BUYING_FOOD) {
+                    continue;
+                }
+
                 // simukraft: 检查是否应该午休（根据配置文件）
                 if (LunchBreakManager.shouldHaveLunchBreak(npc) && LunchBreakManager.isLunchBreakTime(gameTime)) {
                     // 午休时间暂停工作，让NPC自由活动
@@ -178,7 +183,7 @@ public class IndustrialWorkHandler {
                         }
                     }
                 }
-                
+
                 // 检查是否接近工作结束时间（在结束时间前100tick内）
                 int workEndTime = config.getWorkEndTime();
                 if (Math.abs(timeOfDay - workEndTime) < 100) {

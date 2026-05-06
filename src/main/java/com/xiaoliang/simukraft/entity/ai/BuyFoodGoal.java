@@ -3,20 +3,21 @@ package com.xiaoliang.simukraft.entity.ai;
 import com.xiaoliang.simukraft.Simukraft;
 import com.xiaoliang.simukraft.config.ServerConfig;
 import com.xiaoliang.simukraft.entity.CustomEntity;
-import com.xiaoliang.simukraft.entity.WorkStatus;
 import com.xiaoliang.simukraft.entity.WorkSubState;
 import com.xiaoliang.simukraft.utils.NPCFoodMarket;
+import com.xiaoliang.simukraft.utils.SelfFeedingManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.ai.goal.Goal;
+import net.minecraft.world.item.ItemStack;
 
 import java.util.EnumSet;
 
 @SuppressWarnings("null")
 public class BuyFoodGoal extends Goal {
-    private static final int START_THRESHOLD = 12;
-    private static final int STOP_THRESHOLD = 20;
-    private static final String LABEL_EATING = "gui.npc.status.eating";
+    private static final int START_THRESHOLD = SelfFeedingManager.START_HUNGER_THRESHOLD;
+    private static final int STOP_THRESHOLD = SelfFeedingManager.FULL_HUNGER;
 
     private final CustomEntity npc;
     private int nextStartTick = 0;
@@ -33,15 +34,18 @@ public class BuyFoodGoal extends Goal {
     public boolean canUse() {
         if (!npc.canStartAutonomousGoal()) return false;
         if (npc.tickCount < nextStartTick) return false;
-        // simukraft: 工作中不能买食物，但午休时可以
-        if (npc.getWorkStatus() == WorkStatus.WORKING && npc.getWorkSubState() != WorkSubState.LUNCH_BREAK) return false;
         if (npc.getWorkSubState() == WorkSubState.RESTING) return false;
         if (npc.isSleeping()) return false; // simukraft: 睡觉时不能去买食物
         if (npc.getHunger() > START_THRESHOLD) return false;
         if (!(npc.level() instanceof ServerLevel level)) return false;
 
+        if (npc.getWorkSubState() != WorkSubState.BUYING_FOOD) {
+            SelfFeedingManager.startSelfFeeding(npc);
+        }
+
         plan = NPCFoodMarket.findPurchasePlan(level, npc);
         if (plan == null) {
+            SelfFeedingManager.onFoodSearchFailed(level, npc);
             nextStartTick = npc.tickCount + 200;
             return false;
         }
@@ -80,9 +84,12 @@ public class BuyFoodGoal extends Goal {
         if (npc.level().isClientSide) return false;
         if (targetPos == null || plan == null) return false;
         if (npc.getHunger() >= STOP_THRESHOLD) return false;
-        // simukraft: 工作中停止购买，但午休时可以继续
-        if (npc.getWorkStatus() == WorkStatus.WORKING && npc.getWorkSubState() != WorkSubState.LUNCH_BREAK) return false;
+        if (npc.getWorkSubState() != WorkSubState.BUYING_FOOD) return false;
         if (npc.isSleeping()) return false; // simukraft: 睡觉时停止购买
+
+        if (isAtTarget()) {
+            return true;
+        }
 
         // simukraft: 检查新寻路系统是否完成
         com.xiaoliang.simukraft.entity.ai.path.NPCPathNavigator navigator = npc.getNPCPathNavigator();
@@ -103,47 +110,34 @@ public class BuyFoodGoal extends Goal {
             return;
         }
 
-        if (npc.blockPosition().distSqr(targetPos) <= 4.0) {
+        if (npc.getWorkSubState() != WorkSubState.BUYING_FOOD) {
+            stop();
+            return;
+        }
+
+        if (isAtTarget()) {
             npc.setStatusLabel(NPCFoodMarket.getBuyingStatusLabel(plan));
-            boolean ok = NPCFoodMarket.tryPurchaseAndEat(level, npc, plan);
-            
-            if (ok) {
-                npc.setStatusLabelForTicks(LABEL_EATING, 60);
-                npc.setWorkNeedDetail("");
-                
-                // 如果还没吃饱，继续购买
-                if (npc.getHunger() < STOP_THRESHOLD) {
-                    // 重新查找购买计划（可能库存或资金有变化）
-                    plan = NPCFoodMarket.findPurchasePlan(level, npc);
-                    if (plan != null) {
-                        targetPos = plan.shopPos();
-                        npc.setStatusLabel(NPCFoodMarket.getTravelStatusLabel(plan));
-                        npc.setWorkNeedDetail(NPCFoodMarket.getFoodDetailKey(plan));
-
-                        if (ServerConfig.isDebugLogEnabled()) {
-                            Simukraft.LOGGER.info("[BuyFoodGoal] NPC {} 继续前往买食物，当前位置: {}，目标商店: {}，商品: {}",
-                                    npc.getFullName(), npc.blockPosition(), targetPos, plan.itemId());
-                        }
-
-                        if (npc.moveToWithNewPathfinder(targetPos, 1.0D)) {
-                            return; // 继续购买，不停止
-                        }
-
-                        Simukraft.LOGGER.warn("[BuyFoodGoal] NPC {} 继续买食物时寻路失败，当前位置: {}，目标商店: {}，改为直接传送",
-                                npc.getFullName(), npc.blockPosition(), targetPos);
-
-                        npc.teleportTo(targetPos.getX() + 0.5, targetPos.getY() + 1.0, targetPos.getZ() + 0.5);
-                        npc.stopNewPathfinder();
-                        return; // 继续购买，不停止
-                    }
-                }
-                
-                nextStartTick = npc.tickCount + 600;
-            } else {
-                nextStartTick = npc.tickCount + 200;
-            }
+            // 到店即视为已经买到并吃完，避免库存校验或中间态把NPC卡在饿疯了状态。
+            NPCFoodMarket.tryPurchaseFood(level, npc, plan);
+            NPCFoodMarket.finishPurchasedMeal(level, npc, plan);
+            nextStartTick = npc.tickCount + 600;
+            SelfFeedingManager.finishSelfFeeding(npc, level);
             stop();
         }
+    }
+
+    private boolean isAtTarget() {
+        if (targetPos == null) {
+            return false;
+        }
+        double distance = npc.blockPosition().distSqr(targetPos);
+        if (distance <= 16.0D) {
+            return true;
+        }
+
+        // 自定义寻路有时会停在控制盒附近而不是精确中心点，这里放宽到店判定。
+        com.xiaoliang.simukraft.entity.ai.path.NPCPathNavigator navigator = npc.getNPCPathNavigator();
+        return distance <= 36.0D && (navigator == null || !navigator.isPathfinding());
     }
 
     @Override
@@ -153,6 +147,7 @@ public class BuyFoodGoal extends Goal {
         if (NPCFoodMarket.isFoodStatusLabel(npc.getStatusLabel())) {
             npc.setStatusLabel(null);
         }
+        npc.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
         plan = null;
         targetPos = null;
     }

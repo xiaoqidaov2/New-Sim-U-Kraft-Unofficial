@@ -1,6 +1,7 @@
 package com.xiaoliang.simukraft.network;
 
 import com.xiaoliang.simukraft.entity.CustomEntity;
+import com.xiaoliang.simukraft.utils.SelfFeedingManager;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -58,6 +59,7 @@ public class FeedNPCPacket {
 
             int nutrition = food.getNutrition();
             npc.addHunger(nutrition);
+            SelfFeedingManager.onExternalFeed(npc, level);
 
             if (!player.getAbilities().instabuild) {
                 stack.shrink(1);

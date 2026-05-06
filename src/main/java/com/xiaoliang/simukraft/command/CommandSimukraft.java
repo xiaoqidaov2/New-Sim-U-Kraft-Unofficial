@@ -537,6 +537,8 @@ public class CommandSimukraft {
         dispatcher.register(
             Commands.literal("simu")
                 .requires(source -> source.hasPermission(2))
+                .then(Commands.literal("je")
+                    .executes(context -> executeZeroHungerNearby(context.getSource())))
                 .then(Commands.literal("jh")
                     .executes(context -> executeMarriageDebug(context.getSource())))
                 .then(Commands.literal("tt")
@@ -637,6 +639,28 @@ public class CommandSimukraft {
                 "§a已让NPC立即怀孕: " + femaleNpc.getFullName()
         ), true);
         return 1;
+    }
+
+    private static int executeZeroHungerNearby(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            source.sendFailure(Component.literal("§c只能由玩家执行该命令"));
+            return 0;
+        }
+
+        var entities = player.level().getEntitiesOfClass(CustomEntity.class, player.getBoundingBox().inflate(3.0D));
+        if (entities.isEmpty()) {
+            source.sendFailure(Component.literal("§c附近3格内没有找到NPC"));
+            return 0;
+        }
+
+        int count = 0;
+        for (CustomEntity npc : entities) {
+            npc.setHunger(0);
+            source.sendSuccess(() -> Component.literal("§e已将NPC饥饿值清零: " + npc.getFullName()), false);
+            count++;
+        }
+        return count;
     }
 
     private static int executeFamilyLaborDebug(CommandSourceStack source) {

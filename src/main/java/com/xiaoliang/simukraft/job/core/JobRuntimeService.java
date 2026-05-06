@@ -204,7 +204,9 @@ public final class JobRuntimeService {
             return;
         }
         WorkSubState subState = npc.getWorkSubState();
-        if (subState == WorkSubState.RESTING || subState == WorkSubState.LUNCH_BREAK) {
+        if (subState == WorkSubState.RESTING
+                || subState == WorkSubState.LUNCH_BREAK
+                || subState == WorkSubState.BUYING_FOOD) {
             return;
         }
         // 让 NPCRestHandler 完整接管"回家/上班"传送链路。drift 兜底如果在去工作过程中插一脚，

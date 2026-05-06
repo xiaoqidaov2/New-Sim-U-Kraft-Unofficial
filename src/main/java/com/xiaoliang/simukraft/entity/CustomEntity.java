@@ -769,8 +769,8 @@ public class CustomEntity extends PathfinderMob {
             // 计算是否有活跃任务（用于同步到客户端）
             boolean hasActiveWork = false;
 
-            // simukraft: 午休状态下没有活跃任务（仿造休息中的写法）
-            if (getWorkSubState() != WorkSubState.LUNCH_BREAK) {
+            // simukraft: 午休和自行吃饭状态下没有活跃任务，避免继续显示原工作动作
+            if (getWorkSubState() != WorkSubState.LUNCH_BREAK && getWorkSubState() != WorkSubState.BUYING_FOOD) {
                 // 建筑师：检查是否有未完成的建造任务
                 if ("builder".equals(currentJob) && constructionTask != null
                         && !constructionTask.isCompleted() && constructionTask.hasNextBlock()) {
@@ -837,7 +837,11 @@ public class CustomEntity extends PathfinderMob {
                 updateHomelessStatus();
             }
 
-            if (aliveAndActive && this.tickCount % 1200 == 0) {
+            if (aliveAndActive && shouldKeepFullHungerWhileEmployed()) {
+                if (getHunger() < 20) {
+                    setHunger(20);
+                }
+            } else if (aliveAndActive && this.tickCount % 1200 == 0) {
                 if (getHunger() > 0) {
                     setHunger(getHunger() - 1);
                 }
@@ -873,9 +877,10 @@ public class CustomEntity extends PathfinderMob {
                 if (current == null) current = "";
                 boolean canOverride = canUseDynamicStatusLabel(current);
 
-                // simukraft: 休息和午休状态下不更新动态标签
+                // simukraft: 休息、午休和自行吃饭状态下不更新动态标签
                 if (canOverride && getWorkSubState() != WorkSubState.RESTING
-                        && getWorkSubState() != WorkSubState.LUNCH_BREAK) {
+                        && getWorkSubState() != WorkSubState.LUNCH_BREAK
+                        && getWorkSubState() != WorkSubState.BUYING_FOOD) {
                     String desired = resolveDynamicStatusLabel(hasActiveWork);
                     if (!desired.equals(current)) {
                         setStatusLabel(desired.isEmpty() ? null : desired);
@@ -1991,6 +1996,13 @@ public class CustomEntity extends PathfinderMob {
             return Component.translatable("gui.npc.status.lunch_break");
         }
 
+        if (currentSubState == WorkSubState.BUYING_FOOD) {
+            if (syncedStatusLabel != null && !syncedStatusLabel.isEmpty()) {
+                return Component.translatable(syncedStatusLabel);
+            }
+            return Component.translatable("gui.npc.status.buying_food");
+        }
+
         // 明确设置的工作标签应优先于通用"工作中"，这样奶酪工厂等分阶段职业能显示细分动作。
         if (syncedStatusLabel != null && !syncedStatusLabel.isEmpty()
                 && !"gui.npc.status.hungry".equals(syncedStatusLabel)) {
@@ -2095,7 +2107,8 @@ public class CustomEntity extends PathfinderMob {
                 || "gui.npc.status.visiting_farm".equals(current)
                 || "gui.npc.status.visiting_shop".equals(current)
                 || "gui.npc.status.visiting_factory".equals(current)
-                || "gui.npc.status.lunch_break".equals(current);  // simukraft: 午休状态不应被动态标签覆盖
+                || "gui.npc.status.lunch_break".equals(current)
+                || "gui.npc.status.too_hungry_on_strike".equals(current);  // 特定流程标签不应被动态标签覆盖
     }
 
     private String resolveDynamicStatusLabel(boolean hasActiveWork) {
@@ -2118,6 +2131,14 @@ public class CustomEntity extends PathfinderMob {
         }
 
         return "";
+    }
+
+    private boolean shouldKeepFullHungerWhileEmployed() {
+        String currentJob = getJob();
+        if (currentJob == null || currentJob.isBlank() || "unemployed".equals(currentJob)) {
+            return false;
+        }
+        return com.xiaoliang.simukraft.building.CommercialBuildingManager.isFoodSellingJob(currentJob);
     }
 
     private String resolveNearbyVisitStatus() {

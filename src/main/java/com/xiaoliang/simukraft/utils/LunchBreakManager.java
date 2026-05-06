@@ -109,7 +109,8 @@ public class LunchBreakManager {
     public static boolean shouldStartLunchBreak(CustomEntity npc, long dayTime) {
         if (npc == null) return false;
         if (!isLunchBreakTime(dayTime)) return false;
-        if (npc.getWorkSubState() == WorkSubState.LUNCH_BREAK) {
+        if (npc.getWorkSubState() == WorkSubState.LUNCH_BREAK
+                || npc.getWorkSubState() == WorkSubState.BUYING_FOOD) {
             return false;
         }
         if (npc.getWorkStatus() != WorkStatus.WORKING) return false;

@@ -88,8 +88,9 @@ public final class NPCWorkResumeCoordinator {
         if (NPCRestHandler.isNpcInRestWorkflow(npc.getUUID())) {
             return false;
         }
-        // simukraft: 午休期间不恢复工作状态，也不传送
-        if (npc.getWorkSubState() == WorkSubState.LUNCH_BREAK) {
+        // simukraft: 午休和自行吃饭期间不恢复工作状态，也不传送
+        if (npc.getWorkSubState() == WorkSubState.LUNCH_BREAK
+                || npc.getWorkSubState() == WorkSubState.BUYING_FOOD) {
             return false;
         }
 

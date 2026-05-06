@@ -19,19 +19,19 @@ import net.minecraft.world.item.ItemStack;
 
 import javax.annotation.Nullable;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 @SuppressWarnings("null")
 public final class NPCFoodMarket {
     private static final int MAX_DISTANCE = 256;
 
     // NPC交易税记录：城市ID -> 税额
-    private static final Map<UUID, Double> npcTradeTaxByCity = new HashMap<>();
+    private static final Map<UUID, Double> npcTradeTaxByCity = new ConcurrentHashMap<>();
     private static long lastTaxRecordDay = -1;
 
     private NPCFoodMarket() {}
@@ -144,30 +144,31 @@ public final class NPCFoodMarket {
                 || "gui.npc.status.buying_food".equals(label);
     }
 
-    public static boolean tryPurchaseAndEat(ServerLevel level, CustomEntity npc, PurchasePlan plan) {
+    @Nullable
+    public static ItemStack tryPurchaseFood(ServerLevel level, CustomEntity npc, PurchasePlan plan) {
         MinecraftServer server = level.getServer();
 
         try {
             CommercialBuildingConfig config = CommercialBuildingManager.getConfig(plan.buildingFileName());
-            if (config == null) return false;
+            if (config == null) return ItemStack.EMPTY;
 
             CommercialBuildingConfig.ShopMode mode = config.getShopMode();
             if (mode != CommercialBuildingConfig.ShopMode.NPC_SELL && mode != CommercialBuildingConfig.ShopMode.MIXED) {
-                return false;
+                return ItemStack.EMPTY;
             }
 
             long dayTime = level.getDayTime();
-            if (!config.isWorkTime(dayTime)) return false;
+            if (!config.isWorkTime(dayTime)) return ItemStack.EMPTY;
 
             UUID cityId = npc.getCityId();
-            if (cityId == null) return false;
+            if (cityId == null) return ItemStack.EMPTY;
 
             CityData cityData = CityData.get(server.overworld());
             CityData.CityInfo city = cityData.getCity(cityId);
-            if (city == null) return false;
+            if (city == null) return ItemStack.EMPTY;
 
             double funds = city.getFunds();
-            if (funds < plan.pricePerItem()) return false;
+            if (funds < plan.pricePerItem()) return ItemStack.EMPTY;
 
             // 检查库存（支持实时库存系统）
             CommercialBuildingConfig tradeConfig = CommercialBuildingManager.getConfig(plan.buildingFileName());
@@ -184,24 +185,24 @@ public final class NPCFoodMarket {
                 availableStock = stock != null ? stock.getCurrentStock() : 0;
             }
 
-            if (availableStock < 1) return false;
+            if (availableStock < 1) return ItemStack.EMPTY;
 
             // 扣除库存（需要原料的商品从箱子扣除，不需要的从库存扣除）
             if (trade != null && trade.requiresMaterial()) {
                 for (CommercialBuildingConfig.MaterialRequirement requirement : trade.getRequiredMaterials()) {
                     ItemStack materialTemplate = parseItemStack(requirement.getItemId());
                     if (materialTemplate.isEmpty()) {
-                        return false;
+                        return ItemStack.EMPTY;
                     }
                     int consumed = consumeMaterialsFromNearbyContainers(level, plan.shopPos(), materialTemplate, requirement.getCount());
                     if (consumed < requirement.getCount()) {
-                        return false;
+                        return ItemStack.EMPTY;
                     }
                 }
             } else {
                 // 从传统库存扣除
                 CommercialHiredData.StockInfo stock = CommercialHiredData.getStock(plan.shopPos(), plan.itemId());
-                if (stock == null || !stock.removeStock(1)) return false;
+                if (stock == null || !stock.removeStock(1)) return ItemStack.EMPTY;
             }
 
             // NPC购买不扣除城市资金，但记录企业税（营业额的40%）
@@ -212,41 +213,46 @@ public final class NPCFoodMarket {
 
             // 生成物品实体（像玩家购买一样）
             var itemRegistry = level.registryAccess().registry(Registries.ITEM).orElse(null);
-            if (itemRegistry == null) return false;
+            if (itemRegistry == null) return ItemStack.EMPTY;
 
             Item item = itemRegistry.getOptional(ResourceLocation.tryParse(plan.itemId())).orElse(null);
-            if (item == null) return false;
+            if (item == null) return ItemStack.EMPTY;
 
             ItemStack foodStack = new ItemStack(item, 1);
-
-            // 直接让NPC食用，避免未捡起时重复购买导致掉落一地
-            npc.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, foodStack);
-
-            // 根据食物实际营养值恢复饥饿值
             FoodProperties foodProperties = foodStack.getFoodProperties(npc);
             int nutrition = foodProperties != null ? foodProperties.getNutrition() : 0;
             if (nutrition <= 0) {
-                return false;
+                return ItemStack.EMPTY;
             }
-            npc.addHunger(nutrition);
 
-            NPCVoiceManager.playFoodVoice(level, npc, plan.buildingFileName());
-
-            level.playSound(
-                    null,
-                    Objects.requireNonNull(npc.blockPosition()),
-                    Objects.requireNonNull(SoundEvents.GENERIC_EAT),
-                    SoundSource.NEUTRAL,
-                    0.8f,
-                    1.0f
-            );
-            npc.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
-            npc.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, ItemStack.EMPTY);
-            return true;
+            npc.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, foodStack.copy());
+            return foodStack;
         } catch (Exception e) {
             Simukraft.LOGGER.error("[NPCFoodMarket] NPC购买食物失败: npc={}, item={}, shop={}", npc.getFullName(), plan.itemId(), plan.shopPos(), e);
-            return false;
+            return ItemStack.EMPTY;
         }
+    }
+
+    public static void finishPurchasedMeal(ServerLevel level, CustomEntity npc, @Nullable PurchasePlan plan) {
+        if (level == null || npc == null) {
+            return;
+        }
+
+        npc.setHunger(20);
+        if (plan != null) {
+            NPCVoiceManager.playFoodVoice(level, npc, plan.buildingFileName());
+        }
+
+        level.playSound(
+                null,
+                Objects.requireNonNull(npc.blockPosition()),
+                Objects.requireNonNull(SoundEvents.GENERIC_EAT),
+                SoundSource.NEUTRAL,
+                0.8f,
+                1.0f
+        );
+        npc.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+        npc.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, ItemStack.EMPTY);
     }
 
     private static double round2(double v) {
@@ -403,7 +409,7 @@ public final class NPCFoodMarket {
      * 获取所有城市的NPC交易税（用于每日结算）
      */
     public static Map<UUID, Double> getAllNPCTradeTaxes() {
-        Map<UUID, Double> result = new HashMap<>(npcTradeTaxByCity);
+        Map<UUID, Double> result = new ConcurrentHashMap<>(npcTradeTaxByCity);
         npcTradeTaxByCity.clear();
         return result;
     }

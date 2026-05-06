@@ -188,7 +188,7 @@ public final class CheeseFactoryWorkController {
         npc.setStatusLabel("gui.npc.status.cheese_factory_go_pour");
         updateHeldItemForStage(npc, Stage.MOVE_TO_POUR);
 
-        if (!hasNearbyItem(level, buildingPos, Items.MILK_BUCKET)) {
+        if (!canStartBatchPour(level, buildingPos)) {
             setStage(state, hasMilkInPool(level, buildingPos) ? Stage.MOVE_TO_STIR : Stage.WAITING);
             return;
         }
@@ -220,7 +220,6 @@ public final class CheeseFactoryWorkController {
                 setStage(state, hasMilkInPool(level, buildingPos) ? Stage.MOVE_TO_STIR : Stage.WAITING);
                 return;
             }
-            insertNearbyItem(level, buildingPos, Items.BUCKET, MAX_POUR_BUCKETS);
             state.pendingMilkBuckets = MAX_POUR_BUCKETS;
             state.pouredBuckets = 0;
         }
@@ -232,7 +231,7 @@ public final class CheeseFactoryWorkController {
         BlockPos poolPos = findFirstEmptyPoolPos(level, buildingPos);
         BlockPos visualPos = findFirstEmptyPourVisualPos(level, buildingPos);
         if (poolPos == null || visualPos == null) {
-            refundPendingMilk(level, buildingPos, state);
+            clearPendingMilkBatch(state);
             setStage(state, hasMilkInPool(level, buildingPos) ? Stage.MOVE_TO_STIR : Stage.WAITING);
             return;
         }
@@ -381,10 +380,7 @@ public final class CheeseFactoryWorkController {
         if (hasMilkInPool(level, buildingPos) || hasMilkInPourVisual(level, buildingPos)) {
             return Stage.MOVE_TO_STIR;
         }
-        if (hasNearbyItem(level, buildingPos, Items.MILK_BUCKET)
-                && hasEmptyPoolSlot(level, buildingPos)
-                && hasEmptyPourVisualSlot(level, buildingPos)
-                && state.pouredBuckets < MAX_POUR_BUCKETS) {
+        if (canStartBatchPour(level, buildingPos) && state.pouredBuckets < MAX_POUR_BUCKETS) {
             return Stage.MOVE_TO_POUR;
         }
         return Stage.WAITING;
@@ -702,11 +698,10 @@ public final class CheeseFactoryWorkController {
                 && countEmptyPourVisualSlots(level, buildingPos) >= MAX_POUR_BUCKETS;
     }
 
-    private static void refundPendingMilk(ServerLevel level, BlockPos buildingPos, CheeseFactoryState state) {
-        if (level == null || buildingPos == null || state == null || state.pendingMilkBuckets <= 0) {
+    private static void clearPendingMilkBatch(CheeseFactoryState state) {
+        if (state == null) {
             return;
         }
-        insertNearbyItem(level, buildingPos, Items.MILK_BUCKET, state.pendingMilkBuckets);
         state.pendingMilkBuckets = 0;
     }
 
@@ -822,10 +817,6 @@ public final class CheeseFactoryWorkController {
         }
         containers.sort(Comparator.comparingDouble(pos -> pos.distSqr(buildingPos)));
         return containers;
-    }
-
-    private static boolean hasNearbyItem(ServerLevel level, BlockPos buildingPos, Item item) {
-        return countNearbyItem(level, buildingPos, item) > 0;
     }
 
     private static int countNearbyItem(ServerLevel level, BlockPos buildingPos, Item item) {
