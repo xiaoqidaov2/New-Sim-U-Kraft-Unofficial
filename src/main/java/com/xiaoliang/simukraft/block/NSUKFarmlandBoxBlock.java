@@ -21,12 +21,12 @@ import net.minecraft.world.phys.BlockHitResult;
 import java.util.Objects;
 import javax.annotation.Nonnull;
 
+@SuppressWarnings("null")
 public class NSUKFarmlandBoxBlock extends Block {
     public NSUKFarmlandBoxBlock() {
         super(createProperties());
     }
 
-    @SuppressWarnings("null")
     private static BlockBehaviour.Properties createProperties() {
         return Objects.requireNonNull(BlockBehaviour.Properties.of()
                 .mapColor(MapColor.WOOD)

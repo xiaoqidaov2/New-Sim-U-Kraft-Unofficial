@@ -845,7 +845,9 @@ public class ConstructionTask {
 
     private static boolean isControlBoxBlock(@Nonnull BlockState state) {
         var blockId = net.minecraftforge.registries.ForgeRegistries.BLOCKS.getKey(state.getBlock());
-        return blockId != null && blockId.getPath().contains("control_box");
+        if (blockId == null) return false;
+        String path = blockId.getPath();
+        return path.contains("control_box") || path.contains("farmland_box");
     }
 
     public void markCompleted() {

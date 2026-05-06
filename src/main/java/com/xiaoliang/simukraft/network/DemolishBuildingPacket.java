@@ -47,6 +47,18 @@ public class DemolishBuildingPacket {
             if (player == null) return;
 
             ServerLevel level = player.serverLevel();
+            var currentState = level.getBlockState(controlBoxPos);
+            if (currentState.getBlock() instanceof com.xiaoliang.simukraft.block.NSUKFarmlandBoxBlock) {
+                if (!hasDemolishPermission(player, level, controlBoxPos)) {
+                    player.sendSystemMessage(Component.translatable("message.demolish.no_permission"));
+                    ctx.get().setPacketHandled(true);
+                    return;
+                }
+                boolean success = com.xiaoliang.simukraft.utils.FarmlandManager.demolishFarmland(level, controlBoxPos);
+                player.sendSystemMessage(Component.translatable(success ? "message.demolish.success" : "message.demolish.failed", "农田"));
+                ctx.get().setPacketHandled(true);
+                return;
+            }
 
             // 获取建筑数据
             PlacedBuildingManager.PlacedBuildingData building =
@@ -124,7 +136,7 @@ public class DemolishBuildingPacket {
 
             // 根据类别确定目录
             String dirName;
-            switch (category) {
+            switch (category.toLowerCase()) {
                 case "residential":
                     dirName = "residence";
                     break;
@@ -132,7 +144,12 @@ public class DemolishBuildingPacket {
                     dirName = "commercial";
                     break;
                 case "industrial":
+                case "industry":
                     dirName = "industrial";
+                    break;
+                case "farming":
+                case "farmland":
+                    dirName = "fruit";
                     break;
                 case "other":
                     dirName = "other";

@@ -10,6 +10,8 @@ import com.xiaoliang.simukraft.job.api.JobDefinition;
 import com.xiaoliang.simukraft.job.api.JobResult;
 import com.xiaoliang.simukraft.job.api.JobResultType;
 import com.xiaoliang.simukraft.job.api.JobRuntimeState;
+import com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler;
+import com.xiaoliang.simukraft.job.jobs.industrialgeneric.CheeseFactoryWorkController;
 import com.xiaoliang.simukraft.utils.NPCDataManager;
 import com.xiaoliang.simukraft.utils.NPCEntityLocator;
 import com.xiaoliang.simukraft.utils.NPCRestHandler;
@@ -217,6 +219,13 @@ public final class JobRuntimeService {
             return;
         }
         lastWorkplaceCorrectionTicks.put(assignment.npcUuid(), gameTime);
+
+        ServerLevel serverLevel = context.level();
+        String buildingFileName = IndustrialWorkHandler.getBuildingFileName(serverLevel, assignment.workplacePos());
+        if (CheeseFactoryWorkController.shouldSuppressWorkplacePull(
+                serverLevel, assignment.workplacePos(), npc, buildingFileName)) {
+            return;
+        }
 
         double targetX = assignment.workplacePos().getX() + 0.5D;
         double targetY = assignment.workplacePos().getY() + 1.0D;

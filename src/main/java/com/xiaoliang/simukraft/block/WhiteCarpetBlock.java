@@ -14,6 +14,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import java.util.Objects;
 import javax.annotation.Nonnull;
 
+@SuppressWarnings("null")
 public class WhiteCarpetBlock extends Block {
     protected static final VoxelShape SHAPE = Shapes.box(0.0D, 0.0D, 0.0D, 1.0D, 0.0625D, 1.0D);
 
@@ -21,7 +22,6 @@ public class WhiteCarpetBlock extends Block {
         super(createProperties());
     }
 
-    @SuppressWarnings("null")
     private static BlockBehaviour.Properties createProperties() {
         return Objects.requireNonNull(BlockBehaviour.Properties.of()
                 .mapColor(MapColor.WOOL)

@@ -112,6 +112,9 @@ public final class IndustrialGenericWorkflow implements JobWorkflow {
         if (npc == null || target == null || npc.isTeleportingForWork()) {
             return;
         }
+        if (CheeseFactoryWorkController.handles(null, resolveBuildingFileName(target))) {
+            return;
+        }
         double distanceSqr = npc.distanceToSqr(
                 target.factoryPos().getX() + 0.5D,
                 target.factoryPos().getY() + 1.0D,

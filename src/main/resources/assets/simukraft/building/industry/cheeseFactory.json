@@ -24,14 +24,20 @@
         {
           "item": "simukraft:cheese_chunk",
           "baseAmount": 1,
-          "randomRange": 0,
+          "randomRange": 2,
           "probability": 1.0
         },
         {
           "item": "minecraft:bucket",
           "baseAmount": 1,
-          "randomRange": 0,
+          "randomRange": 1,
           "probability": 1.0
+        },
+        {
+          "item": "simukraft:cheese_chunk",
+          "baseAmount": 1,
+          "randomRange": 5,
+          "probability": 0.1
         }
       ]
     }
@@ -47,14 +53,20 @@
     {
       "item": "simukraft:cheese_chunk",
       "baseAmount": 1,
-      "randomRange": 0,
+      "randomRange": 2,
       "probability": 1.0
     },
     {
       "item": "minecraft:bucket",
       "baseAmount": 1,
-      "randomRange": 0,
+      "randomRange": 1,
       "probability": 1.0
+    },
+    {
+      "item": "simukraft:cheese_chunk",
+      "baseAmount": 1,
+      "randomRange": 5,
+      "probability": 0.1
     }
   ],
   "spawnEntity": {
@@ -62,6 +74,7 @@
     "type": "minecraft:sheep",
     "count": 5
   },
+  "hasLunchBreak": true,
   "messages": {
     "hired": "§a{npcName} {jobName} 已开始工作",
     "workComplete": "§6{npcName} {jobName}：生产完成",

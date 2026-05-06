@@ -83,6 +83,7 @@
     }
   ],
   "buyTrades": [],
+  "hasLunchBreak": false,
   "messages": {
     "welcome": "欢迎光临肯打鸡！",
     "noStock": "今天的商品卖完啦，明天再来吧~",

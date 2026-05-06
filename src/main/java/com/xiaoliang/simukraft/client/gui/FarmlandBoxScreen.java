@@ -98,6 +98,13 @@ public class FarmlandBoxScreen extends Screen {
                 .bounds(5, 5, 45, 20)
                 .build()));
 
+        // 拆除按钮
+        this.addRenderableWidget(nn(Button.builder(
+                        nn(Component.translatable("gui.button.demolish")),
+                        button -> onDemolishClicked())
+                .bounds(55, 5, 45, 20)
+                .build()));
+
         // 雇佣农民按钮 - 左下角
         hireFarmerButton = nn(Button.builder(
                         nn(Component.translatable("gui.button.hire_farmer")),
@@ -243,6 +250,18 @@ public class FarmlandBoxScreen extends Screen {
                 );
             }
         }
+    }
+
+    /**
+     * 点击拆除按钮处理
+     */
+    private void onDemolishClicked() {
+        // 发送拆除请求到服务器
+        com.xiaoliang.simukraft.network.NetworkManager.INSTANCE.sendToServer(
+            new com.xiaoliang.simukraft.network.DemolishBuildingPacket(farmlandBoxPos)
+        );
+        // 关闭界面
+        this.onClose();
     }
 
     @Override

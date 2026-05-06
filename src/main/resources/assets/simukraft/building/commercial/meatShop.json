@@ -30,8 +30,12 @@
       "maxStock": 64,
       "restockAmount": 16,
       "retail": true,
-      "requiredMaterial": "minecraft:beef",
-      "requiredMaterialCount": 1
+      "requiredMaterials": [
+        {
+          "item": "minecraft:beef",
+          "count": 1
+        }
+      ]
     },
     {
       "item": "minecraft:cooked_porkchop",
@@ -39,11 +43,16 @@
       "maxStock": 64,
       "restockAmount": 16,
       "retail": true,
-      "requiredMaterial": "minecraft:porkchop",
-      "requiredMaterialCount": 1
+      "requiredMaterials": [
+        {
+          "item": "minecraft:porkchop",
+          "count": 1
+        }
+      ]
     }
   ],
   "buyTrades": [],
+  "hasLunchBreak": false,
   "messages": {
     "welcome": "肉铺开门啦，市民们快来购买吧！",
     "noStock": "肉铺售罄了，明天再来吧~",

@@ -26,6 +26,7 @@ import javax.annotation.Nonnull;
  * 住宅控制盒方块
  * 统一的住宅类型控制盒，从同名sk文件获取基本信息
  */
+@SuppressWarnings("null")
 public class ResidentialControlBoxBlock extends Block {
     private static final Logger LOGGER = LogManager.getLogger();
     
@@ -33,7 +34,7 @@ public class ResidentialControlBoxBlock extends Block {
         super(createProperties());
     }
 
-    @SuppressWarnings("null")
+
     private static BlockBehaviour.Properties createProperties() {
         return Objects.requireNonNull(BlockBehaviour.Properties.of()
                 .mapColor(MapColor.METAL)

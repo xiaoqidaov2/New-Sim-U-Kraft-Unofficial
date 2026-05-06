@@ -67,6 +67,7 @@ public class IndustrialWorkHandler {
         lastWorkTick.clear();
         processedEndOfDay.clear();
         BUILDING_FILE_NAME_CACHE.clear();
+        CheeseFactoryWorkController.resetRuntimeState();
 
         // 初始化工业建筑配置管理器
         IndustrialBuildingManager.init(server);
@@ -133,43 +134,48 @@ public class IndustrialWorkHandler {
                 if (isWorkTime) {
                     ensureNpcReadyForWork(npc, level, buildingPos, buildingFileName);
 
-                    // 计算工作刻间隔（基于NPC等级）
-                    int npcLevel = NPCDataManager.getNPCLevel(level.getServer(), npc.getUUID());
-                    long workTickInterval = getWorkTickInterval(npcLevel);
-                    
-                    // 检查是否到达工作刻
-                    // 使用基于天的相对时间来处理时间跳跃（如/time set指令）
-                    Long lastTick = lastWorkTick.get(buildingPos);
-                    long timeSinceLastWork;
-                    
-                    if (lastTick == null) {
-                        timeSinceLastWork = Long.MAX_VALUE;
+                    if (CheeseFactoryWorkController.handles(config, buildingFileName)) {
+                        CheeseFactoryWorkController.tickWork(npc, buildingPos, level, config);
                     } else {
-                        long lastDay = lastTick / 24000;
-                        long lastTimeOfDay = lastTick % 24000;
-                        
-                        if (currentDay > lastDay) {
-                            // 已经过了新的一天，重置工作间隔
-                            timeSinceLastWork = Long.MAX_VALUE;
-                        } else if (currentDay < lastDay) {
-                            // 时间被调回（如/time set指令），重置工作间隔
+
+                        // 计算工作刻间隔（基于NPC等级）
+                        int npcLevel = NPCDataManager.getNPCLevel(level.getServer(), npc.getUUID());
+                        long workTickInterval = getWorkTickInterval(npcLevel);
+
+                        // 检查是否到达工作刻
+                        // 使用基于天的相对时间来处理时间跳跃（如/time set指令）
+                        Long lastTick = lastWorkTick.get(buildingPos);
+                        long timeSinceLastWork;
+
+                        if (lastTick == null) {
                             timeSinceLastWork = Long.MAX_VALUE;
                         } else {
-                            // 同一天内，正常计算间隔
-                            timeSinceLastWork = timeOfDay - lastTimeOfDay;
-                            // 如果时间被调回（负数），重置
-                            if (timeSinceLastWork < 0) {
+                            long lastDay = lastTick / 24000;
+                            long lastTimeOfDay = lastTick % 24000;
+
+                            if (currentDay > lastDay) {
+                                // 已经过了新的一天，重置工作间隔
                                 timeSinceLastWork = Long.MAX_VALUE;
+                            } else if (currentDay < lastDay) {
+                                // 时间被调回（如/time set指令），重置工作间隔
+                                timeSinceLastWork = Long.MAX_VALUE;
+                            } else {
+                                // 同一天内，正常计算间隔
+                                timeSinceLastWork = timeOfDay - lastTimeOfDay;
+                                // 如果时间被调回（负数），重置
+                                if (timeSinceLastWork < 0) {
+                                    timeSinceLastWork = Long.MAX_VALUE;
+                                }
                             }
                         }
-                    }
-                    
-                    if (timeSinceLastWork >= workTickInterval) {
-                        // 到达工作刻，执行工作（只生产物品，不发送消息和经验值）
-                        processIndustrialWork(npc, buildingPos, level, config, selectedRecipeId);
 
-                        // 记录上次工作刻时间
-                        lastWorkTick.put(buildingPos, gameTime);
+                        if (timeSinceLastWork >= workTickInterval) {
+                            // 到达工作刻，执行工作（只生产物品，不发送消息和经验值）
+                            processIndustrialWork(npc, buildingPos, level, config, selectedRecipeId);
+
+                            // 记录上次工作刻时间
+                            lastWorkTick.put(buildingPos, gameTime);
+                        }
                     }
                 }
                 
@@ -493,6 +499,10 @@ public class IndustrialWorkHandler {
         // 发送雇佣消息
         sendHireMessage(npc, level.getServer(), config);
 
+        if (CheeseFactoryWorkController.handles(config, buildingFileName)) {
+            CheeseFactoryWorkController.onNpcAssigned(npc, level, farmPos);
+        }
+
         // 设置手持物品（使用配方配置）
         setHeldItemFromConfig(npc, config, selectedRecipeId);
 
@@ -531,6 +541,9 @@ public class IndustrialWorkHandler {
         String selectedRecipeId = ControlBoxDataManager.getSelectedRecipe(level.getServer(), farmPos);
         setHeldItemFromConfig(npc, config, selectedRecipeId);
         spawnEntitiesIfNeeded(level, farmPos, config);
+        if (CheeseFactoryWorkController.handles(config, buildingFileName)) {
+            CheeseFactoryWorkController.restoreNpcAfterRest(npc, level, farmPos);
+        }
     }
 
     /**
@@ -793,21 +806,15 @@ public class IndustrialWorkHandler {
         if (npc == null || server == null || level == null || config == null) return;
 
         boolean leveledUp = NPCDataManager.addXp(server, npc.getUUID(), 5);
-
-        String safeJobName = Objects.requireNonNull(config.getJobName());
-        Component npcName = npc.getCustomName() != null ? npc.getCustomName() : Component.literal(safeJobName);
-        Component jobName = Component.translatable(safeJobName);
-
-        Component message = Component.translatable("message.simukraft.industrial.work_complete", npcName, jobName);
-        if (leveledUp) {
-            int newLevel = NPCDataManager.getNPCLevel(server, npc.getUUID());
-            Component levelUpMsg = Objects.requireNonNull(Component.translatable("message.simukraft.industrial.level_up", newLevel));
-            message = Objects.requireNonNull(
-                    Component.translatable("message.simukraft.industrial.work_complete_with_xp", npcName, jobName)
-            ).append(levelUpMsg);
+        if (!leveledUp) {
+            return;
         }
 
-        sendMessageToMayor(npc, server, message);
+        int newLevel = NPCDataManager.getNPCLevel(server, npc.getUUID());
+        Component levelUpMsg = Objects.requireNonNull(
+                Component.translatable("message.simukraft.industrial.level_up", newLevel)
+        );
+        sendMessageToMayor(npc, server, levelUpMsg);
     }
 
     /**

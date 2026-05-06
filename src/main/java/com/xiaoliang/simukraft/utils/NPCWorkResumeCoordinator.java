@@ -4,6 +4,7 @@ import com.xiaoliang.simukraft.config.ServerConfig;
 import com.xiaoliang.simukraft.entity.CustomEntity;
 import com.xiaoliang.simukraft.entity.WorkStatus;
 import com.xiaoliang.simukraft.entity.WorkSubState;
+import com.xiaoliang.simukraft.job.jobs.industrialgeneric.CheeseFactoryWorkController;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 
@@ -50,8 +51,15 @@ public final class NPCWorkResumeCoordinator {
 
     public static boolean resumeIndustrialWork(CustomEntity npc, ServerLevel level, BlockPos workplacePos, String buildingFileName) {
         return resumeAssignedWork(npc, npc != null ? npc.getJob() : null, workplacePos, () -> {
-            scheduleTeleportIfNeeded(npc, workplacePos);
-            if (shouldRestoreWorksite(npc, workplacePos) && level != null && workplacePos != null && buildingFileName != null && !buildingFileName.isBlank()) {
+            boolean suppressWorkplacePull = CheeseFactoryWorkController.shouldSuppressWorkplacePull(
+                    level, workplacePos, npc, buildingFileName
+            );
+            if (!suppressWorkplacePull) {
+                scheduleTeleportIfNeeded(npc, workplacePos);
+            }
+            if (!suppressWorkplacePull
+                    && shouldRestoreWorksite(npc, workplacePos)
+                    && level != null && workplacePos != null && buildingFileName != null && !buildingFileName.isBlank()) {
                 com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler.restoreNpcAfterRest(npc, level, workplacePos, buildingFileName);
                 markWorksiteRestore(npc, workplacePos);
             }

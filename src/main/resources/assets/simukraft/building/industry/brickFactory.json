@@ -18,13 +18,18 @@
           "item": "minecraft:dirt",
           "count": 4,
           "consume": true
+        },
+        {
+          "item": "minecraft:glass_bottle",
+          "count": 1,
+          "consume": false
         }
       ],
       "products": [
         {
           "item": "minecraft:brick",
           "baseAmount": 1,
-          "randomRange": 0,
+          "randomRange": 2,
           "probability": 1.0
         }
       ]
@@ -35,13 +40,18 @@
       "item": "minecraft:dirt",
       "consume": true,
       "amount": 4
+    },
+    {
+      "item": "minecraft:glass_bottle",
+      "consume": false,
+      "amount": 1
     }
   ],
   "products": [
     {
       "item": "minecraft:brick",
       "baseAmount": 1,
-      "randomRange": 0,
+      "randomRange": 2,
       "probability": 1.0
     }
   ],
@@ -50,6 +60,7 @@
     "type": "minecraft:sheep",
     "count": 5
   },
+  "hasLunchBreak": true,
   "messages": {
     "hired": "§a{npcName} {jobName} 已开始工作",
     "workComplete": "§6{npcName} {jobName}：生产完成",

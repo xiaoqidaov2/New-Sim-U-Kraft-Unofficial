@@ -24,7 +24,7 @@
         {
           "item": "minecraft:glass",
           "baseAmount": 1,
-          "randomRange": 0,
+          "randomRange": 1,
           "probability": 1.0
         }
       ]
@@ -49,13 +49,13 @@
         {
           "item": "minecraft:tinted_glass",
           "baseAmount": 1,
-          "randomRange": 0,
+          "randomRange": 1,
           "probability": 1.0
         },
         {
           "item": "minecraft:tinted_glass",
           "baseAmount": 1,
-          "randomRange": 0,
+          "randomRange": 1,
           "probability": 0.5
         }
       ]
@@ -72,7 +72,7 @@
     {
       "item": "minecraft:glass",
       "baseAmount": 1,
-      "randomRange": 0,
+      "randomRange": 1,
       "probability": 1.0
     }
   ],
@@ -81,6 +81,7 @@
     "type": "minecraft:sheep",
     "count": 5
   },
+  "hasLunchBreak": true,
   "messages": {
     "hired": "§a{npcName} {jobName} 已开始工作",
     "workComplete": "§6{npcName} {jobName}：生产完成",

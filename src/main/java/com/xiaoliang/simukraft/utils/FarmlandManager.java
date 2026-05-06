@@ -277,6 +277,38 @@ public final class FarmlandManager {
         }
     }
 
+    public static boolean demolishFarmland(ServerLevel level, BlockPos boxPos) {
+        BlockPos chestPos = getBoundChestIfValid(level, boxPos);
+        if (chestPos == null) {
+            chestPos = findNearestContainer(level, boxPos);
+        }
+        FarmlandPlot plot = FarmlandHiredData.getSelectedPlot(boxPos);
+        if (plot == null) {
+            int areaSize = FarmlandHiredData.getSelectedAreaSize(boxPos);
+            plot = FarmlandPlot.fromLegacy(boxPos, Direction.NORTH, areaSize);
+        }
+        for (BlockPos p : plot.positions()) {
+            BlockPos above = Objects.requireNonNull(p.above());
+            BlockState aboveState = level.getBlockState(above);
+            if (!aboveState.isAir()) {
+                var drops = net.minecraft.world.level.block.Block.getDrops(Objects.requireNonNull(aboveState), level, above, null);
+                level.destroyBlock(above, false);
+                if (chestPos != null) {
+                    for (net.minecraft.world.item.ItemStack drop : drops) {
+                        if (!drop.isEmpty()) {
+                            ContainerUtils.insertItem(level, chestPos, drop);
+                        }
+                    }
+                }
+            }
+            level.setBlock(p, Objects.requireNonNull(Blocks.GRASS_BLOCK.defaultBlockState()), 3);
+        }
+        invalidateWorkflow(level, boxPos, null, true);
+        FileUtils.deleteFarmlandBoxFile(level.getServer(), boxPos);
+        level.removeBlock(boxPos, false);
+        return true;
+    }
+
     // --- 内部辅助方法 (从 Packet 迁移) ---
 
     private static boolean checkAndClearPlot(ServerLevel level, FarmlandPlot plot) {

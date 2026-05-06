@@ -157,6 +157,7 @@
       "maxBuyAmount": 64
     }
   ],
+  "hasLunchBreak": true,
   "messages": {
     "welcome": "伐木工开始售卖木头了！",
     "noStock": "伐木工没有砍到树，下次再来吧。",

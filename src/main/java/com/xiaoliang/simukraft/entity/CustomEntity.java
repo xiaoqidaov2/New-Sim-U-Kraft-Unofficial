@@ -1768,8 +1768,12 @@ public class CustomEntity extends PathfinderMob {
                 java.util.List<com.xiaoliang.simukraft.building.ConstructionTask.BlockInfo> placedBlocks = completedTask.getBlocksToPlace();
 
                 for (BlockPos controlBoxPos : completedTask.getControlBoxPositions()) {
+                    BlockState controlBoxState = serverLevel.getBlockState(controlBoxPos);
+                    
                     // 激活住宅控制盒
-                    com.xiaoliang.simukraft.block.ResidentialControlBoxBlock.activatePendingResidence(serverLevel, controlBoxPos);
+                    if (controlBoxState.getBlock() instanceof com.xiaoliang.simukraft.block.ResidentialControlBoxBlock) {
+                        com.xiaoliang.simukraft.block.ResidentialControlBoxBlock.activatePendingResidence(serverLevel, controlBoxPos);
+                    }
 
                     // 注册建筑结构（使用实际放置的方块列表，包含旋转信息）
                     com.xiaoliang.simukraft.building.PlacedBuildingManager.registerPlacedBuildingFromTask(
@@ -1987,15 +1991,15 @@ public class CustomEntity extends PathfinderMob {
             return Component.translatable("gui.npc.status.lunch_break");
         }
 
-        // 工作中状态优先显示，不受饥饿状态标签影响（但午休状态除外）
-        if (currentWorkStatus == WorkStatus.WORKING && currentSubState != WorkSubState.LUNCH_BREAK) {
-            return Component.translatable("work_status.working");
-        }
-
-        // 不显示饥饿状态标签，饥饿状态单独显示
+        // 明确设置的工作标签应优先于通用"工作中"，这样奶酪工厂等分阶段职业能显示细分动作。
         if (syncedStatusLabel != null && !syncedStatusLabel.isEmpty()
                 && !"gui.npc.status.hungry".equals(syncedStatusLabel)) {
             return Component.translatable(syncedStatusLabel);
+        }
+
+        // 工作中状态优先显示，不受饥饿状态标签影响（但午休状态除外）
+        if (currentWorkStatus == WorkStatus.WORKING && currentSubState != WorkSubState.LUNCH_BREAK) {
+            return Component.translatable("work_status.working");
         }
 
         return Component.translatable(currentWorkStatus.getDisplayName());
