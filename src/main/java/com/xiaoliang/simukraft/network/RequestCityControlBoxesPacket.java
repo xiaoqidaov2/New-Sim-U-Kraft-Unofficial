@@ -50,6 +50,7 @@ public class RequestCityControlBoxesPacket {
             controlBoxes.addAll(loadControlBoxesByType(server, "industrial", cityId));
             controlBoxes.addAll(loadControlBoxesByType(server, "commercial", cityId));
             controlBoxes.addAll(loadControlBoxesByType(server, "residential", cityId));
+            controlBoxes.addAll(loadControlBoxesByType(server, "public", cityId));
             controlBoxes.addAll(loadControlBoxesByType(server, "other", cityId));
 
             // 发送响应
@@ -104,6 +105,7 @@ public class RequestCityControlBoxesPacket {
             case "industrial" -> "industrial";
             case "commercial" -> "commercial";
             case "residential" -> "residence";
+            case "public" -> "public";
             case "other" -> "other";
             default -> null;
         };

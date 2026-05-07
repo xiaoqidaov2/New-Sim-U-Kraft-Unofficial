@@ -91,6 +91,7 @@ public class IndustrialBuildingConfig {
         private int baseAmount;          // 基础数量
         private int randomRange;         // 随机范围
         private double probability = 1.0; // 概率（0.0-1.0）
+        private boolean ignoreMultiplier = false; // 是否免疫NPC等级产量翻倍
         
         public ProductOutput(String itemId, int baseAmount, int randomRange) {
             this.itemId = itemId;
@@ -110,6 +111,9 @@ public class IndustrialBuildingConfig {
         public double getProbability() { return probability; }
         public void setProbability(double probability) { this.probability = probability; }
         
+        public boolean isIgnoreMultiplier() { return ignoreMultiplier; }
+        public void setIgnoreMultiplier(boolean ignoreMultiplier) { this.ignoreMultiplier = ignoreMultiplier; }
+        
         /**
          * 计算实际产出数量
          */
@@ -119,7 +123,8 @@ public class IndustrialBuildingConfig {
             }
             // 修复：确保 randomRange 至少为 1，避免 nextInt(0) 抛出异常
             int amount = baseAmount + (randomRange > 0 ? random.nextInt(randomRange) : 0);
-            return (int) (amount * levelMultiplier);
+            float effectiveMultiplier = ignoreMultiplier ? 1.0f : levelMultiplier;
+            return (int) (amount * effectiveMultiplier);
         }
     }
     

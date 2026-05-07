@@ -51,7 +51,7 @@ public class ConstructionCompletionNotifier {
         String buildingName = fileName.replace(".sk", "");
         
         // 尝试从所有类别中查找建筑信息
-        String[] categories = {"residential", "commercial", "industry", "other"};
+        String[] categories = {"residential", "commercial", "industry", "public", "other"};
         
         for (String category : categories) {
             // 首先尝试精确匹配文件�?

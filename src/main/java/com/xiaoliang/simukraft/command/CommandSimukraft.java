@@ -535,7 +535,7 @@ public class CommandSimukraft {
         );
 
         dispatcher.register(
-            Commands.literal("simu")
+            Commands.literal("simutest")
                 .requires(source -> source.hasPermission(2))
                 .then(Commands.literal("je")
                     .executes(context -> executeZeroHungerNearby(context.getSource())))

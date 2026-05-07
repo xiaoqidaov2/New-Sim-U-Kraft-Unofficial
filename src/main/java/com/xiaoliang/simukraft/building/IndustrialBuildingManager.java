@@ -266,6 +266,9 @@ public class IndustrialBuildingManager {
                 if (prod.has("probability")) {
                     output.setProbability(prod.get("probability").getAsDouble());
                 }
+                if (prod.has("ignoreMultiplier")) {
+                    output.setIgnoreMultiplier(prod.get("ignoreMultiplier").getAsBoolean());
+                }
                 config.addProduct(output);
             }
         }
@@ -322,6 +325,9 @@ public class IndustrialBuildingManager {
                         ProductOutput output = new ProductOutput(itemId, baseAmount, randomRange);
                         if (prod.has("probability")) {
                             output.setProbability(prod.get("probability").getAsDouble());
+                        }
+                        if (prod.has("ignoreMultiplier")) {
+                            output.setIgnoreMultiplier(prod.get("ignoreMultiplier").getAsBoolean());
                         }
                         recipe.addProduct(output);
                     }

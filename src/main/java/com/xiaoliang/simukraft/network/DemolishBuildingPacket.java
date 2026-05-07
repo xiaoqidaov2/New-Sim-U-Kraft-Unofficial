@@ -128,7 +128,7 @@ public class DemolishBuildingPacket {
      * 删除控制盒数据（menglannnn: 根据类别删除对应的sk文件）
      * @param level 世界
      * @param controlBoxPos 控制盒位置
-     * @param category 建筑类别（residential/commercial/industrial/other）
+     * @param category 建筑类别（residential/commercial/industrial/public/other）
      */
     private void deleteControlBoxData(ServerLevel level, BlockPos controlBoxPos, String category) {
         try {

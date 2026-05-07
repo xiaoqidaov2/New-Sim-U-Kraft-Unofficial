@@ -25,7 +25,3 @@ seaboatShoping.sk
 SimuFriedChicken.json
 SimuFriedChicken.nbt
 SimuFriedChicken.sk
-YH.nbt
-YH.sk
-YY.nbt
-YY.sk
