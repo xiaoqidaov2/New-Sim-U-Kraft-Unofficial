@@ -20,17 +20,11 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 import java.util.Objects;
-import java.util.Set;
 import java.util.UUID;
 
 @Mod.EventBusSubscriber(modid = Simukraft.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 @SuppressWarnings("null")
 public final class CityPlacementRestrictionHandler {
-    private static final Set<Block> EXEMPT_BLOCKS = Set.of(
-            ModBlocks.LOGISTICS_CLIENT_BOX.get(),
-            ModBlocks.CITY_CORE.get()
-    );
-
     private CityPlacementRestrictionHandler() {
     }
 
@@ -88,7 +82,7 @@ public final class CityPlacementRestrictionHandler {
         if (player.isCreative()) {
             return false;
         }
-        if (EXEMPT_BLOCKS.contains(block)) {
+        if (isExemptBlock(block)) {
             return false;
         }
         if (!isRestrictedBlock(block)) {
@@ -120,6 +114,11 @@ public final class CityPlacementRestrictionHandler {
                 || block == ModBlocks.COMMERCIAL_CONTROL_BOX.get()
                 || block == ModBlocks.INDUSTRIAL_CONTROL_BOX.get()
                 || block == ModBlocks.OTHER_CONTROL_BOX.get();
+    }
+
+    private static boolean isExemptBlock(Block block) {
+        return block == ModBlocks.LOGISTICS_CLIENT_BOX.get()
+                || block == ModBlocks.CITY_CORE.get();
     }
 
     private static void sendDeniedMessage(Player player) {
