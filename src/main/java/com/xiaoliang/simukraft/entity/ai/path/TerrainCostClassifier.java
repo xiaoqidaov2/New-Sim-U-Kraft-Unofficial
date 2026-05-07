@@ -15,10 +15,10 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
-
 /**
  * 地形代价分类器：负责识别地毯栅栏跳跃、直穿障碍、楼梯/方块惩罚等特殊地形
  */
+@SuppressWarnings("null")
 public class TerrainCostClassifier {
     private static final double COLLISION_EPSILON = 1.0E-5D;
 

@@ -81,8 +81,10 @@ public class ModConfigScreenLDLib extends LDLibMenuScreen {
         onClose();
     }
 
+    @SuppressWarnings("null")
     private static String tr(String key) {
-        return I18n.get(key);
+        String value = I18n.get(key);
+        return value == null ? key : value;
     }
 
     private static String getPathDebugToggleText() {

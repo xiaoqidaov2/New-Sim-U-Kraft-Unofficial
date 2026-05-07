@@ -9,7 +9,6 @@ public final class PathCostEngine {
     }
 
     public static PathCostBreakdown calculate(TerrainMoveDescriptor descriptor, PathCostRules rules) {
-        descriptor = PathCostValidator.validate(descriptor);
         double distanceCost = descriptor.geometricDistance() + getMovementSurcharge(descriptor.movementType(), rules);
         double terrainCost = descriptor.carpetFenceHop() ? rules.carpetFenceHopCost() : rules.normalTerrainCost();
         double maxPenaltyCost = Math.max(0, descriptor.maxPenaltyTriggers()) * rules.maxPenaltyCost();

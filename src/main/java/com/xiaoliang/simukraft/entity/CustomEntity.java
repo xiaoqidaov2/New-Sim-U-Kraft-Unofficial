@@ -27,6 +27,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
@@ -67,6 +68,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Random;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @SuppressWarnings({"null", "deprecation"})
 public class CustomEntity extends PathfinderMob {
@@ -74,6 +76,7 @@ public class CustomEntity extends PathfinderMob {
     private static final float CHILD_WIDTH = 0.35F;
     private static final float CHILD_HEIGHT = 1.0F;
     private static final long CHILD_GROWTH_DAYS = 3L;
+    private static final AtomicBoolean VOICE_SYSTEM_AVAILABLE = new AtomicBoolean(true);
     private static final EntityDataAccessor<String> DATA_NAME = SynchedEntityData.defineId(CustomEntity.class, EntityDataSerializers.STRING);
     private static final EntityDataAccessor<String> DATA_GENDER = SynchedEntityData.defineId(CustomEntity.class, EntityDataSerializers.STRING);
     private static final EntityDataAccessor<String> DATA_SKIN_PATH = SynchedEntityData.defineId(CustomEntity.class, EntityDataSerializers.STRING);
@@ -443,7 +446,15 @@ public class CustomEntity extends PathfinderMob {
 
     @Override
     protected SoundEvent getHurtSound(DamageSource damageSource) {
-        return NPCVoiceManager.getHurtSound(this);
+        if (!VOICE_SYSTEM_AVAILABLE.get()) {
+            return SoundEvents.PLAYER_HURT;
+        }
+        try {
+            return NPCVoiceManager.getHurtSound(this);
+        } catch (Throwable throwable) {
+            disableVoiceSystem("hurt_sound", throwable);
+            return SoundEvents.PLAYER_HURT;
+        }
     }
 
     @Override
@@ -930,7 +941,7 @@ public class CustomEntity extends PathfinderMob {
                 if (hireArrivalRevealDelay <= 0) {
                     this.setInvisible(false);
                     spawnHireArrivalParticles(serverLevel, hireArrivalEffectPos, true);
-                    NPCVoiceManager.playArrivalVoice(serverLevel, this, hireArrivalEffectPos);
+                    safePlayArrivalVoice(serverLevel, hireArrivalEffectPos);
                     hireArrivalEffectPos = null;
                 }
             }
@@ -1641,7 +1652,7 @@ public class CustomEntity extends PathfinderMob {
         performTeleport();
         this.teleportParticleTimer = -1;
         if (this.level() instanceof ServerLevel serverLevel) {
-            NPCVoiceManager.playArrivalVoice(serverLevel, this, pos);
+            safePlayArrivalVoice(serverLevel, pos);
         }
         if (!"builder".equals(this.job)) {
             this.aiRestoreDelay = 5;
@@ -1665,15 +1676,62 @@ public class CustomEntity extends PathfinderMob {
         }
 
         if (level.isNight() && gameTime >= nextNightVoiceGameTime) {
-            NPCVoiceManager.playNightVoice(level, this);
+            if (!safePlayNightVoice(level)) {
+                return;
+            }
             nextNightVoiceGameTime = gameTime + 1800L + this.getRandom().nextInt(1200);
             nextAmbientVoiceGameTime = Math.max(nextAmbientVoiceGameTime, gameTime + 400L);
             return;
         }
 
         if (!level.isNight() && gameTime >= nextAmbientVoiceGameTime) {
-            NPCVoiceManager.playAmbientChat(level, this);
+            if (!safePlayAmbientVoice(level)) {
+                return;
+            }
             nextAmbientVoiceGameTime = gameTime + 1200L + this.getRandom().nextInt(1200);
+        }
+    }
+
+    private void safePlayArrivalVoice(ServerLevel level, @Nullable BlockPos pos) {
+        if (level == null || !VOICE_SYSTEM_AVAILABLE.get()) {
+            return;
+        }
+        try {
+            NPCVoiceManager.playArrivalVoice(level, this, pos);
+        } catch (Throwable throwable) {
+            disableVoiceSystem("arrival_voice", throwable);
+        }
+    }
+
+    private boolean safePlayNightVoice(ServerLevel level) {
+        if (level == null || !VOICE_SYSTEM_AVAILABLE.get()) {
+            return false;
+        }
+        try {
+            NPCVoiceManager.playNightVoice(level, this);
+            return true;
+        } catch (Throwable throwable) {
+            disableVoiceSystem("night_voice", throwable);
+            return false;
+        }
+    }
+
+    private boolean safePlayAmbientVoice(ServerLevel level) {
+        if (level == null || !VOICE_SYSTEM_AVAILABLE.get()) {
+            return false;
+        }
+        try {
+            NPCVoiceManager.playAmbientChat(level, this);
+            return true;
+        } catch (Throwable throwable) {
+            disableVoiceSystem("ambient_voice", throwable);
+            return false;
+        }
+    }
+
+    private void disableVoiceSystem(String action, Throwable throwable) {
+        if (VOICE_SYSTEM_AVAILABLE.compareAndSet(true, false)) {
+            Simukraft.LOGGER.error("[CustomEntity] NPC 语音系统在 {} 阶段发生异常，已自动停用后续语音播放以避免实体 tick 崩溃", action, throwable);
         }
     }
 
@@ -2388,7 +2446,7 @@ public class CustomEntity extends PathfinderMob {
                 nodePositions.add(debugTargetPos);
                 nodeTypes.add("TARGET");
                 nodeCosts.add(0.0D);
-                nodeCostReasons.add("target");
+                nodeCostReasons.add("debug_target");
             }
             com.xiaoliang.simukraft.entity.ai.path.NPCPath currentPath = npcPathNavigator.getCurrentPath();
             if (currentPath != null && !currentPath.isEmpty()) {

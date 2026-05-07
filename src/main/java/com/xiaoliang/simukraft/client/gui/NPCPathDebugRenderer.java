@@ -39,10 +39,7 @@ public class NPCPathDebugRenderer {
     private static final int COLOR_CURRENT_NODE = 0xAAFFFF00;
     private static final int COLOR_TARGET_NODE = 0xAAFF4040;
     private static final int COLOR_BLOCKED = 0xFFFF3030;
-    private static final int COLOR_LOW_COST = 0xAA00FF00;
-    private static final int COLOR_MID_COST = 0xAAF0C020;
-    private static final int COLOR_HIGH_COST = 0xAAFF6020;
-    private static final int COLOR_MAX_COST = 0xAAFF2020;
+    private static final int COLOR_HIGH_COST_NODE = 0xAAFF8800;
 
     public static boolean isPathDebugVisible() {
         return pathDebugVisible || ClientConfig.isAlwaysShowNpcPathDebug();
@@ -127,25 +124,12 @@ public class NPCPathDebugRenderer {
             return COLOR_TARGET_NODE;
         }
         String nodeType = index < nodeTypes.size() ? nodeTypes.get(index) : "WALKABLE";
+        double nodeCost = index < nodeCosts.size() ? nodeCosts.get(index) : 0.0D;
+        if (nodeCost >= 100.0D) {
+            return COLOR_HIGH_COST_NODE;
+        }
         if ("STEP_UP".equals(nodeType)) {
             return COLOR_STEP_UP_NODE;
-        }
-        double nodeCost = index < nodeCosts.size() ? nodeCosts.get(index) : 0.0D;
-        return getColorForCost(nodeCost);
-    }
-
-    private static int getColorForCost(double nodeCost) {
-        if (nodeCost >= 100.0D) {
-            return COLOR_MAX_COST;
-        }
-        if (nodeCost >= 40.0D) {
-            return COLOR_HIGH_COST;
-        }
-        if (nodeCost >= 10.0D) {
-            return COLOR_MID_COST;
-        }
-        if (nodeCost > 0.0D) {
-            return COLOR_LOW_COST;
         }
         return COLOR_NODE;
     }

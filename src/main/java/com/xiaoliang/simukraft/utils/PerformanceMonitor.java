@@ -11,6 +11,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -21,6 +22,7 @@ public final class PerformanceMonitor {
     private static final Logger LOGGER = LogManager.getLogger();
     private static final long REPORT_INTERVAL_TICKS = 600L;
     private static final int TOP_SECTION_LIMIT = 8;
+    private static final AtomicBoolean DISABLED = new AtomicBoolean(false);
 
     private static final Map<String, SectionStat> SECTION_STATS = new ConcurrentHashMap<>();
     private static final Map<String, NumericStat> NUMERIC_STATS = new ConcurrentHashMap<>();
@@ -30,10 +32,16 @@ public final class PerformanceMonitor {
     }
 
     public static long beginSection() {
+        if (DISABLED.get()) {
+            return 0L;
+        }
         return System.nanoTime();
     }
 
     public static void endSection(ServerLevel level, String sectionName, long startNanos) {
+        if (DISABLED.get() || startNanos <= 0L) {
+            return;
+        }
         if (sectionName == null || sectionName.isBlank()) {
             return;
         }
@@ -50,6 +58,9 @@ public final class PerformanceMonitor {
     }
 
     public static void recordValue(String metricName, long value) {
+        if (DISABLED.get()) {
+            return;
+        }
         if (metricName == null || metricName.isBlank()) {
             return;
         }
@@ -57,6 +68,9 @@ public final class PerformanceMonitor {
     }
 
     public static void tick(ServerLevel level) {
+        if (DISABLED.get()) {
+            return;
+        }
         if (level == null || level.isClientSide()) {
             return;
         }
@@ -71,23 +85,27 @@ public final class PerformanceMonitor {
         }
 
         LAST_REPORT_TICKS.put(level.dimension(), gameTime);
-        flush(level);
+        try {
+            flush(level);
+        } catch (Throwable throwable) {
+            disable(level, throwable);
+        }
     }
 
     private static synchronized void flush(ServerLevel level) {
-        List<SectionSnapshot> sectionSnapshots = new ArrayList<>();
+        List<Map.Entry<String, long[]>> sectionSnapshots = new ArrayList<>();
         for (Map.Entry<String, SectionStat> entry : SECTION_STATS.entrySet()) {
-            SectionSnapshot snapshot = entry.getValue().snapshotAndReset(entry.getKey());
-            if (snapshot.calls() > 0L) {
-                sectionSnapshots.add(snapshot);
+            long[] snapshot = entry.getValue().snapshotAndReset();
+            if (snapshot[1] > 0L) {
+                sectionSnapshots.add(Map.entry(entry.getKey(), snapshot));
             }
         }
 
-        List<NumericSnapshot> numericSnapshots = new ArrayList<>();
+        List<Map.Entry<String, long[]>> numericSnapshots = new ArrayList<>();
         for (Map.Entry<String, NumericStat> entry : NUMERIC_STATS.entrySet()) {
-            NumericSnapshot snapshot = entry.getValue().snapshotAndReset(entry.getKey());
-            if (snapshot.samples() > 0L) {
-                numericSnapshots.add(snapshot);
+            long[] snapshot = entry.getValue().snapshotAndReset();
+            if (snapshot[1] > 0L) {
+                numericSnapshots.add(Map.entry(entry.getKey(), snapshot));
             }
         }
 
@@ -95,8 +113,8 @@ public final class PerformanceMonitor {
             return;
         }
 
-        sectionSnapshots.sort(Comparator.comparingLong(SectionSnapshot::totalNanos).reversed());
-        numericSnapshots.sort(Comparator.comparingLong(NumericSnapshot::totalValue).reversed());
+        sectionSnapshots.sort(Comparator.comparingLong((Map.Entry<String, long[]> entry) -> entry.getValue()[0]).reversed());
+        numericSnapshots.sort(Comparator.comparingLong((Map.Entry<String, long[]> entry) -> entry.getValue()[0]).reversed());
 
         Runtime runtime = Runtime.getRuntime();
         long usedMemoryMb = (runtime.totalMemory() - runtime.freeMemory()) / (1024L * 1024L);
@@ -121,16 +139,20 @@ public final class PerformanceMonitor {
 
         int sectionLimit = Math.min(sectionSnapshots.size(), TOP_SECTION_LIMIT);
         for (int i = 0; i < sectionLimit; i++) {
-            SectionSnapshot snapshot = sectionSnapshots.get(i);
-            long totalMs = snapshot.totalNanos() / 1_000_000L;
-            long avgMicros = snapshot.calls() == 0L ? 0L : snapshot.totalNanos() / snapshot.calls() / 1_000L;
-            long maxMicros = snapshot.maxNanos() / 1_000L;
+            Map.Entry<String, long[]> snapshot = sectionSnapshots.get(i);
+            long[] values = snapshot.getValue();
+            long totalNanos = values[0];
+            long calls = values[1];
+            long maxNanos = values[2];
+            long totalMs = totalNanos / 1_000_000L;
+            long avgMicros = calls == 0L ? 0L : totalNanos / calls / 1_000L;
+            long maxMicros = maxNanos / 1_000L;
             builder.append(" | ")
-                    .append(snapshot.name())
+                    .append(snapshot.getKey())
                     .append(":total=")
                     .append(totalMs)
                     .append("ms,calls=")
-                    .append(snapshot.calls())
+                    .append(calls)
                     .append(",avg=")
                     .append(avgMicros)
                     .append("us,max=")
@@ -140,19 +162,30 @@ public final class PerformanceMonitor {
 
         int numericLimit = Math.min(numericSnapshots.size(), 6);
         for (int i = 0; i < numericLimit; i++) {
-            NumericSnapshot snapshot = numericSnapshots.get(i);
-            long avgValue = snapshot.samples() == 0L ? 0L : snapshot.totalValue() / snapshot.samples();
+            Map.Entry<String, long[]> snapshot = numericSnapshots.get(i);
+            long[] values = snapshot.getValue();
+            long totalValue = values[0];
+            long samples = values[1];
+            long maxValue = values[2];
+            long avgValue = samples == 0L ? 0L : totalValue / samples;
             builder.append(" | ")
-                    .append(snapshot.name())
+                    .append(snapshot.getKey())
                     .append(":sum=")
-                    .append(snapshot.totalValue())
+                    .append(totalValue)
                     .append(",avg=")
                     .append(avgValue)
                     .append(",max=")
-                    .append(snapshot.maxValue());
+                    .append(maxValue);
         }
 
         LOGGER.info(builder.toString());
+    }
+
+    private static void disable(ServerLevel level, Throwable throwable) {
+        if (DISABLED.compareAndSet(false, true)) {
+            String dimension = level == null ? "unknown" : String.valueOf(level.dimension().location());
+            LOGGER.error("[PerformanceMonitor] 维度 {} 的性能监控发生异常，已自动停用后续统计以避免影响世界运行", dimension, throwable);
+        }
     }
 
     private static final class SectionStat {
@@ -166,11 +199,11 @@ public final class PerformanceMonitor {
             maxNanos.accumulateAndGet(nanos, Math::max);
         }
 
-        private SectionSnapshot snapshotAndReset(String name) {
+        private long[] snapshotAndReset() {
             long total = totalNanos.getAndSet(0L);
             long callCount = calls.getAndSet(0L);
             long max = maxNanos.getAndSet(0L);
-            return new SectionSnapshot(name, total, callCount, max);
+            return new long[]{total, callCount, max};
         }
     }
 
@@ -185,17 +218,11 @@ public final class PerformanceMonitor {
             maxValue.accumulateAndGet(value, Math::max);
         }
 
-        private NumericSnapshot snapshotAndReset(String name) {
+        private long[] snapshotAndReset() {
             long total = totalValue.getAndSet(0L);
             long sampleCount = samples.getAndSet(0L);
             long max = maxValue.getAndSet(0L);
-            return new NumericSnapshot(name, total, sampleCount, max);
+            return new long[]{total, sampleCount, max};
         }
-    }
-
-    private record SectionSnapshot(String name, long totalNanos, long calls, long maxNanos) {
-    }
-
-    private record NumericSnapshot(String name, long totalValue, long samples, long maxValue) {
     }
 }

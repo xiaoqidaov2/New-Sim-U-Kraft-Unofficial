@@ -57,7 +57,6 @@ public class NPCMoveController {
     private static final double MAX_ASCEND_JUMP_SPEED = 0.33D;
     private static final double MIN_AIR_TRAVERSAL_SPEED = 0.12D;
     private static final double BODY_COLLISION_XZ_SHRINK = 0.03D;
-    private static final double DEFAULT_BODY_RADIUS = 0.3D;
     private static final double OPEN_TRAPDOOR_BODY_RADIUS = 0.24D;
     private static final double OPEN_TRAPDOOR_PANEL_SIDE_RADIUS = 0.14D;
     private static final double TRAPDOOR_HOP_SPEED = 0.24D;
