@@ -729,6 +729,7 @@ public class ControlBoxDataManager {
             case "residential", "residential_control_box" -> RESIDENCE_DIR;
             case "commercial", "commercial_control_box" -> COMMERCIAL_DIR;
             case "industrial", "industrial_control_box" -> INDUSTRIAL_DIR;
+            case "public", "public_control_box" -> "public";
             case "other", "other_control_box" -> OTHER_DIR;
             default -> null;
         };

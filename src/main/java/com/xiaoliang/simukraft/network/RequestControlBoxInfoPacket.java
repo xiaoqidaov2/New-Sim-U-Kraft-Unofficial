@@ -108,6 +108,7 @@ public class RequestControlBoxInfoPacket {
             case "residential", "residence" -> "residence";
             case "commercial", "business" -> "commercial";
             case "industrial", "industry" -> "industrial";
+            case "public" -> "public";
             case "other" -> "other";
             default -> null;
         };

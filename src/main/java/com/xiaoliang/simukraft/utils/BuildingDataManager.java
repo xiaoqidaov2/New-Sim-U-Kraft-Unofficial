@@ -72,7 +72,7 @@ public class BuildingDataManager {
     
     private static final String BUILDING_ROOT_PATH = "assets/simukraft/building";
     private static String SIMUKRAFT_BUILDING_FOLDER;
-    private static final String[] CATEGORIES = {"residential", "commercial", "industry", "other"};
+    private static final String[] CATEGORIES = {"residential", "commercial", "industry", "public", "other"};
 
     // 建筑信息缓存 - 缓存建筑类别数据避免重复文件读取
     private static final Map<String, List<BuildingInfo>> BUILDING_CATEGORY_CACHE = new HashMap<>();

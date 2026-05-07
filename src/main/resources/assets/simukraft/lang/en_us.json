@@ -228,10 +228,12 @@
   "gui.category.residential": "Residential",
   "gui.category.commercial": "Commercial",
   "gui.category.industrial": "Industrial",
+  "gui.category.public": "Public",
   "gui.category.other": "Other",
   "category.residential": "Residential",
   "category.commercial": "Commercial",
   "category.industrial": "Industrial",
+  "category.public": "Public",
   "category.other": "Other",
 
   "gui.pagination.previous": "Previous",

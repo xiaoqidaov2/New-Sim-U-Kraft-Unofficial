@@ -496,6 +496,7 @@ public class BuildingListScreen extends LDLibMenuScreen {
             case "residential" -> Component.translatable("category.residential").getString();
             case "commercial" -> Component.translatable("category.commercial").getString();
             case "industry" -> Component.translatable("category.industrial").getString();
+            case "public" -> Component.translatable("category.public").getString();
             case "other" -> Component.translatable("category.other").getString();
             default -> category;
         };
@@ -506,6 +507,7 @@ public class BuildingListScreen extends LDLibMenuScreen {
             case "residential" -> 0xFF90EE90; // 浅绿�?
             case "commercial" -> 0xFFADD8E6;  // 淡蓝�?
             case "industry" -> 0xFFC8A260;     // 金色（保持原色）
+            case "public" -> 0xFFB39DDB;
             case "other" -> 0xFFFFFFFF;        // 白色
             default -> 0xFFC8A260;             // 默认金色
         };
