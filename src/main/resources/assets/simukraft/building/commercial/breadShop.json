@@ -25,11 +25,16 @@
       "maxStock": 64,
       "restockAmount": 32,
       "retail": true,
-      "requiredMaterial": "minecraft:wheat",
-      "requiredMaterialCount": 3
+      "requiredMaterials": [
+        {
+          "item": "minecraft:wheat",
+          "count": 3
+        }
+      ]
     }
   ],
   "buyTrades": [],
+  "hasLunchBreak": false,
   "messages": {
     "welcome": "面包店开门啦，市民们快来买吧！",
     "noStock": "今天的面包卖完了，明天再来吧！",

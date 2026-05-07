@@ -19,7 +19,7 @@
           "item": "minecraft:white_wool",
           "baseAmount": 1,
           "randomRange": 1,
-          "probability": 0.2
+          "probability": 0.05
         }
       ]
     }
@@ -29,7 +29,7 @@
       "item": "minecraft:white_wool",
       "baseAmount": 1,
       "randomRange": 1,
-      "probability": 0.2
+      "probability": 0.05
     }
   ],
   "spawnEntity": {

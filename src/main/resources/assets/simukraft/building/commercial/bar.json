@@ -13,6 +13,7 @@
   "requireMaterialsForSale": false,
   "trades": [],
   "buyTrades": [],
+  "hasLunchBreak": true,
   "messages": {
     "welcome": "欢迎光临！",
     "noStock": "库存不足！",

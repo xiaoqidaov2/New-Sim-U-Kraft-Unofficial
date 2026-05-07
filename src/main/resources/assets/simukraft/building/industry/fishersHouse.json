@@ -19,7 +19,7 @@
           "item": "minecraft:cod",
           "baseAmount": 1,
           "randomRange": 1,
-          "probability": 0.2
+          "probability": 0.1
         }
       ]
     },
@@ -33,7 +33,7 @@
           "item": "minecraft:salmon",
           "baseAmount": 1,
           "randomRange": 1,
-          "probability": 0.2
+          "probability": 0.1
         }
       ]
     },
@@ -47,13 +47,13 @@
           "item": "minecraft:salmon",
           "baseAmount": 1,
           "randomRange": 1,
-          "probability": 0.1
+          "probability": 0.05
         },
         {
           "item": "minecraft:cod",
           "baseAmount": 1,
           "randomRange": 1,
-          "probability": 0.1
+          "probability": 0.05
         }
       ]
     }
@@ -63,7 +63,7 @@
       "item": "minecraft:cod",
       "baseAmount": 1,
       "randomRange": 1,
-      "probability": 0.2
+      "probability": 0.1
     }
   ],
   "spawnEntity": {

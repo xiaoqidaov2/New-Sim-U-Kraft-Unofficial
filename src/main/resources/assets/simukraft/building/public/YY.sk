@@ -1,7 +1,7 @@
-name:诊所 (开发中)
+name:诊所
 size:0 x 0 x 0
 amount:45.49元
 author:XiaoLiang
-description:建筑开发中...
+description:治疗NPC和NPC分娩场所
 tags:price_medium,material_low,stage_mid
 job_type:doctor

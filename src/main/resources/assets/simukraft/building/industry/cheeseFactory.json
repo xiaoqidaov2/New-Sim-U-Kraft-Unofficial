@@ -28,6 +28,13 @@
           "probability": 1.0
         },
         {
+          "item": "minecraft:bucket",
+          "baseAmount": 1,
+          "randomRange": 1,
+          "probability": 1.0,
+          "ignoreMultiplier": true
+        },
+        {
           "item": "simukraft:cheese_chunk",
           "baseAmount": 1,
           "randomRange": 5,
@@ -49,6 +56,13 @@
       "baseAmount": 1,
       "randomRange": 2,
       "probability": 1.0
+    },
+    {
+      "item": "minecraft:bucket",
+      "baseAmount": 1,
+      "randomRange": 1,
+      "probability": 1.0,
+      "ignoreMultiplier": true
     },
     {
       "item": "simukraft:cheese_chunk",

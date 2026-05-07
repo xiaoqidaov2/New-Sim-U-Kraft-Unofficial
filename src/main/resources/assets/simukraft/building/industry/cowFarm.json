@@ -19,7 +19,7 @@
           "item": "minecraft:beef",
           "baseAmount": 1,
           "randomRange": 1,
-          "probability": 0.2
+          "probability": 0.1
         }
       ]
     },
@@ -33,7 +33,7 @@
           "item": "minecraft:leather",
           "baseAmount": 1,
           "randomRange": 1,
-          "probability": 0.3
+          "probability": 0.2
         }
       ]
     },
@@ -53,7 +53,8 @@
           "item": "minecraft:milk_bucket",
           "baseAmount": 1,
           "randomRange": 1,
-          "probability": 0.2
+          "probability": 0.2,
+          "ignoreMultiplier": true
         }
       ]
     }
@@ -63,7 +64,7 @@
       "item": "minecraft:beef",
       "baseAmount": 1,
       "randomRange": 1,
-      "probability": 0.2
+      "probability": 0.1
     }
   ],
   "spawnEntity": {

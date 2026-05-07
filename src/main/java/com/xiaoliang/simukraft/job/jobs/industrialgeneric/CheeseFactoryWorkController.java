@@ -220,6 +220,7 @@ public final class CheeseFactoryWorkController {
                 setStage(state, hasMilkInPool(level, buildingPos) ? Stage.MOVE_TO_STIR : Stage.WAITING);
                 return;
             }
+            returnEmptyBuckets(level, buildingPos, MAX_POUR_BUCKETS);
             state.pendingMilkBuckets = MAX_POUR_BUCKETS;
             state.pouredBuckets = 0;
         }
@@ -859,6 +860,35 @@ public final class CheeseFactoryWorkController {
             remaining -= inserted;
         }
         return remaining <= 0;
+    }
+
+    private static void returnEmptyBuckets(ServerLevel level, BlockPos buildingPos, int count) {
+        if (level == null || buildingPos == null || count <= 0) {
+            return;
+        }
+        int remaining = count;
+        for (BlockPos containerPos : findNearbyContainers(level, buildingPos)) {
+            if (remaining <= 0) {
+                break;
+            }
+            ItemStack stack = new ItemStack(Items.BUCKET, remaining);
+            if (!ContainerUtils.canInsertItem(level, containerPos, stack)) {
+                continue;
+            }
+            int inserted = ContainerUtils.insertItem(level, containerPos, stack);
+            remaining -= inserted;
+        }
+        if (remaining > 0) {
+            BlockPos dropPos = findPrimaryChestPos(level, buildingPos);
+            BlockPos spawnPos = dropPos != null ? dropPos : buildingPos;
+            level.addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(
+                    level,
+                    spawnPos.getX() + 0.5D,
+                    spawnPos.getY() + 1.0D,
+                    spawnPos.getZ() + 0.5D,
+                    new ItemStack(Items.BUCKET, remaining)
+            ));
+        }
     }
 
     private static List<BlockPos> createPourVisualPositions() {

@@ -25,11 +25,16 @@
       "maxStock": 32,
       "restockAmount": 16,
       "retail": true,
-      "requiredMaterial": "minecraft:chicken",
-      "requiredMaterialCount": 1
+      "requiredMaterials": [
+        {
+          "item": "minecraft:chicken",
+          "count": 1
+        }
+      ]
     }
   ],
   "buyTrades": [],
+  "hasLunchBreak": false,
   "messages": {
     "welcome": "肉摊开张~",
     "noStock": "肉摊库存不足了，明天再来吧！",
