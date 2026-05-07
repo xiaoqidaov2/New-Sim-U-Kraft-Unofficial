@@ -1305,6 +1305,9 @@ public class NPCMoveController {
     }
 
     private boolean isThinWalkableCover(BlockState state, BlockPos pos) {
+        if (state.isAir()) {
+            return false;
+        }
         if (state.getBlock() instanceof CarpetBlock) {
             return true;
         }

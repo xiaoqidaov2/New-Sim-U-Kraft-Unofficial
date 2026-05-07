@@ -357,12 +357,43 @@ public class NPCPathFinder {
             return null;
         }
         if (heightDelta < -1.0D) {
-            return copyNode(target, NPCPathNode.NodeType.FALL, NPCPathNode.MovementAction.FALL);
+            NPCPathNode fallNode = copyNode(target, NPCPathNode.NodeType.FALL, NPCPathNode.MovementAction.FALL);
+            return crossesFenceBarrier(from, fallNode) ? null : fallNode;
         }
         if (heightDelta < -WALK_STEP_HEIGHT) {
-            return copyNode(target, NPCPathNode.NodeType.FALL, NPCPathNode.MovementAction.DESCEND);
+            NPCPathNode descendNode = copyNode(target, NPCPathNode.NodeType.FALL, NPCPathNode.MovementAction.DESCEND);
+            return crossesFenceBarrier(from, descendNode) ? null : descendNode;
         }
-        return copyNode(target, preferredType, NPCPathNode.MovementAction.TRAVERSE);
+        NPCPathNode traverseNode = copyNode(target, preferredType, NPCPathNode.MovementAction.TRAVERSE);
+        return crossesFenceBarrier(from, traverseNode) ? null : traverseNode;
+    }
+
+    /**
+     * 普通相邻移动不允许直接横穿栅栏/墙/铁栏杆。
+     * 这类路线即使距离更短，执行层也会被卡住，因此应在规划层直接裁掉，只保留带覆盖层的 JUMP_OVER 路线。
+     */
+    private boolean crossesFenceBarrier(NPCPathNode from, NPCPathNode to) {
+        if (from == null || to == null || to.action == NPCPathNode.MovementAction.JUMP_OVER) {
+            return false;
+        }
+        double dx = Math.abs(to.standX - from.standX);
+        double dz = Math.abs(to.standZ - from.standZ);
+        if (dx <= COLLISION_EPSILON && dz <= COLLISION_EPSILON) {
+            return false;
+        }
+
+        double sampleX = (from.standX + to.standX) * 0.5D;
+        double sampleY = Math.min(from.standY, to.standY) + 0.45D;
+        double sampleZ = (from.standZ + to.standZ) * 0.5D;
+        BlockPos midPos = BlockPos.containing(sampleX, sampleY, sampleZ);
+        BlockState midState = level.getBlockState(midPos);
+        if (isFenceLikeBarrier(midState) && !isThinWalkableCover(level.getBlockState(midPos.above()), midPos.above())) {
+            return true;
+        }
+
+        BlockPos supportMidPos = midPos.below();
+        BlockState supportMidState = level.getBlockState(supportMidPos);
+        return isFenceLikeBarrier(supportMidState) && !isThinWalkableCover(midState, midPos);
     }
 
     private NPCPathNode createNeighbor(NPCPathNode from, BlockPos pos, NPCPathNode.NodeType preferredType) {
@@ -1164,6 +1195,9 @@ public class NPCPathFinder {
     }
 
     private boolean isThinWalkableCover(BlockState state, BlockPos pos) {
+        if (state.isAir()) {
+            return false;
+        }
         if (state.getBlock() instanceof CarpetBlock) {
             return true;
         }
@@ -1188,7 +1222,7 @@ public class NPCPathFinder {
         return block instanceof WallBlock
             || block instanceof FenceBlock
             || block instanceof IronBarsBlock
-            || block instanceof TrapDoorBlock;
+            || isOpenTrapdoor(state);
     }
 
     private double getCollisionHeight(BlockState state, BlockPos pos) {
