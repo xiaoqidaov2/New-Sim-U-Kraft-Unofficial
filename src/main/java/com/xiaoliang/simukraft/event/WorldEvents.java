@@ -28,6 +28,7 @@ import net.minecraftforge.fml.common.Mod;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -52,6 +53,7 @@ public class WorldEvents {
     // 按城市记录当天已结算收入，避免“同城多官员重复入账”
     private static long lastCityIncomeCollectionDay = -1;
     private static final Map<UUID, CityIncome> collectedIncomeByCity = new ConcurrentHashMap<>();
+    private static final Map<Path, CachedSkFileData> SK_FILE_CONTENT_CACHE = new ConcurrentHashMap<>();
 
     // 新增：NPC年龄增长计数器，每7个游戏日增长1岁
     private static int ageIncreaseCounter = 0;
@@ -64,19 +66,31 @@ public class WorldEvents {
 
         ServerLevel serverLevel = (ServerLevel) event.level;
         if (serverLevel.dimension() != Level.OVERWORLD) return;
+        long worldTickStart = PerformanceMonitor.beginSection();
 
         // 物流传输引擎
+        long logisticsStart = PerformanceMonitor.beginSection();
         com.xiaoliang.simukraft.job.jobs.warehousemanager.LogisticsWorkHandler.onServerTick(serverLevel);
+        PerformanceMonitor.endSection(serverLevel, "world.logistics", logisticsStart);
 
         // 新职业运行时
+        long jobRuntimeStart = PerformanceMonitor.beginSection();
         com.xiaoliang.simukraft.job.core.JobRuntimeService.get().tick(serverLevel);
+        PerformanceMonitor.endSection(serverLevel, "world.jobRuntime", jobRuntimeStart);
 
         // simukraft: 处理NPC午休逻辑
+        long lunchStart = PerformanceMonitor.beginSection();
         com.xiaoliang.simukraft.utils.LunchBreakManager.handleLunchBreak(serverLevel);
+        PerformanceMonitor.endSection(serverLevel, "world.lunchBreak", lunchStart);
+
+        long selfFeedingStart = PerformanceMonitor.beginSection();
         com.xiaoliang.simukraft.utils.SelfFeedingManager.handleSelfFeeding(serverLevel);
+        PerformanceMonitor.endSection(serverLevel, "world.selfFeeding", selfFeedingStart);
 
         // 处理延迟的收钱音效和房租收集
+        long incomeStart = PerformanceMonitor.beginSection();
         processPendingMoneySounds(serverLevel);
+        PerformanceMonitor.endSection(serverLevel, "world.pendingIncome", incomeStart);
 
         // 修复：延迟恢复建造盒雇佣状态，使用 BuilderWorkService 持续尝试恢复
         if (buildBoxRestoreScheduled) {
@@ -112,8 +126,13 @@ public class WorldEvents {
 
         // HUD 采用周期保底同步，避免每 tick 重复发包和重复解析城市快照
         if (serverLevel.getGameTime() % HUD_SYNC_INTERVAL_TICKS == 0L) {
+            long hudStart = PerformanceMonitor.beginSection();
             syncHUDDataToAllPlayers(serverLevel);
+            PerformanceMonitor.endSection(serverLevel, "world.hudSync", hudStart);
         }
+
+        PerformanceMonitor.endSection(serverLevel, "world.tick", worldTickStart);
+        PerformanceMonitor.tick(serverLevel);
     }
 
     /**
@@ -262,6 +281,7 @@ public class WorldEvents {
             PlayerCitySnapshot citySnapshot = resolvePlayerCitySnapshot(level, player);
             NetworkManager.sendHUDDataToPlayer(currentDay, worldPopulation, citySnapshot.cityName(), citySnapshot.cityFunds(), citySnapshot.cityPopulation(), player);
         }
+        PerformanceMonitor.recordValue("hud.playersSynced", level.getServer().getPlayerList().getPlayers().size());
     }
 
     @SubscribeEvent
@@ -304,25 +324,28 @@ public class WorldEvents {
         ageIncreaseCounter = 0;
 
         // 遍历所有NPC实体并增加年龄
-        level.getAllEntities().forEach(entity -> {
-            if (entity instanceof com.xiaoliang.simukraft.entity.CustomEntity npc) {
-                // 增加年龄
-                int currentAge = npc.getNpcAge();
-                int newAge = currentAge + 1;
-                npc.setNpcAge(newAge);
-
-                // 更新NPC数据到文件
-                NPCDataManager.updateNPCAge(level.getServer(), npc.getUUID(), newAge);
-
-                Simukraft.LOGGER.info("[NPC年龄] {} 年龄增长至 {} 岁", npc.getFullName(), newAge);
-
-                // 检查是否达到寿命上限
-                if (npc.isAtEndOfLife()) {
-                    Simukraft.LOGGER.info("[NPC寿命] {} 已达到寿命上限（{}岁），即将去世",
-                            npc.getFullName(), npc.getLifespan());
-                }
+        int updatedNpcCount = 0;
+        for (CustomEntity npc : NPCTaskScheduler.getNPCsInLevel(level)) {
+            if (npc == null || !npc.isAlive()) {
+                continue;
             }
-        });
+
+            int currentAge = npc.getNpcAge();
+            int newAge = currentAge + 1;
+            npc.setNpcAge(newAge);
+            NPCDataManager.updateNPCAge(level.getServer(), npc.getUUID(), newAge);
+            updatedNpcCount++;
+
+            if (Simukraft.LOGGER.isDebugEnabled()) {
+                Simukraft.LOGGER.debug("[NPC年龄] {} 年龄增长至 {} 岁", npc.getFullName(), newAge);
+            }
+
+            if (npc.isAtEndOfLife() && Simukraft.LOGGER.isDebugEnabled()) {
+                Simukraft.LOGGER.debug("[NPC寿命] {} 已达到寿命上限（{}岁），即将去世",
+                        npc.getFullName(), npc.getLifespan());
+            }
+        }
+        PerformanceMonitor.recordValue("npc.ageUpdated", updatedNpcCount);
     }
 
     /**
@@ -414,6 +437,7 @@ public class WorldEvents {
         lastRentCollectionDay = -1;
         lastCityIncomeCollectionDay = -1;
         collectedIncomeByCity.clear();
+        SK_FILE_CONTENT_CACHE.clear();
 
         if (event.getLevel() instanceof ServerLevel serverLevel) {
             if (serverLevel.dimension() == Level.OVERWORLD) {
@@ -854,7 +878,7 @@ public class WorldEvents {
 
     private static boolean isOwnedByCity(Path path, String cityIdStr) {
         try {
-            String content = Files.readString(path);
+            String content = getCachedSkContent(path);
             return content.contains("cityid: " + cityIdStr)
                     || content.contains("cityId: " + cityIdStr)
                     || content.contains("city_id: " + cityIdStr);
@@ -870,7 +894,7 @@ public class WorldEvents {
                 return -1;
             }
 
-            for (String line : Files.readAllLines(skFile)) {
+            for (String line : getCachedSkLines(skFile)) {
                 String trimmed = line.trim();
                 if (trimmed.startsWith("rent:")) {
                     String rentStr = trimmed.substring(5).trim().replace("元", "").trim();
@@ -895,7 +919,7 @@ public class WorldEvents {
                 return -1;
             }
 
-            for (String line : Files.readAllLines(skFile)) {
+            for (String line : getCachedSkLines(skFile)) {
                 String trimmed = line.trim();
                 if (trimmed.startsWith("amount:")) {
                     String amountStr = trimmed.substring(7).trim().replace("元", "").trim();
@@ -922,6 +946,7 @@ public class WorldEvents {
         FarmlandHiredData.saveAllFarmlandData(event.getServer());
         pendingMoneySounds.clear();
         collectedIncomeByCity.clear();
+        SK_FILE_CONTENT_CACHE.clear();
         NetworkManager.clearAllHUDSyncState();
         com.xiaoliang.simukraft.utils.NPCTaskScheduler.invalidateCache();
         com.xiaoliang.simukraft.utils.NPCTaskScheduler.shutdown();
@@ -1003,5 +1028,30 @@ public class WorldEvents {
 
     private record PlayerCitySnapshot(String cityName, double cityFunds, int cityPopulation) {
         private static final PlayerCitySnapshot EMPTY = new PlayerCitySnapshot("", 0.0, 0);
+    }
+
+    private record CachedSkFileData(FileTime lastModified, String content, List<String> lines) {
+    }
+
+    private static String getCachedSkContent(Path path) throws IOException {
+        return getCachedSkFileData(path).content();
+    }
+
+    private static List<String> getCachedSkLines(Path path) throws IOException {
+        return getCachedSkFileData(path).lines();
+    }
+
+    private static CachedSkFileData getCachedSkFileData(Path path) throws IOException {
+        FileTime lastModified = Files.getLastModifiedTime(path);
+        CachedSkFileData cached = SK_FILE_CONTENT_CACHE.get(path);
+        if (cached != null && cached.lastModified().equals(lastModified)) {
+            return cached;
+        }
+
+        String content = Files.readString(path);
+        List<String> lines = content.lines().toList();
+        CachedSkFileData next = new CachedSkFileData(lastModified, content, lines);
+        SK_FILE_CONTENT_CACHE.put(path, next);
+        return next;
     }
 }

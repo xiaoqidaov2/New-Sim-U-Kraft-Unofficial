@@ -19,11 +19,14 @@ import com.xiaoliang.simukraft.world.LogisticsHiredData;
 import com.xiaoliang.simukraft.utils.NPCDataManager;
 import com.xiaoliang.simukraft.utils.NPCEntityLocator;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraftforge.network.NetworkEvent;
@@ -454,6 +457,10 @@ public class EmploymentCommandPacket {
         npc.setWorkStatus(WorkStatus.WORKING);
         npc.setJob(npcJob);
 
+        if (assignment.workBlockType() == WorkBlockType.BUILD_BOX && npc.level() instanceof ServerLevel serverLevel) {
+            spawnBuildBoxHireSuccessParticles(serverLevel, npc.blockPosition(), assignment.workplacePos());
+        }
+
         if (targetPos != null) {
             Simukraft.LOGGER.debug("[EmploymentCommandPacket] schedule hire arrival teleport to {}", targetPos);
             npc.scheduleHireArrivalTeleport(targetPos);
@@ -553,6 +560,46 @@ public class EmploymentCommandPacket {
                     NetworkManager.sendToPlayer(syncPacket, p)
             );
         }
+    }
+
+    private void spawnBuildBoxHireSuccessParticles(ServerLevel level, BlockPos npcPos, BlockPos workplacePos) {
+        if (level == null) {
+            return;
+        }
+
+        spawnHappyVillagerParticles(level, npcPos);
+        if (workplacePos != null && !workplacePos.equals(npcPos)) {
+            spawnHappyVillagerParticles(level, workplacePos);
+        }
+
+        BlockPos soundPos = workplacePos != null ? workplacePos : npcPos;
+        if (soundPos != null) {
+            level.playSound(
+                    null,
+                    soundPos,
+                    SoundEvents.VILLAGER_CELEBRATE,
+                    SoundSource.NEUTRAL,
+                    0.7F,
+                    1.0F
+            );
+        }
+    }
+
+    private void spawnHappyVillagerParticles(ServerLevel level, BlockPos pos) {
+        if (level == null || pos == null) {
+            return;
+        }
+        level.sendParticles(
+                ParticleTypes.HAPPY_VILLAGER,
+                pos.getX() + 0.5D,
+                pos.getY() + 1.1D,
+                pos.getZ() + 0.5D,
+                12,
+                0.45D,
+                0.35D,
+                0.45D,
+                0.02D
+        );
     }
 
     private CustomEntity tryRestoreNpcEntityForHire(MinecraftServer server,

@@ -41,6 +41,7 @@ public class CommercialGenericWorkService extends AbstractWorkService {
     public void restoreWorkState(CustomEntity npc, UUID npcUuid, ServerLevel level) {
         if (npc == null || level == null) return;
         if (npc.isTeleportingForWork()) return;
+        if (com.xiaoliang.simukraft.utils.SelfFeedingManager.shouldBlockWorkPull(npc)) return;
 
         if (npc.getWorkStatus() != WorkStatus.WORKING) {
             npc.setWorkStatus(WorkStatus.WORKING);

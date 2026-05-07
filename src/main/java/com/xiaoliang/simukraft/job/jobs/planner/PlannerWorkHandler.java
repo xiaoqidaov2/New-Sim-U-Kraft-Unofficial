@@ -35,6 +35,11 @@ public class PlannerWorkHandler {
     public void tick(Level level) {
         if (!(level instanceof ServerLevel serverLevel)) return;
 
+        if (npc.getWorkSubState() == WorkSubState.LUNCH_BREAK
+                || npc.getWorkSubState() == WorkSubState.BUYING_FOOD) {
+            return;
+        }
+
         if (LunchBreakManager.isLunchBreakTime(serverLevel.getDayTime())) {
             return;
         }
@@ -81,7 +86,9 @@ public class PlannerWorkHandler {
     }
 
     private boolean isNPCResting() {
-        return npc.getWorkSubState() == WorkSubState.RESTING;
+        return npc.getWorkSubState() == WorkSubState.RESTING
+                || npc.getWorkSubState() == WorkSubState.LUNCH_BREAK
+                || npc.getWorkSubState() == WorkSubState.BUYING_FOOD;
     }
 
     public boolean isWorking() {

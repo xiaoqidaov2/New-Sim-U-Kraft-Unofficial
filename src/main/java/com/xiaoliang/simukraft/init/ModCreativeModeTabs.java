@@ -46,6 +46,7 @@ public class ModCreativeModeTabs {
                         output.accept(nn(ModBlocks.PURPLE_LIGHT_BLOCK.get()));
                         output.accept(nn(ModBlocks.RAINBOW_LIGHT_BLOCK.get()));
                         output.accept(nn(ModBlocks.WHITE_CARPET.get()));
+                        output.accept(nn(ModBlocks.WOODEN_FENCE.get()));
                         // 便携城市核心
                         output.accept(nn(ModItems.PORTABLE_CITY_CORE.get()));
                         // 指南

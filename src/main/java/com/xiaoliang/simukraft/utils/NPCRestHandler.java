@@ -36,6 +36,9 @@ public class NPCRestHandler {
     private static final int MORNING_END_TIME = 0; // 早上结束时间（约6:00）
     private static final int MORNING_PREPARE_TIME = 23000; // 早上准备出发时间（约5:00）
     private static final int MAX_GOING_TO_WORK_TIME = 6000; // 最长去工作时间（游戏刻5分钟）
+    private static final int REST_START_SPREAD_TICKS = 200; // 将下班入口摊平到约10秒
+    private static final int MAX_REST_STARTS_PER_UPDATE = 8;
+    private static final int MAX_REST_STOPS_PER_UPDATE = 8;
     private static final int BED_SEARCH_HORIZONTAL_RADIUS = 8;
     private static final int BED_SEARCH_VERTICAL_RADIUS = 4;
     private static final long BED_REPATH_INTERVAL_TICKS = 40L;
@@ -466,8 +469,10 @@ public class NPCRestHandler {
         // 发送休息提示消息
         sendRestMessage(npc, level.getServer());
 
-        LOGGER.info("NPC {} 开始休息流程，准备返回住宅: {}，原状态: {}，原职业: {}", 
-            npc.getFullName(), homePos, resumeWorkStatus, currentJob);
+        if (ServerConfig.isDebugLogEnabled()) {
+            LOGGER.info("NPC {} 开始休息流程，准备返回住宅: {}，原状态: {}，原职业: {}",
+                npc.getFullName(), homePos, resumeWorkStatus, currentJob);
+        }
 
         // 开始寻路回家
         startPathfindingToHome(npc, homePos);
@@ -493,7 +498,9 @@ public class NPCRestHandler {
             npc.setConstructionTask(null);
         }
 
-        LOGGER.debug("NPC {} 的所有活动已停止，已设置为可移动状态", npc.getFullName());
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug("NPC {} 的所有活动已停止，已设置为可移动状态", npc.getFullName());
+        }
     }
 
     private static WorkStatus resolveResumeWorkStatus(CustomEntity npc, MinecraftServer server, String currentJob, WorkStatus currentWorkStatus) {
@@ -545,8 +552,10 @@ public class NPCRestHandler {
 
                 if (distance > 10.0 || (preferImmediateTeleport && distance > 3.0)) {
                     // 距离太远，直接传送
-                    LOGGER.info("[NPCRestHandler] NPC {} 距离工作岗位{}格，传送回工作岗位: {}",
-                        npc.getFullName(), distance, workPos);
+                    if (ServerConfig.isDebugLogEnabled()) {
+                        LOGGER.info("[NPCRestHandler] NPC {} 距离工作岗位{}格，传送回工作岗位: {}",
+                            npc.getFullName(), distance, workPos);
+                    }
                     spawnTeleportParticles(npc);
                     npc.teleportTo(workPos.getX() + 0.5, workPos.getY() + 1, workPos.getZ() + 0.5);
                     spawnTeleportParticles(npc);
@@ -555,8 +564,10 @@ public class NPCRestHandler {
                     restoreWorkStatus(npc, npcUuid, previousWorkStatus, previousJob, level);
                 } else if (distance > 3.0) {
                     // 距离适中，需要寻路过去
-                    LOGGER.info("[NPCRestHandler] NPC {} 距离工作岗位{}格，开始寻路去工作: {}",
-                        npc.getFullName(), distance, workPos);
+                    if (ServerConfig.isDebugLogEnabled()) {
+                        LOGGER.info("[NPCRestHandler] NPC {} 距离工作岗位{}格，开始寻路去工作: {}",
+                            npc.getFullName(), distance, workPos);
+                    }
 
                     // simukraft: 首先设置状态标签，让NPCBoundaryManager知道NPC要去工作了
                     npc.setStatusLabel("gui.npc.status.going_to_work");
@@ -585,13 +596,17 @@ public class NPCRestHandler {
                     // 发送起床提示消息
                     sendWakeUpMessage(npc, level.getServer());
 
-                    LOGGER.info("NPC {} 结束休息，正在前往工作岗位: {}，职业: {}",
-                        npc.getFullName(), workPos, previousJob);
+                    if (ServerConfig.isDebugLogEnabled()) {
+                        LOGGER.info("NPC {} 结束休息，正在前往工作岗位: {}，职业: {}",
+                            npc.getFullName(), workPos, previousJob);
+                    }
                     return; // 不立即恢复工作状态，等到达后再恢复
                 } else {
                     // 已经在工作位置附近，直接恢复工作状态
-                    LOGGER.info("[NPCRestHandler] NPC {} 已经在工作岗位附近({}格)，直接恢复工作",
-                        npc.getFullName(), distance);
+                    if (ServerConfig.isDebugLogEnabled()) {
+                        LOGGER.info("[NPCRestHandler] NPC {} 已经在工作岗位附近({}格)，直接恢复工作",
+                            npc.getFullName(), distance);
+                    }
                     restoreWorkStatus(npc, npcUuid, previousWorkStatus, previousJob, level);
                 }
             } else {
@@ -629,8 +644,10 @@ public class NPCRestHandler {
         // 发送起床提示消息
         sendWakeUpMessage(npc, level.getServer());
 
-        LOGGER.info("NPC {} 结束休息，恢复原状态: {}，原职业: {}",
-            npc.getFullName(), previousWorkStatus, previousJob);
+        if (ServerConfig.isDebugLogEnabled()) {
+            LOGGER.info("NPC {} 结束休息，恢复原状态: {}，原职业: {}",
+                npc.getFullName(), previousWorkStatus, previousJob);
+        }
 
         // 清理休息数据
         clearRestWorkflowData(npcUuid, true);
@@ -689,13 +706,17 @@ public class NPCRestHandler {
             }
         }
 
-        LOGGER.info("[NPCRestHandler] NPC {} 已恢复工作状态: {}，职业: {}",
-            npc.getFullName(), previousWorkStatus, previousJob);
+        if (ServerConfig.isDebugLogEnabled()) {
+            LOGGER.info("[NPCRestHandler] NPC {} 已恢复工作状态: {}，职业: {}",
+                npc.getFullName(), previousWorkStatus, previousJob);
+        }
 
         // 清理数据 - 确保完全清理所有休息状态数据
         clearRestWorkflowData(npcUuid, true);
 
-        LOGGER.info("[NPCRestHandler] NPC {} 休息状态数据已完全清理，标签将恢复正常显示", npc.getFullName());
+        if (ServerConfig.isDebugLogEnabled()) {
+            LOGGER.info("[NPCRestHandler] NPC {} 休息状态数据已完全清理，标签将恢复正常显示", npc.getFullName());
+        }
     }
 
     private static void restoreJobSpecificWorkState(CustomEntity npc, UUID npcUuid, String previousJob, ServerLevel level) {
@@ -991,6 +1012,9 @@ public class NPCRestHandler {
     private static void updateRestStatusInternal(ServerLevel level, List<CustomEntity> npcs) {
         if (level == null || npcs == null || npcs.isEmpty()) return;
 
+        int startedRestCount = 0;
+        int stoppedRestCount = 0;
+
         for (CustomEntity npc : npcs) {
             if (npc == null || !npc.isAlive()) continue;
 
@@ -1017,17 +1041,26 @@ public class NPCRestHandler {
 
             if (shouldStartResting(level, npc)) {
                 // 应该开始休息 - 所有NPC都进入休息状态（优先级最高）
+                if (restData == null) {
+                    if (!isRestStartWindowOpen(level, npcUuid) || startedRestCount >= MAX_REST_STARTS_PER_UPDATE) {
+                        continue;
+                    }
+                }
 
                 // 首先检查是否正在去工作，如果是则取消
                 if (workData != null) {
                     // 正在去工作的路上，但到休息时间了，取消去工作，改为回家休息
-                    LOGGER.info("[NPCRestHandler] NPC {} 正在去工作，但到休息时间了，优先回家休息", npc.getFullName());
+                    if (ServerConfig.isDebugLogEnabled()) {
+                        LOGGER.info("[NPCRestHandler] NPC {} 正在去工作，但到休息时间了，优先回家休息", npc.getFullName());
+                    }
                     goingToWorkNPCs.remove(npcUuid);
                     enqueueMainThreadLevelTask(level, () -> npc.getNavigation().stop(), "StopNavigation-" + npcUuid);
                 }
 
                 if (restData == null && npc.getWorkStatus() == WorkStatus.WORKING) {
-                    LOGGER.info("[NPCRestHandler] NPC {} 正在工作，但到休息时间了，停止工作并回家", npc.getFullName());
+                    if (ServerConfig.isDebugLogEnabled()) {
+                        LOGGER.info("[NPCRestHandler] NPC {} 正在工作，但到休息时间了，停止工作并回家", npc.getFullName());
+                    }
                     // 保存当前工作状态以便明天恢复
                     npcPreviousWorkStatus.put(npcUuid, WorkStatus.WORKING);
                     npcPreviousJob.put(npcUuid, npc.getJob());
@@ -1036,8 +1069,10 @@ public class NPCRestHandler {
                     if ("builder".equals(npc.getJob()) && npc.getConstructionTask() != null) {
                         if (npc.getServer() != null) {
                             com.xiaoliang.simukraft.job.jobs.builder.BuilderWorkService.INSTANCE.saveConstructionTask(npc.getServer(), npc);
-                            LOGGER.info("[NPCRestHandler] NPC {} 保存建造任务到JSON: {}",
-                                npc.getFullName(), npc.getConstructionTask().getBuildingName());
+                            if (ServerConfig.isDebugLogEnabled()) {
+                                LOGGER.info("[NPCRestHandler] NPC {} 保存建造任务到JSON: {}",
+                                    npc.getFullName(), npc.getConstructionTask().getBuildingName());
+                            }
                         }
                     }
 
@@ -1054,8 +1089,11 @@ public class NPCRestHandler {
 
                 if (restData == null) {
                     // NPC还没有开始休息，开始休息流程
-                    LOGGER.info("[NPCRestHandler] 尝试让NPC {} 开始休息", npc.getFullName());
+                    if (ServerConfig.isDebugLogEnabled()) {
+                        LOGGER.info("[NPCRestHandler] 尝试让NPC {} 开始休息", npc.getFullName());
+                    }
                     enqueueMainThreadLevelTask(level, () -> startResting(npc, level), "StartResting-" + npcUuid);
+                    startedRestCount++;
                 } else {
                     // NPC已经在休息中，更新休息状态
                     updateRestingNPC(npc, restData, level);
@@ -1063,7 +1101,11 @@ public class NPCRestHandler {
             } else if (shouldStopResting(level, npc)) {
                 // 应该结束休息（工作开始时间）
                 if (restData != null) {
+                    if (stoppedRestCount >= MAX_REST_STOPS_PER_UPDATE) {
+                        continue;
+                    }
                     enqueueMainThreadLevelTask(level, () -> stopResting(npc, level), "StopResting-" + npcUuid);
+                    stoppedRestCount++;
                 }
 
                 // 更新正在去工作的NPC（检查是否超时需要传送）
@@ -1072,6 +1114,23 @@ public class NPCRestHandler {
                 }
             }
         }
+
+        PerformanceMonitor.recordValue("rest.startsQueued", startedRestCount);
+        PerformanceMonitor.recordValue("rest.stopsQueued", stoppedRestCount);
+        PerformanceMonitor.recordValue("rest.active", restingNPCs.size());
+        PerformanceMonitor.recordValue("rest.goingToWork", goingToWorkNPCs.size());
+    }
+
+    private static boolean isRestStartWindowOpen(ServerLevel level, UUID npcUuid) {
+        if (level == null || npcUuid == null) {
+            return true;
+        }
+        long timeOfDay = level.getDayTime() % 24000L;
+        if (timeOfDay < EVENING_START_TIME || timeOfDay >= EVENING_START_TIME + REST_START_SPREAD_TICKS) {
+            return true;
+        }
+        long offset = Math.floorMod(npcUuid.hashCode(), REST_START_SPREAD_TICKS);
+        return timeOfDay - EVENING_START_TIME >= offset;
     }
 
     private static void enqueueMainThreadLevelTask(ServerLevel level, Runnable task, String taskName) {
@@ -1122,7 +1181,9 @@ public class NPCRestHandler {
 
         // 确保NPC可以移动（每次更新都检查）
         if (npc.isWorking()) {
-            LOGGER.info("[NPCRestHandler] NPC {} isWorking=true，设置为false以允许移动", npc.getFullName());
+            if (ServerConfig.isDebugLogEnabled()) {
+                LOGGER.info("[NPCRestHandler] NPC {} isWorking=true，设置为false以允许移动", npc.getFullName());
+            }
             npc.setWorking(false);
             npc.setNoAi(false);
         }
@@ -1140,7 +1201,9 @@ public class NPCRestHandler {
 
         // 如果距离超过50格，直接传送回家并添加粒子效果
         if (distance > 50.0) {
-            LOGGER.info("[NPCRestHandler] NPC {} 距离家{}格，超过50格，直接传送回家", npc.getFullName(), distance);
+            if (ServerConfig.isDebugLogEnabled()) {
+                LOGGER.info("[NPCRestHandler] NPC {} 距离家{}格，超过50格，直接传送回家", npc.getFullName(), distance);
+            }
             teleportNPCHomeWithEffects(npc, homePos);
             markArrivedHome(npc, restData);
             return;
@@ -1149,8 +1212,10 @@ public class NPCRestHandler {
         // 检查是否超过强制传送时间（19:00还没到家则传送）
         long dayTime = level.getDayTime() % 24000L;
         if (dayTime >= EVENING_FORCE_TELEPORT_TIME) {
-            LOGGER.info("[NPCRestHandler] NPC {} 超过19:00仍未到家（当前时间：{}），强制传送回家", 
-                npc.getFullName(), dayTime);
+            if (ServerConfig.isDebugLogEnabled()) {
+                LOGGER.info("[NPCRestHandler] NPC {} 超过19:00仍未到家（当前时间：{}），强制传送回家",
+                    npc.getFullName(), dayTime);
+            }
             teleportNPCHomeWithEffects(npc, homePos);
             markArrivedHome(npc, restData);
             return;
@@ -1159,20 +1224,26 @@ public class NPCRestHandler {
         // 如果距离小于3格，认为已到达
         if (distance < 3.0) {
             markArrivedHome(npc, restData);
-            LOGGER.info("NPC {} 已到达住宅，开始休息", npc.getFullName());
+            if (ServerConfig.isDebugLogEnabled()) {
+                LOGGER.info("NPC {} 已到达住宅，开始休息", npc.getFullName());
+            }
         } else {
             // 检查是否需要重新寻路
             Boolean isPathfinding = npcPathfindingStatus.get(npc.getUUID());
             if (isPathfinding == null || !isPathfinding) {
                 // 如果距离很近（小于10格）但寻路失败，直接传送回家
                 if (distance < 10.0) {
-                    LOGGER.info("[NPCRestHandler] NPC {} 距离家{}格（小于10格）但寻路失败，直接传送回家", 
-                        npc.getFullName(), distance);
+                    if (ServerConfig.isDebugLogEnabled()) {
+                        LOGGER.info("[NPCRestHandler] NPC {} 距离家{}格（小于10格）但寻路失败，直接传送回家",
+                            npc.getFullName(), distance);
+                    }
                     teleportNPCHomeWithEffects(npc, homePos);
                     markArrivedHome(npc, restData);
                 } else {
                     // 重新启动寻路
-                    LOGGER.info("[NPCRestHandler] NPC {} 重新启动寻路回家，当前距离: {}", npc.getFullName(), distance);
+                    if (ServerConfig.isDebugLogEnabled()) {
+                        LOGGER.info("[NPCRestHandler] NPC {} 重新启动寻路回家，当前距离: {}", npc.getFullName(), distance);
+                    }
                     startPathfindingToHome(npc, homePos);
                 }
             }
@@ -1198,7 +1269,9 @@ public class NPCRestHandler {
         // 在目的地生成传送粒子效果
         spawnTeleportParticles(npc);
 
-        LOGGER.info("[NPCRestHandler] NPC {} 已传送回家并添加粒子效果", npc.getFullName());
+        if (ServerConfig.isDebugLogEnabled()) {
+            LOGGER.info("[NPCRestHandler] NPC {} 已传送回家并添加粒子效果", npc.getFullName());
+        }
     }
 
     private static void markArrivedHome(CustomEntity npc, RestData restData) {
@@ -1220,7 +1293,7 @@ public class NPCRestHandler {
         net.minecraft.util.RandomSource random = npc.getRandom();
 
         // 生成末影珍珠传送粒子效果
-        for (int i = 0; i < 30; i++) {
+        for (int i = 0; i < 12; i++) {
             double x = pos.x + (random.nextDouble() - 0.5);
             double y = pos.y + random.nextDouble() * 2.0;
             double z = pos.z + (random.nextDouble() - 0.5);
@@ -1235,7 +1308,7 @@ public class NPCRestHandler {
         }
 
         // 生成一些烟雾粒子
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 4; i++) {
             double x = pos.x + (random.nextDouble() - 0.5) * 0.5;
             double y = pos.y + random.nextDouble();
             double z = pos.z + (random.nextDouble() - 0.5) * 0.5;
@@ -2166,8 +2239,10 @@ public class NPCRestHandler {
 
         // 如果已经到上班时间(6:00)还没到达，或者已经走了超过5分钟，直接传送
         if (currentDayTime >= MORNING_END_TIME && currentDayTime < EVENING_START_TIME && timeSpent > MAX_GOING_TO_WORK_TIME) {
-            LOGGER.info("[NPCRestHandler] NPC {} 去工作超时（已花费{}游戏刻），直接传送到工作位置: {}",
-                npc.getFullName(), timeSpent, workPos);
+            if (ServerConfig.isDebugLogEnabled()) {
+                LOGGER.info("[NPCRestHandler] NPC {} 去工作超时（已花费{}游戏刻），直接传送到工作位置: {}",
+                    npc.getFullName(), timeSpent, workPos);
+            }
 
             // 停止移动
             npc.getNavigation().stop();
@@ -2189,8 +2264,10 @@ public class NPCRestHandler {
         PathNavigation navigation = npc.getNavigation();
         if (!navigation.isInProgress()) {
             // 寻路中断，重新启动
-            LOGGER.info("[NPCRestHandler] NPC {} 寻路中断，重新寻路到工作位置，当前距离: {}格",
-                npc.getFullName(), distance);
+            if (ServerConfig.isDebugLogEnabled()) {
+                LOGGER.info("[NPCRestHandler] NPC {} 寻路中断，重新寻路到工作位置，当前距离: {}格",
+                    npc.getFullName(), distance);
+            }
             startPathfindingToWork(npc, workPos);
         }
     }

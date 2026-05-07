@@ -39,8 +39,8 @@ public final class SelfFeedingManager {
             return;
         }
 
-        for (var entity : level.getAllEntities()) {
-            if (!(entity instanceof CustomEntity npc)) {
+        for (CustomEntity npc : NPCTaskScheduler.getNPCsInLevel(level)) {
+            if (npc == null || !npc.isAlive()) {
                 continue;
             }
 
@@ -74,6 +74,14 @@ public final class SelfFeedingManager {
     }
 
     public static boolean isSelfFeedingActive(@Nullable CustomEntity npc) {
+        return npc != null && npc.getWorkSubState() == WorkSubState.BUYING_FOOD;
+    }
+
+    /**
+     * 统一判断是否应当暂停所有"拉回工作点/恢复工作控制器"逻辑。
+     * 目前主要用于自行买饭阶段，避免工作方块与买饭寻路互相抢控制权。
+     */
+    public static boolean shouldBlockWorkPull(@Nullable CustomEntity npc) {
         return npc != null && npc.getWorkSubState() == WorkSubState.BUYING_FOOD;
     }
 
@@ -206,6 +214,12 @@ public final class SelfFeedingManager {
         }
 
         if ("builder".equals(previousJob)) {
+            com.xiaoliang.simukraft.job.jobs.builder.BuilderWorkService.INSTANCE.restoreWorkState(npc, npcId, level);
+            return;
+        }
+
+        if ("planner".equals(previousJob)) {
+            com.xiaoliang.simukraft.job.jobs.planner.PlannerWorkService.INSTANCE.restoreWorkState(npc, npcId, level);
             return;
         }
 
@@ -262,8 +276,17 @@ public final class SelfFeedingManager {
 
     @Nullable
     private static BlockPos findWorkPositionByJob(UUID npcId, MinecraftServer server, String job) {
-        if (job == null || server == null || npcId == null) {
+        if (job == null || job.isBlank() || server == null || npcId == null) {
             return null;
+        }
+
+        BlockPos industrialPos = findIndustrialWorkPosition(npcId, server, job);
+        if (industrialPos != null) {
+            return industrialPos;
+        }
+
+        if (com.xiaoliang.simukraft.building.CommercialBuildingManager.isCommercialJobType(job)) {
+            return findCommercialWorkPosition(npcId, server);
         }
 
         return switch (job) {
@@ -271,9 +294,17 @@ public final class SelfFeedingManager {
             case "planner" -> findPlannerWorkPosition(npcId, server);
             case "farmer" -> findFarmerWorkPosition(npcId);
             case "warehouse_manager" -> findWarehouseWorkPosition(npcId, server);
-            case "industrial" -> findIndustrialWorkPosition(npcId, server);
-            default -> findCommercialWorkPosition(npcId, server);
+            default -> findFallbackWorkPosition(npcId, server);
         };
+    }
+
+    @Nullable
+    private static BlockPos findFallbackWorkPosition(UUID npcId, MinecraftServer server) {
+        BlockPos commercialPos = findCommercialWorkPosition(npcId, server);
+        if (commercialPos != null) {
+            return commercialPos;
+        }
+        return findIndustrialWorkPosition(npcId, server, null);
     }
 
     @Nullable
@@ -325,11 +356,17 @@ public final class SelfFeedingManager {
     }
 
     @Nullable
-    private static BlockPos findIndustrialWorkPosition(UUID npcId, MinecraftServer server) {
+    private static BlockPos findIndustrialWorkPosition(UUID npcId, MinecraftServer server, @Nullable String jobType) {
         var hiredEmployees = com.xiaoliang.simukraft.world.IndustrialHiredData.loadHiredEmployees(server);
         for (var entry : hiredEmployees.entrySet()) {
             var hireInfo = entry.getValue();
-            if (hireInfo != null && hireInfo.getNpcUuid().equals(npcId)) {
+            if (hireInfo == null || !hireInfo.getNpcUuid().equals(npcId)) {
+                continue;
+            }
+            if (jobType != null && !jobType.equals(hireInfo.getJobType())) {
+                continue;
+            }
+            if (entry.getKey() != null) {
                 return entry.getKey();
             }
         }

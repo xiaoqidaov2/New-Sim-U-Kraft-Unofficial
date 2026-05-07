@@ -264,6 +264,7 @@ public class BuilderWorkService extends AbstractWorkService {
     @Override
     public void restoreWorkState(CustomEntity npc, UUID npcUuid, ServerLevel level) {
         if (npc == null || npcUuid == null || level == null) return;
+        if (com.xiaoliang.simukraft.utils.SelfFeedingManager.shouldBlockWorkPull(npc)) return;
 
         if (!"builder".equals(npc.getJob())) {
             npc.setJob("builder");

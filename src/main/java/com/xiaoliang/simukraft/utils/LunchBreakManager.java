@@ -34,6 +34,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @SuppressWarnings("null")
 public class LunchBreakManager {
+    private static final long LUNCH_BREAK_UPDATE_INTERVAL_TICKS = 5L;
 
     public static final int LUNCH_BREAK_START = 6000;
     public static final int LUNCH_BREAK_END = 7000;
@@ -412,11 +413,16 @@ public class LunchBreakManager {
 
     public static void handleLunchBreak(ServerLevel level) {
         if (level == null) return;
+        if (level.getGameTime() % LUNCH_BREAK_UPDATE_INTERVAL_TICKS != 0L) {
+            return;
+        }
 
         long dayTime = level.getDayTime();
+        int processedNpcs = 0;
 
-        for (var entity : level.getAllEntities()) {
-            if (!(entity instanceof CustomEntity npc)) continue;
+        for (CustomEntity npc : NPCTaskScheduler.getNPCsInLevel(level)) {
+            if (npc == null || !npc.isAlive()) continue;
+            processedNpcs++;
 
             restoreLunchBreakState(npc);
 
@@ -431,6 +437,8 @@ public class LunchBreakManager {
                 endLunchBreak(npc, level);
             }
         }
+
+        PerformanceMonitor.recordValue("lunch.processedNpcs", processedNpcs);
     }
 
     @Nullable

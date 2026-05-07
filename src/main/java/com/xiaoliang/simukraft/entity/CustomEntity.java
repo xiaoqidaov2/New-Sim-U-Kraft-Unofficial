@@ -974,9 +974,10 @@ public class CustomEntity extends PathfinderMob {
 
         // 处理建造任务
         if (!this.level().isClientSide && workStatus == WorkStatus.WORKING && constructionTask != null) {
-            // simukraft: 午休状态暂停建造（仿造休息中的写法）
-            if (getWorkSubState() == WorkSubState.LUNCH_BREAK) {
-                return; // 午休期间不建造
+            // simukraft: 午休和买饭期间暂停建造，避免插队吃饭时继续偷偷施工
+            if (getWorkSubState() == WorkSubState.LUNCH_BREAK
+                    || getWorkSubState() == WorkSubState.BUYING_FOOD) {
+                return;
             }
 
             if (!constructionTask.isCompleted() && constructionTask.hasNextBlock()) {

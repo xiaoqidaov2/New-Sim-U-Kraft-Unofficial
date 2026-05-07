@@ -103,7 +103,9 @@ public class ServerTickHandler {
 
             // 使用多线程调度器更新NPC休息状态（降低频率）
             if (tickCounter % REST_UPDATE_INTERVAL == 0) {
+                long restScheduleStart = PerformanceMonitor.beginSection();
                 submitRestStatusTasks(server);
+                PerformanceMonitor.endSection(overworld, "server.restScheduler", restScheduleStart);
             }
         }
     }
@@ -142,6 +144,7 @@ public class ServerTickHandler {
         List<CustomEntity> allNPCs = NPCTaskScheduler.getAllNPCs(server);
 
         if (allNPCs.isEmpty()) return;
+        PerformanceMonitor.recordValue("restScheduler.allNpcs", allNPCs.size());
 
         // 将NPC按世界分组
         Map<ServerLevel, List<CustomEntity>> npcsByLevel = new ConcurrentHashMap<>();
@@ -150,6 +153,7 @@ public class ServerTickHandler {
                 npcsByLevel.computeIfAbsent(level, k -> new java.util.ArrayList<>()).add(npc);
             }
         }
+        PerformanceMonitor.recordValue("restScheduler.levelGroups", npcsByLevel.size());
 
         // 休息状态涉及导航、传送、实体状态写入，统一在主线程推进。
         for (Map.Entry<ServerLevel, List<CustomEntity>> entry : npcsByLevel.entrySet()) {

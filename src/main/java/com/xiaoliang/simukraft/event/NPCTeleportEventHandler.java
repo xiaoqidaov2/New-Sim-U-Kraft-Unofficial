@@ -35,6 +35,9 @@ public class NPCTeleportEventHandler {
                 if (npc == null || !npc.isAlive() || npc.isTeleportingForWork()) {
                     continue;
                 }
+                if (com.xiaoliang.simukraft.utils.SelfFeedingManager.shouldBlockWorkPull(npc)) {
+                    continue;
+                }
                 String job = npc.getJob();
                 if ("farmer".equals(job)) {
                     handleFarmerTeleport(npc, level);
@@ -48,6 +51,9 @@ public class NPCTeleportEventHandler {
      */
     private static void handleFarmerTeleport(CustomEntity npc, ServerLevel level) {
         if (npc.isUsingCustomPathfinder()) {
+            return;
+        }
+        if (com.xiaoliang.simukraft.utils.SelfFeedingManager.shouldBlockWorkPull(npc)) {
             return;
         }
         BlockPos farmlandBoxPos = com.xiaoliang.simukraft.world.FarmlandHiredData.getFarmlandPosByNpc(npc.getUUID());

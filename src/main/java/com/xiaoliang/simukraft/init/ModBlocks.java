@@ -76,6 +76,10 @@ public class ModBlocks {
     public static final RegistryObject<Item> WHITE_CARPET_ITEM = ModItems.ITEMS.register("white_carpet",
             () -> new BlockItem(nn(WHITE_CARPET.get()), new Item.Properties()));
 
+    public static final RegistryObject<Block> WOODEN_FENCE = BLOCKS.register("wooden_fence", WoodenFenceBlock::new);
+    public static final RegistryObject<Item> WOODEN_FENCE_ITEM = ModItems.ITEMS.register("wooden_fence",
+            () -> new BlockItem(nn(WOODEN_FENCE.get()), new Item.Properties()));
+
     // 物流盒服务端（仓库）
     public static final RegistryObject<Block> LOGISTICS_SERVER_BOX = BLOCKS.register("logistics_server_box", LogisticsServerBlock::new);
     public static final RegistryObject<Item> LOGISTICS_SERVER_BOX_ITEM = ModItems.ITEMS.register("logistics_server_box",

@@ -47,6 +47,7 @@ public class WarehouseManagerWorkService extends AbstractWorkService {
     public void restoreWorkState(CustomEntity npc, UUID npcUuid, ServerLevel level) {
         if (npc == null || npcUuid == null || level == null) return;
         if (npc.isTeleportingForWork()) return;
+        if (com.xiaoliang.simukraft.utils.SelfFeedingManager.shouldBlockWorkPull(npc)) return;
 
         if (npc.getWorkStatus() != WorkStatus.WORKING) {
             npc.setWorkStatus(WorkStatus.WORKING);
@@ -65,6 +66,9 @@ public class WarehouseManagerWorkService extends AbstractWorkService {
 
     private void correctWorkplaceDrift(CustomEntity npc, UUID npcUuid, ServerLevel level) {
         if (npc == null || npc.isTeleportingForWork()) {
+            return;
+        }
+        if (com.xiaoliang.simukraft.utils.SelfFeedingManager.shouldBlockWorkPull(npc)) {
             return;
         }
         Map<BlockPos, UUID> hiredManagers = LogisticsHiredData.getServerBoxHiredNpcs(level.getServer());
