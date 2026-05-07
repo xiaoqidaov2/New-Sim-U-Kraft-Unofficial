@@ -29,6 +29,7 @@ import net.minecraftforge.registries.ForgeRegistries;
  * 1. 首次启动：将JAR内的默认配置复制到 simukraftbuilding/commercial/
  * 2. 后续启动：从 simukraftbuilding/commercial/ 读取配置（允许用户修改）
  */
+@SuppressWarnings("null")
 public class CommercialBuildingManager {
     
     private static final Logger LOGGER = LogUtils.getLogger();
