@@ -103,7 +103,8 @@ public class SelectBuildingScreen extends LDLibMenuScreen {
                 clickData -> Minecraft.getInstance().setScreen(null)));
 
         int buttonY = 150;
-        int totalWidth = BUTTON_WIDTH * 5 + BUTTON_SPACING * 4;
+        int secondRowButtonY = buttonY + BUTTON_HEIGHT + BUTTON_SPACING;
+        int totalWidth = BUTTON_WIDTH * 4 + BUTTON_SPACING * 3;
         int startX = centerX - totalWidth / 2;
 
         rootGroup.addWidget(createButton(startX, buttonY, BUTTON_WIDTH, BUTTON_HEIGHT, "gui.category.residential",
@@ -112,10 +113,10 @@ public class SelectBuildingScreen extends LDLibMenuScreen {
                 clickData -> Minecraft.getInstance().setScreen(new BuildingListScreen("commercial", Minecraft.getInstance().screen, buildBoxPos))));
         rootGroup.addWidget(createButton(startX + (BUTTON_WIDTH + BUTTON_SPACING) * 2, buttonY, BUTTON_WIDTH, BUTTON_HEIGHT, "gui.category.industrial",
                 clickData -> Minecraft.getInstance().setScreen(new BuildingListScreen("industry", Minecraft.getInstance().screen, buildBoxPos))));
-        rootGroup.addWidget(createButton(startX + (BUTTON_WIDTH + BUTTON_SPACING) * 3, buttonY, BUTTON_WIDTH, BUTTON_HEIGHT, "gui.category.public",
-                clickData -> Minecraft.getInstance().setScreen(new BuildingListScreen("public", Minecraft.getInstance().screen, buildBoxPos))));
-        rootGroup.addWidget(createButton(startX + (BUTTON_WIDTH + BUTTON_SPACING) * 4, buttonY, BUTTON_WIDTH, BUTTON_HEIGHT, "gui.category.other",
+        rootGroup.addWidget(createButton(startX + (BUTTON_WIDTH + BUTTON_SPACING) * 3, buttonY, BUTTON_WIDTH, BUTTON_HEIGHT, "gui.category.other",
                 clickData -> Minecraft.getInstance().setScreen(new BuildingListScreen("other", Minecraft.getInstance().screen, buildBoxPos))));
+        rootGroup.addWidget(createButton(startX, secondRowButtonY, BUTTON_WIDTH, BUTTON_HEIGHT, "gui.category.public",
+                clickData -> Minecraft.getInstance().setScreen(new BuildingListScreen("public", Minecraft.getInstance().screen, buildBoxPos))));
 
         modularUI.widget(rootGroup);
         modularUI.initWidgets();
