@@ -672,6 +672,7 @@
   "gui.mod_config.save": "保存",
   "gui.mod_config.cancel": "取消",
   "gui.mod_config.reset": "重置",
+  "gui.mod_config.path_debug_always_show": "NPC寻路路径常显",
   "gui.mod_config.description": "锚点决定 HUD 的基础位置，偏移值可以微调",
 
   "gui.anchor.top_left": "左上",

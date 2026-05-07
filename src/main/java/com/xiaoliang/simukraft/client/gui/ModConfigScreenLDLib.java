@@ -11,9 +11,11 @@ import com.lowdragmc.lowdraglib.gui.widget.ButtonWidget;
 import com.lowdragmc.lowdraglib.gui.widget.ImageWidget;
 import com.lowdragmc.lowdraglib.gui.widget.WidgetGroup;
 import com.lowdragmc.lowdraglib.utils.Size;
+import com.xiaoliang.simukraft.client.config.ClientConfig;
 import com.xiaoliang.simukraft.client.gui.ldlib.LDLibMenuScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.api.distmarker.Dist;
@@ -38,7 +40,7 @@ public class ModConfigScreenLDLib extends LDLibMenuScreen {
 
     // 布局常量
     private static final int WINDOW_WIDTH = 280;
-    private static final int WINDOW_HEIGHT = 180;
+    private static final int WINDOW_HEIGHT = 200;
     private static final int HEADER_HEIGHT = 36;
     private static final int BUTTON_WIDTH = 200;
     private static final int BUTTON_HEIGHT = 28;
@@ -77,6 +79,15 @@ public class ModConfigScreenLDLib extends LDLibMenuScreen {
 
     private void closeScreen() {
         onClose();
+    }
+
+    private static String tr(String key) {
+        return I18n.get(key);
+    }
+
+    private static String getPathDebugToggleText() {
+        return tr("gui.mod_config.path_debug_always_show") + "：" +
+                tr(ClientConfig.isAlwaysShowNpcPathDebug() ? "gui.switch.on" : "gui.switch.off");
     }
 
     private static class ConfigUIHolder implements IUIHolder {
@@ -125,18 +136,30 @@ public class ModConfigScreenLDLib extends LDLibMenuScreen {
             int startY = HEADER_HEIGHT + 30;
 
             parent.addWidget(createButton(centerX, startY, BUTTON_WIDTH, BUTTON_HEIGHT,
-                    "调整HUD位置", clickData -> {
+                    tr("gui.hud_editor.title"), clickData -> {
                         if (currentInstance != null) {
                             currentInstance.openHUDEditor();
                         }
                     }));
 
-            parent.addWidget(createButton(centerX, startY + BUTTON_HEIGHT + 20, BUTTON_WIDTH, BUTTON_HEIGHT,
-                    "返回", clickData -> {
+            ButtonWidget[] pathDebugButton = new ButtonWidget[1];
+            pathDebugButton[0] = createButton(centerX, startY + BUTTON_HEIGHT + 20, BUTTON_WIDTH, BUTTON_HEIGHT,
+                    getPathDebugToggleText(), clickData -> updatePathDebugToggle(pathDebugButton[0]));
+            parent.addWidget(pathDebugButton[0]);
+
+            parent.addWidget(createButton(centerX, startY + (BUTTON_HEIGHT + 20) * 2, BUTTON_WIDTH, BUTTON_HEIGHT,
+                    tr("gui.back"), clickData -> {
                         if (currentInstance != null) {
                             currentInstance.closeScreen();
                         }
                     }));
+        }
+
+        private void updatePathDebugToggle(ButtonWidget button) {
+            boolean nextEnabled = !ClientConfig.isAlwaysShowNpcPathDebug();
+            ClientConfig.setAlwaysShowNpcPathDebug(nextEnabled);
+            NPCPathDebugRenderer.refreshVisibilityState();
+            applyButtonStyle(button, getPathDebugToggleText());
         }
 
         private ButtonWidget createButton(int x, int y, int width, int height,
@@ -146,27 +169,26 @@ public class ModConfigScreenLDLib extends LDLibMenuScreen {
             button.setSelfPosition(x, y);
             button.setSize(width, height);
             button.setOnPressCallback(callback);
+            applyButtonStyle(button, text);
+            return button;
+        }
 
-            // 正常状态背景+文字
+        private void applyButtonStyle(ButtonWidget button, String text) {
             TextTexture normalText = new TextTexture(text, COLOR_TEXT_NORMAL);
             normalText.setType(TextTexture.TextType.NORMAL);
-            normalText.setWidth(width);
-            button.setBackground(new GuiTextureGroup(
+            normalText.setWidth(button.getSize().width);
+            button.setButtonTexture(new GuiTextureGroup(
                     new ColorRectTexture(COLOR_BUTTON_BG).setRadius(4),
-                    new ColorBorderTexture(1, COLOR_WINDOW_BORDER).setRadius(4),
-                    normalText
-            ));
+                    new ColorBorderTexture(1, COLOR_WINDOW_BORDER).setRadius(4)
+            ), normalText);
 
-            // 悬停状态
             TextTexture hoverText = new TextTexture(text, COLOR_TEXT_TITLE);
             hoverText.setType(TextTexture.TextType.NORMAL);
-            hoverText.setWidth(width);
+            hoverText.setWidth(button.getSize().width);
             button.setHoverTexture(new GuiTextureGroup(
                     new ColorRectTexture(COLOR_BUTTON_HOVER).setRadius(4),
-                    new ColorBorderTexture(1, COLOR_WINDOW_BORDER).setRadius(4),
-                    hoverText
-            ));
-            return button;
+                    new ColorBorderTexture(1, COLOR_WINDOW_BORDER).setRadius(4)
+            ), hoverText);
         }
 
         @Override public boolean isInvalid() { return false; }

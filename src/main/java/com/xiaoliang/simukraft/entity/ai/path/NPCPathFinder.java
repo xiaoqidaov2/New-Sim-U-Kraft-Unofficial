@@ -10,6 +10,7 @@ import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.FenceBlock;
 import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.IronBarsBlock;
+import net.minecraft.world.level.block.CarpetBlock;
 import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
@@ -31,23 +32,32 @@ import java.util.Set;
 public class NPCPathFinder {
     private static final int MAX_ITERATIONS = 5000;
     private static final int MAX_FALL_SCAN = 6;
-    private static final double COST_STRAIGHT = 1.0D;
-    private static final double COST_DIAGONAL = 1.45D;
-    private static final double COST_JUMP = 2.2D;
-    private static final double COST_FALL = 1.35D;
-    private static final double COST_DOOR = 1.15D;
     private static final double COST_DANGER = 100.0D;
     private static final double COST_DANGER_NEARBY = 30.0D;
     private static final double COST_DANGER_ADJACENT = 15.0D;
+    private static final double COST_BARRIER_NEARBY = 10.0D;
+    private static final double COST_BARRIER_ADJACENT = 24.0D;
+    private static final double COST_BARRIER_ON_NODE = 36.0D;
+    private static final double COST_BARRIER_COVER_DISCOUNT = 0.35D;
     private static final int DANGER_CHECK_RADIUS = 2;
     private static final double WALK_STEP_HEIGHT = 12.0D / 16.0D;
     private static final double MAX_ASCEND_HEIGHT = 19.0D / 16.0D;
+    private static final double MAX_JUMP_OVER_HEIGHT = 1.625D;
+    private static final double MAX_JUMP_OVER_LANDING_DELTA = 1.0D;
     private static final double COLLISION_EPSILON = 1.0E-5D;
+    private static final double DEFAULT_BODY_RADIUS = 0.3D;
+    private static final double OPEN_TRAPDOOR_BODY_RADIUS = 0.24D;
+    private static final double OPEN_TRAPDOOR_PANEL_SIDE_RADIUS = 0.14D;
+    private static final double OPEN_TRAPDOOR_STAND_BIAS = 0.18D;
+    private static final double STAND_POSITION_MIN_MARGIN = 0.18D;
+    private static final double STAND_POSITION_MAX_MARGIN = 0.82D;
 
     private final ServerLevel level;
+    private final TerrainCostClassifier terrainCostClassifier;
 
     public NPCPathFinder(ServerLevel level) {
         this.level = level;
+        this.terrainCostClassifier = new TerrainCostClassifier(level);
     }
 
     public BlockPos normalizeStartPosition(BlockPos pos) {
@@ -60,6 +70,7 @@ public class NPCPathFinder {
     }
 
     public NPCPath findPath(BlockPos start, BlockPos end) {
+        PathCostRules costRules = PathCostConfigLoader.getRules();
         BlockPos normalizedStart = normalizeStartPosition(start);
         BlockPos normalizedEnd = normalizeTargetPosition(end);
         if (normalizedStart == null || normalizedEnd == null) {
@@ -91,7 +102,7 @@ public class NPCPathFinder {
                 continue;
             }
             if (isAtTarget(current, targetNode)) {
-                NPCPath path = reconstructPath(current, normalizedStart, normalizedEnd);
+                NPCPath path = reconstructPath(current, normalizedStart, normalizedEnd, costRules);
                 //logPathComposition(normalizedStart, normalizedEnd, path);
                 return path;
             }
@@ -102,7 +113,9 @@ public class NPCPathFinder {
                     continue;
                 }
 
-                double tentativeGCost = current.gCost + calculateMoveCost(current, neighbor);
+                PathCostBreakdown moveCostBreakdown = calculateMoveCostBreakdown(current, neighbor, costRules);
+                applyCostBreakdown(neighbor, moveCostBreakdown);
+                double tentativeGCost = current.gCost + moveCostBreakdown.totalCost();
                 NPCPathNode existingNode = nodeMap.get(neighbor.key);
                 if (existingNode == null) {
                     neighbor.gCost = tentativeGCost;
@@ -119,6 +132,9 @@ public class NPCPathFinder {
                     existingNode.type = neighbor.type;
                     existingNode.action = neighbor.action;
                     existingNode.setStandPosition(neighbor.standX, neighbor.standY, neighbor.standZ);
+                    existingNode.stepCost = neighbor.stepCost;
+                    existingNode.terrainCost = neighbor.terrainCost;
+                    existingNode.costReason = neighbor.costReason;
                     openSet.add(existingNode);
                 }
             }
@@ -142,6 +158,12 @@ public class NPCPathFinder {
                 NPCPathNode next = resolveHorizontalNeighbor(node, dx, dz);
                 if (next != null) {
                     neighbors.add(next);
+                }
+                if ((dx == 0) != (dz == 0)) {
+                    NPCPathNode jumpOver = resolveJumpOverNeighbor(node, dx, dz);
+                    if (jumpOver != null) {
+                        neighbors.add(jumpOver);
+                    }
                 }
             }
         }
@@ -176,6 +198,28 @@ public class NPCPathFinder {
             return createNeighbor(from, fall, NPCPathNode.NodeType.FALL);
         }
         return null;
+    }
+
+    private NPCPathNode resolveJumpOverNeighbor(NPCPathNode from, int dx, int dz) {
+        BlockPos obstaclePos = from.pos.offset(dx, 0, dz);
+        if (!isJumpOverObstacle(obstaclePos)) {
+            return null;
+        }
+
+        BlockPos landingColumn = obstaclePos.offset(dx, 0, dz);
+        NPCPathNode landingNode = findBestColumnNeighbor(from, landingColumn, false);
+        if (landingNode == null) {
+            return null;
+        }
+
+        double heightDelta = calculateSignedVerticalDistance(from, landingNode);
+        if (heightDelta > MAX_JUMP_OVER_LANDING_DELTA || heightDelta < -1.25D) {
+            return null;
+        }
+        if (!isJumpOverArcClear(obstaclePos, landingNode)) {
+            return null;
+        }
+        return copyNode(landingNode, NPCPathNode.NodeType.JUMP, NPCPathNode.MovementAction.JUMP_OVER);
     }
 
     private NPCPathNode findBestColumnNeighbor(NPCPathNode from, BlockPos column, boolean allowFall) {
@@ -230,6 +274,9 @@ public class NPCPathFinder {
         double dirZ = dz / length;
         double standX = supportPos.getX() + 0.5D + dirX * 0.18D;
         double standZ = supportPos.getZ() + 0.5D + dirZ * 0.18D;
+        TrapdoorStandAdjustment trapdoorAdjusted = adjustStandPositionForOpenTrapdoor(supportPos, standX, standZ);
+        standX = trapdoorAdjusted.standX;
+        standZ = trapdoorAdjusted.standZ;
         double standY = getHighestCollisionTopAt(supportPos, standX, standZ);
         if (standY == Double.NEGATIVE_INFINITY) {
             return candidate;
@@ -269,6 +316,8 @@ public class NPCPathFinder {
                 return 2.0D + heightDelta;
             case ASCEND:
                 return 3.0D + heightDelta;
+            case JUMP_OVER:
+                return 3.4D + heightDelta;
             case FALL:
                 return 4.0D + heightDelta;
             default:
@@ -523,6 +572,9 @@ public class NPCPathFinder {
                 double standX = blockPos.getX() + (region[0] + region[1]) * 0.5D;
                 double standY = blockPos.getY() + height;
                 double standZ = blockPos.getZ() + (region[2] + region[3]) * 0.5D;
+                TrapdoorStandAdjustment trapdoorAdjusted = adjustStandPositionForOpenTrapdoor(blockPos, standX, standZ);
+                standX = trapdoorAdjusted.standX;
+                standZ = trapdoorAdjusted.standZ;
                 BlockPos footNodePos = BlockPos.containing(standX, standY, standZ);
                 String key = NPCPathNode.createKey(standX, standY, standZ);
                 if ((nodePos == null || footNodePos.equals(nodePos)) && added.add(key)) {
@@ -814,14 +866,13 @@ public class NPCPathFinder {
     }
 
     private boolean hasHeadroomAt(BlockPos pos, double standX, double standY, double standZ) {
-        // NPC身体宽度约为0.6格，检查身体占据的整个区域
-        double bodyRadius = 0.3D;
-        int minX = (int) Math.floor(standX - bodyRadius);
-        int maxX = (int) Math.floor(standX + bodyRadius);
+        // 对打开的活板门使用更窄的通行判定，避免楼梯贴墙薄碰撞把整条路误判死。
+        int minX = (int) Math.floor(standX - DEFAULT_BODY_RADIUS);
+        int maxX = (int) Math.floor(standX + DEFAULT_BODY_RADIUS);
         int minY = (int) Math.floor(standY + COLLISION_EPSILON);
         int maxY = (int) Math.floor(standY + 1.8D - COLLISION_EPSILON);
-        int minZ = (int) Math.floor(standZ - bodyRadius);
-        int maxZ = (int) Math.floor(standZ + bodyRadius);
+        int minZ = (int) Math.floor(standZ - DEFAULT_BODY_RADIUS);
+        int maxZ = (int) Math.floor(standZ + DEFAULT_BODY_RADIUS);
 
         // menglannnn: 计算NPC站立的支撑方块位置
         BlockPos supportPos = BlockPos.containing(standX, standY - COLLISION_EPSILON, standZ);
@@ -846,10 +897,11 @@ public class NPCPathFinder {
                         boolean blocksHead = false;
                         for (AABB box : shape.toAabbs()) {
                             if (box.maxY > localMinY + 1.8D - COLLISION_EPSILON) {
-                                double npcMinX = standX - bodyRadius;
-                                double npcMaxX = standX + bodyRadius;
-                                double npcMinZ = standZ - bodyRadius;
-                                double npcMaxZ = standZ + bodyRadius;
+                                BodyCollisionBounds bodyBounds = getCollisionCheckBodyBounds(state, checkPos, standX, standZ);
+                                double npcMinX = bodyBounds.minX;
+                                double npcMaxX = bodyBounds.maxX;
+                                double npcMinZ = bodyBounds.minZ;
+                                double npcMaxZ = bodyBounds.maxZ;
                                 double boxMinX = checkPos.getX() + box.minX;
                                 double boxMaxX = checkPos.getX() + box.maxX;
                                 double boxMinZ = checkPos.getZ() + box.minZ;
@@ -871,10 +923,11 @@ public class NPCPathFinder {
 
                     for (AABB box : shape.toAabbs()) {
                         // 检查box是否与NPC身体区域在水平方向上有重叠
-                        double npcMinX = standX - bodyRadius;
-                        double npcMaxX = standX + bodyRadius;
-                        double npcMinZ = standZ - bodyRadius;
-                        double npcMaxZ = standZ + bodyRadius;
+                        BodyCollisionBounds bodyBounds = getCollisionCheckBodyBounds(state, checkPos, standX, standZ);
+                        double npcMinX = bodyBounds.minX;
+                        double npcMaxX = bodyBounds.maxX;
+                        double npcMinZ = bodyBounds.minZ;
+                        double npcMaxZ = bodyBounds.maxZ;
                         double boxMinX = checkPos.getX() + box.minX;
                         double boxMaxX = checkPos.getX() + box.maxX;
                         double boxMinZ = checkPos.getZ() + box.minZ;
@@ -892,6 +945,236 @@ public class NPCPathFinder {
         return true;
     }
 
+    private BodyCollisionBounds getCollisionCheckBodyBounds(BlockState state, BlockPos pos, double standX, double standZ) {
+        double minX = standX - DEFAULT_BODY_RADIUS;
+        double maxX = standX + DEFAULT_BODY_RADIUS;
+        double minZ = standZ - DEFAULT_BODY_RADIUS;
+        double maxZ = standZ + DEFAULT_BODY_RADIUS;
+        if (!isOpenTrapdoor(state)) {
+            return new BodyCollisionBounds(minX, maxX, minZ, maxZ);
+        }
+
+        double[] trapdoorBounds = getTrapdoorHorizontalBounds(state, pos);
+        if (trapdoorBounds == null) {
+            return new BodyCollisionBounds(standX - OPEN_TRAPDOOR_BODY_RADIUS, standX + OPEN_TRAPDOOR_BODY_RADIUS,
+                    standZ - OPEN_TRAPDOOR_BODY_RADIUS, standZ + OPEN_TRAPDOOR_BODY_RADIUS);
+        }
+
+        double thicknessX = trapdoorBounds[1] - trapdoorBounds[0];
+        double thicknessZ = trapdoorBounds[3] - trapdoorBounds[2];
+        if (thicknessX <= thicknessZ && thicknessX <= 0.25D) {
+            minZ = standZ - OPEN_TRAPDOOR_BODY_RADIUS;
+            maxZ = standZ + OPEN_TRAPDOOR_BODY_RADIUS;
+            if ((trapdoorBounds[0] + trapdoorBounds[1]) * 0.5D <= pos.getX() + 0.5D) {
+                minX = standX - OPEN_TRAPDOOR_PANEL_SIDE_RADIUS;
+            } else {
+                maxX = standX + OPEN_TRAPDOOR_PANEL_SIDE_RADIUS;
+            }
+        } else if (thicknessZ <= 0.25D) {
+            minX = standX - OPEN_TRAPDOOR_BODY_RADIUS;
+            maxX = standX + OPEN_TRAPDOOR_BODY_RADIUS;
+            if ((trapdoorBounds[2] + trapdoorBounds[3]) * 0.5D <= pos.getZ() + 0.5D) {
+                minZ = standZ - OPEN_TRAPDOOR_PANEL_SIDE_RADIUS;
+            } else {
+                maxZ = standZ + OPEN_TRAPDOOR_PANEL_SIDE_RADIUS;
+            }
+        } else {
+            minX = standX - OPEN_TRAPDOOR_BODY_RADIUS;
+            maxX = standX + OPEN_TRAPDOOR_BODY_RADIUS;
+            minZ = standZ - OPEN_TRAPDOOR_BODY_RADIUS;
+            maxZ = standZ + OPEN_TRAPDOOR_BODY_RADIUS;
+        }
+        return new BodyCollisionBounds(minX, maxX, minZ, maxZ);
+    }
+
+    private double[] getTrapdoorHorizontalBounds(BlockState state, BlockPos pos) {
+        VoxelShape shape = state.getCollisionShape(level, pos);
+        if (shape.isEmpty()) {
+            return null;
+        }
+        boolean found = false;
+        double minX = Double.POSITIVE_INFINITY;
+        double maxX = Double.NEGATIVE_INFINITY;
+        double minZ = Double.POSITIVE_INFINITY;
+        double maxZ = Double.NEGATIVE_INFINITY;
+        for (AABB box : shape.toAabbs()) {
+            found = true;
+            minX = Math.min(minX, pos.getX() + box.minX);
+            maxX = Math.max(maxX, pos.getX() + box.maxX);
+            minZ = Math.min(minZ, pos.getZ() + box.minZ);
+            maxZ = Math.max(maxZ, pos.getZ() + box.maxZ);
+        }
+        return found ? new double[] {minX, maxX, minZ, maxZ} : null;
+    }
+
+    private TrapdoorStandAdjustment adjustStandPositionForOpenTrapdoor(BlockPos supportPos, double standX, double standZ) {
+        double originalStandX = standX;
+        double originalStandZ = standZ;
+        double adjustedX = standX;
+        double adjustedZ = standZ;
+        Set<BlockPos> visited = new HashSet<>();
+        for (int dy = 0; dy <= 1; dy++) {
+            BlockPos layerPos = supportPos.above(dy);
+            BlockPos[] candidates = new BlockPos[] {
+                    layerPos,
+                    layerPos.north(),
+                    layerPos.south(),
+                    layerPos.east(),
+                    layerPos.west()
+            };
+            for (BlockPos candidate : candidates) {
+                if (!visited.add(candidate)) {
+                    continue;
+                }
+                BlockState state = level.getBlockState(candidate);
+                if (!isOpenTrapdoor(state)) {
+                    continue;
+                }
+                double[] bounds = getTrapdoorHorizontalBounds(state, candidate);
+                if (bounds == null) {
+                    continue;
+                }
+                double thicknessX = bounds[1] - bounds[0];
+                double thicknessZ = bounds[3] - bounds[2];
+                boolean overlapsX = adjustedX + DEFAULT_BODY_RADIUS > bounds[0] + COLLISION_EPSILON
+                        && adjustedX - DEFAULT_BODY_RADIUS < bounds[1] - COLLISION_EPSILON;
+                boolean overlapsZ = adjustedZ + DEFAULT_BODY_RADIUS > bounds[2] + COLLISION_EPSILON
+                        && adjustedZ - DEFAULT_BODY_RADIUS < bounds[3] - COLLISION_EPSILON;
+                if (!overlapsX || !overlapsZ) {
+                    continue;
+                }
+
+                double supportCenterX = supportPos.getX() + 0.5D;
+                double supportCenterZ = supportPos.getZ() + 0.5D;
+                if (thicknessX <= thicknessZ && thicknessX <= 0.25D) {
+                    double panelCenterX = (bounds[0] + bounds[1]) * 0.5D;
+                    adjustedX = panelCenterX <= supportCenterX
+                            ? Math.max(adjustedX, supportCenterX + OPEN_TRAPDOOR_STAND_BIAS)
+                            : Math.min(adjustedX, supportCenterX - OPEN_TRAPDOOR_STAND_BIAS);
+                } else if (thicknessZ <= 0.25D) {
+                    double panelCenterZ = (bounds[2] + bounds[3]) * 0.5D;
+                    adjustedZ = panelCenterZ <= supportCenterZ
+                            ? Math.max(adjustedZ, supportCenterZ + OPEN_TRAPDOOR_STAND_BIAS)
+                            : Math.min(adjustedZ, supportCenterZ - OPEN_TRAPDOOR_STAND_BIAS);
+                }
+            }
+        }
+        adjustedX = clamp(adjustedX, supportPos.getX() + STAND_POSITION_MIN_MARGIN, supportPos.getX() + STAND_POSITION_MAX_MARGIN);
+        adjustedZ = clamp(adjustedZ, supportPos.getZ() + STAND_POSITION_MIN_MARGIN, supportPos.getZ() + STAND_POSITION_MAX_MARGIN);
+        if (ServerConfig.isDebugLogEnabled()
+                && (Math.abs(adjustedX - originalStandX) > COLLISION_EPSILON || Math.abs(adjustedZ - originalStandZ) > COLLISION_EPSILON)) {
+            Simukraft.LOGGER.info("[NPCPathFinder][TrapdoorBias] support={} fromStand=({}, {}) adjustedStand=({}, {})",
+                    supportPos, originalStandX, originalStandZ, adjustedX, adjustedZ);
+        }
+        return new TrapdoorStandAdjustment(adjustedX, adjustedZ);
+    }
+
+    private double clamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private boolean isOpenTrapdoor(BlockState state) {
+        return state.getBlock() instanceof TrapDoorBlock && state.getValue(TrapDoorBlock.OPEN);
+    }
+
+    private static final class BodyCollisionBounds {
+        private final double minX;
+        private final double maxX;
+        private final double minZ;
+        private final double maxZ;
+
+        private BodyCollisionBounds(double minX, double maxX, double minZ, double maxZ) {
+            this.minX = minX;
+            this.maxX = maxX;
+            this.minZ = minZ;
+            this.maxZ = maxZ;
+        }
+    }
+
+    private static final class TrapdoorStandAdjustment {
+        private final double standX;
+        private final double standZ;
+
+        private TrapdoorStandAdjustment(double standX, double standZ) {
+            this.standX = standX;
+            this.standZ = standZ;
+        }
+    }
+
+    private boolean isJumpOverObstacle(BlockPos pos) {
+        BlockState state = level.getBlockState(pos);
+        if (state.isAir() || isDoorBlock(state) || isDangerous(state)) {
+            return false;
+        }
+
+        VoxelShape shape = state.getCollisionShape(level, pos);
+        if (shape.isEmpty()) {
+            return false;
+        }
+
+        double height = getCollisionHeight(state, pos);
+        if (height <= WALK_STEP_HEIGHT + COLLISION_EPSILON || height > MAX_JUMP_OVER_HEIGHT) {
+            return false;
+        }
+
+        BlockPos abovePos = pos.above();
+        BlockPos twoAbovePos = pos.above(2);
+        if (requiresJumpCoverToClear(state) && !isThinWalkableCover(level.getBlockState(abovePos), abovePos)) {
+            return false;
+        }
+        return isJumpOverCoverPassable(abovePos)
+                && level.getBlockState(twoAbovePos).getCollisionShape(level, twoAbovePos).isEmpty();
+    }
+
+    private boolean isJumpOverArcClear(BlockPos obstaclePos, NPCPathNode landingNode) {
+        if (landingNode == null || !hasHeadroomAt(landingNode.pos, landingNode.standX, landingNode.standY, landingNode.standZ)) {
+            return false;
+        }
+
+        double obstacleTop = getHighestCollisionTopAt(obstaclePos, obstaclePos.getX() + 0.5D, obstaclePos.getZ() + 0.5D);
+        if (obstacleTop == Double.NEGATIVE_INFINITY) {
+            return false;
+        }
+
+        double clearanceY = obstacleTop + 0.2D;
+        return hasJumpClearanceAt(obstaclePos, clearanceY)
+                && hasJumpClearanceAt(obstaclePos.above(), clearanceY)
+                && hasJumpClearanceAt(landingNode.pos, Math.max(clearanceY, landingNode.standY + 0.1D));
+    }
+
+    private boolean hasJumpClearanceAt(BlockPos pos, double minY) {
+        BlockState state = level.getBlockState(pos);
+        if (state.getCollisionShape(level, pos).isEmpty()) {
+            return true;
+        }
+        for (AABB box : state.getCollisionShape(level, pos).toAabbs()) {
+            if (pos.getY() + box.maxY > minY - COLLISION_EPSILON) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean isJumpOverCoverPassable(BlockPos pos) {
+        BlockState state = level.getBlockState(pos);
+        if (state.getCollisionShape(level, pos).isEmpty()) {
+            return true;
+        }
+        return isThinWalkableCover(state, pos);
+    }
+
+    private boolean isThinWalkableCover(BlockState state, BlockPos pos) {
+        if (state.getBlock() instanceof CarpetBlock) {
+            return true;
+        }
+        return getCollisionHeight(state, pos) <= 0.125D + COLLISION_EPSILON;
+    }
+
+    private boolean requiresJumpCoverToClear(BlockState state) {
+        Block block = state.getBlock();
+        return block instanceof FenceBlock || block instanceof WallBlock || block instanceof IronBarsBlock;
+    }
+
     private boolean isDoorBlock(BlockState state) {
         Block block = state.getBlock();
         return block instanceof DoorBlock || block instanceof FenceGateBlock;
@@ -906,6 +1189,18 @@ public class NPCPathFinder {
             || block instanceof FenceBlock
             || block instanceof IronBarsBlock
             || block instanceof TrapDoorBlock;
+    }
+
+    private double getCollisionHeight(BlockState state, BlockPos pos) {
+        VoxelShape shape = state.getCollisionShape(level, pos);
+        if (shape.isEmpty()) {
+            return 0.0D;
+        }
+        double height = 0.0D;
+        for (AABB box : shape.toAabbs()) {
+            height = Math.max(height, box.maxY);
+        }
+        return height;
     }
 
     /**
@@ -1011,6 +1306,59 @@ public class NPCPathFinder {
         return cost;
     }
 
+    private double calculateBarrierCost(BlockPos pos) {
+        double cost = 0.0D;
+        BlockState footState = level.getBlockState(pos);
+        if (isFenceLikeBarrier(footState)) {
+            cost += getBarrierPenalty(level.getBlockState(pos.above()), pos.above(), COST_BARRIER_ON_NODE);
+        }
+        BlockState belowState = level.getBlockState(pos.below());
+        if (isFenceLikeBarrier(belowState)) {
+            cost += getBarrierPenalty(level.getBlockState(pos), pos, COST_BARRIER_ON_NODE * 0.8D);
+        }
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                if (dx == 0 && dz == 0) {
+                    continue;
+                }
+                BlockPos nearbyPos = pos.offset(dx, 0, dz);
+                if (isFenceLikeBarrier(level.getBlockState(nearbyPos))) {
+                    cost += getBarrierPenalty(level.getBlockState(nearbyPos.above()), nearbyPos.above(), COST_BARRIER_ADJACENT);
+                }
+                BlockPos nearbyBelowPos = nearbyPos.below();
+                if (isFenceLikeBarrier(level.getBlockState(nearbyBelowPos))) {
+                    cost += getBarrierPenalty(level.getBlockState(nearbyPos), nearbyPos, COST_BARRIER_ADJACENT * 0.8D);
+                }
+            }
+        }
+        for (int dx = -DANGER_CHECK_RADIUS; dx <= DANGER_CHECK_RADIUS; dx++) {
+            for (int dz = -DANGER_CHECK_RADIUS; dz <= DANGER_CHECK_RADIUS; dz++) {
+                if (Math.abs(dx) <= 1 && Math.abs(dz) <= 1) {
+                    continue;
+                }
+                BlockPos nearbyPos = pos.offset(dx, 0, dz);
+                int distance = Math.abs(dx) + Math.abs(dz);
+                if (isFenceLikeBarrier(level.getBlockState(nearbyPos))) {
+                    cost += getBarrierPenalty(level.getBlockState(nearbyPos.above()), nearbyPos.above(), COST_BARRIER_NEARBY / distance);
+                }
+                BlockPos nearbyBelowPos = nearbyPos.below();
+                if (isFenceLikeBarrier(level.getBlockState(nearbyBelowPos))) {
+                    cost += getBarrierPenalty(level.getBlockState(nearbyPos), nearbyPos, (COST_BARRIER_NEARBY * 0.8D) / distance);
+                }
+            }
+        }
+        return cost;
+    }
+
+    private double getBarrierPenalty(BlockState coverState, BlockPos coverPos, double basePenalty) {
+        return isThinWalkableCover(coverState, coverPos) ? basePenalty * COST_BARRIER_COVER_DISCOUNT : basePenalty;
+    }
+
+    private boolean isFenceLikeBarrier(BlockState state) {
+        Block block = state.getBlock();
+        return block instanceof FenceBlock || block instanceof WallBlock || block instanceof IronBarsBlock;
+    }
+
     private BlockPos findAlternativeEndPoint(BlockPos target) {
         return findAlternativeTargetNear(target, 4);
     }
@@ -1042,33 +1390,20 @@ public class NPCPathFinder {
     /**
      * menglannnn: 计算移动代价（包含危险区域避让）
      */
-    private double calculateMoveCost(NPCPathNode from, NPCPathNode to) {
-        double baseCost = from.distanceTo(to);
-        boolean diagonal = from.x != to.x && from.z != to.z;
-        double cost = diagonal ? baseCost * COST_DIAGONAL : baseCost * COST_STRAIGHT;
-        switch (to.action) {
-            case ASCEND:
-                cost *= COST_JUMP;
-                break;
-            case DESCEND:
-            case FALL:
-                cost *= COST_FALL;
-                break;
-            case DOOR:
-                cost *= COST_DOOR;
-                break;
-            default:
-                break;
-        }
-        
-        // 使用新的危险代价计算
+    private PathCostBreakdown calculateMoveCostBreakdown(NPCPathNode from, NPCPathNode to, PathCostRules costRules) {
         double dangerCost = calculateDangerCost(to.pos);
-        cost += dangerCost;
-        
-        return cost;
+        double barrierCost = calculateBarrierCost(to.pos);
+        TerrainMoveDescriptor descriptor = terrainCostClassifier.classify(from, to, dangerCost, barrierCost);
+        return PathCostEngine.calculate(descriptor, costRules);
     }
 
-    private NPCPath reconstructPath(NPCPathNode endNode, BlockPos start, BlockPos end) {
+    private void applyCostBreakdown(NPCPathNode node, PathCostBreakdown breakdown) {
+        node.stepCost = breakdown.totalCost();
+        node.terrainCost = breakdown.terrainCost() + breakdown.maxPenaltyCost();
+        node.costReason = breakdown.summary();
+    }
+
+    private NPCPath reconstructPath(NPCPathNode endNode, BlockPos start, BlockPos end, PathCostRules costRules) {
         List<NPCPathNode> path = new ArrayList<>();
         NPCPathNode current = endNode;
         while (current != null) {
@@ -1078,7 +1413,26 @@ public class NPCPathFinder {
         Collections.reverse(path);
         NPCPath npcPath = NPCPath.fromNodes(level, path, start, end);
         npcPath.smooth();
+        refreshPathCostMetadata(npcPath, costRules);
         return npcPath;
+    }
+
+    private void refreshPathCostMetadata(NPCPath path, PathCostRules costRules) {
+        if (path == null || path.isEmpty()) {
+            return;
+        }
+        List<NPCPathNode> nodes = path.getNodes();
+        if (!nodes.isEmpty()) {
+            NPCPathNode first = nodes.get(0);
+            first.stepCost = 0.0D;
+            first.terrainCost = 0.0D;
+            first.costReason = "start";
+        }
+        for (int i = 1; i < nodes.size(); i++) {
+            NPCPathNode current = nodes.get(i);
+            NPCPathNode previous = nodes.get(i - 1);
+            applyCostBreakdown(current, calculateMoveCostBreakdown(previous, current, costRules));
+        }
     }
 
     /*private void logPathComposition(BlockPos start, BlockPos end, NPCPath path) {

@@ -8,10 +8,15 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.CarpetBlock;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.FenceGateBlock;
+import net.minecraft.world.level.block.FenceBlock;
+import net.minecraft.world.level.block.IronBarsBlock;
 import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.StairBlock;
+import net.minecraft.world.level.block.TrapDoorBlock;
+import net.minecraft.world.level.block.WallBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -47,6 +52,16 @@ public class NPCMoveController {
     private static final double SPRINT_ATTRIBUTE_MULTIPLIER = 1.35D;
     private static final double WALK_STEP_HEIGHT = 12.0D / 16.0D;
     private static final double MAX_ASCEND_HEIGHT = 19.0D / 16.0D;
+    private static final double MAX_JUMP_OVER_HEIGHT = 1.625D;
+    private static final double MIN_ASCEND_JUMP_SPEED = 0.18D;
+    private static final double MAX_ASCEND_JUMP_SPEED = 0.33D;
+    private static final double MIN_AIR_TRAVERSAL_SPEED = 0.12D;
+    private static final double BODY_COLLISION_XZ_SHRINK = 0.03D;
+    private static final double DEFAULT_BODY_RADIUS = 0.3D;
+    private static final double OPEN_TRAPDOOR_BODY_RADIUS = 0.24D;
+    private static final double OPEN_TRAPDOOR_PANEL_SIDE_RADIUS = 0.14D;
+    private static final double TRAPDOOR_HOP_SPEED = 0.24D;
+    private static final double TRAPDOOR_HOP_MAX_DISTANCE = 1.15D;
     private static final float MIN_SNAP_TURN_DEGREES = 12.0F;
     private static final float MAX_TURN_DEGREES_PER_TICK = 55.0F;
     
@@ -220,12 +235,14 @@ public class NPCMoveController {
         // 检查是否到达当前节点
         Vec3 targetPos = currentPath.getCurrentTarget();
         double distanceToTarget = npc.position().distanceTo(targetPos);
-        boolean requiresVerticalTraversal = targetNode.action == NPCPathNode.MovementAction.ASCEND;
+        boolean jumpOverTraversal = targetNode.action == NPCPathNode.MovementAction.JUMP_OVER;
+        boolean requiresVerticalTraversal = targetNode.action == NPCPathNode.MovementAction.ASCEND || jumpOverTraversal;
         double targetHeight = targetNode.standY;
         boolean reachedTraversalHeight = npc.getY() >= targetHeight - 0.15D;
         double horizontalDistanceToTarget = horizontalDistance(npc.position(), targetPos);
         boolean traverseNode = targetNode.action == NPCPathNode.MovementAction.TRAVERSE;
         boolean stairOrSlabTraversal = shouldUseAutoStepTraversal(targetNode, targetPos);
+        boolean trapdoorTraversalScenario = isTrapdoorTraversalScenario(targetNode, targetPos);
         if (stairOrSlabTraversal) {
             requiresVerticalTraversal = false;
             resetStepUpState();
@@ -250,6 +267,10 @@ public class NPCMoveController {
             movementBlocked = true;
             return;
         }
+        if (jumpOverTraversal && horizontalDistanceToTarget <= 0.7D && Math.abs(npc.getY() - targetHeight) <= 0.85D) {
+            handleNodeArrival(targetNode);
+            return;
+        }
         double traverseArrivalDistance = stairOrSlabTraversal ? 0.18D : ARRIVAL_DISTANCE;
         boolean reachedTraverseNode = traverseNode && horizontalDistanceToTarget <= traverseArrivalDistance
                 && (!stairOrSlabTraversal || Math.abs(npc.getY() - targetNode.standY) <= 0.18D || npc.getY() >= targetNode.standY - 0.08D);
@@ -268,7 +289,7 @@ public class NPCMoveController {
         }
 
         if (requiresVerticalTraversal && !npc.onGround()) {
-            releaseAirTraversalControl();
+            maintainAirTraversalMotion(targetNode, targetPos);
             if (stepUpPhase != StepUpPhase.NONE) {
                 stepUpPhase = StepUpPhase.LAND;
             }
@@ -277,7 +298,7 @@ public class NPCMoveController {
         
         // 检查是否卡住
         if (checkStuck()) {
-            if (stairOrSlabTraversal) {
+            if (stairOrSlabTraversal && !trapdoorTraversalScenario) {
                 stuckTicks = 0;
             } else {
                 handleStuck();
@@ -297,6 +318,16 @@ public class NPCMoveController {
         }
 
         resetStepUpState();
+
+        if (trapdoorTraversalScenario && tryTrapdoorForwardHop(targetNode, targetPos)) {
+            movementBlocked = false;
+            return;
+        }
+
+        if (jumpOverTraversal && executeJumpOverAction(targetNode, targetPos)) {
+            movementBlocked = false;
+            return;
+        }
         
         // 执行移动前检查前方是否被阻挡
         if (!stairOrSlabTraversal && isMovementBlocked(targetPos)) {
@@ -309,6 +340,10 @@ public class NPCMoveController {
                 return;
             }
             if (tryResolveCrowdedPath(targetPos)) {
+                return;
+            }
+            if (tryForwardJumpRecovery(targetNode, targetPos)) {
+                movementBlocked = false;
                 return;
             }
             if (tryBypassObstacle(targetPos)) {
@@ -353,6 +388,7 @@ public class NPCMoveController {
                 interactWithDoor(node.pos);
                 break;
             case ASCEND:
+            case JUMP_OVER:
                 resetStepUpState();
                 releaseAirTraversalControl();
                 break;
@@ -439,10 +475,10 @@ public class NPCMoveController {
         double dz = direction.z / horizontalDist;
         BlockPos landingPos = targetNode.pos;
         BlockPos landingHeadPos = landingPos.above();
-        if (!level.getBlockState(landingPos).getCollisionShape(level, landingPos).isEmpty()) {
+        if (!isAscendLandingPassable(landingPos)) {
             return false;
         }
-        if (!level.getBlockState(landingHeadPos).getCollisionShape(level, landingHeadPos).isEmpty()) {
+        if (!isOpenSpacePassable(level.getBlockState(landingHeadPos), landingHeadPos)) {
             return false;
         }
 
@@ -450,10 +486,80 @@ public class NPCMoveController {
         moveTowards(targetPos);
         stepUpPhase = StepUpPhase.APPROACH;
         if (horizontalDist <= 0.35D && targetNode.standY - npc.getY() > 0.75D) {
+            double jumpSpeed = calculateAscendJumpSpeed(horizontalDist);
             logStepMove("ASCEND_JUMP_CONTROL", targetNode, targetPos, horizontalDist, targetNode.standY - npc.getY());
-            npc.getJumpControl().jump();
+            triggerGroundJump(0.42D);
+            applyDirectedTraversalMotion(dx, dz, jumpSpeed, Math.max(npc.getDeltaMovement().y, 0.42D));
             stepUpPhase = StepUpPhase.LAND;
         }
+        return true;
+    }
+
+    private boolean executeJumpOverAction(NPCPathNode targetNode, Vec3 targetPos) {
+        if (targetNode == null || targetNode.action != NPCPathNode.MovementAction.JUMP_OVER || targetPos == null) {
+            return false;
+        }
+
+        Vec3 currentPos = npc.position();
+        Vec3 direction = targetPos.subtract(currentPos);
+        double horizontalDist = Math.sqrt(direction.x * direction.x + direction.z * direction.z);
+        if (horizontalDist < 0.05D) {
+            return false;
+        }
+
+        double dx = direction.x / horizontalDist;
+        double dz = direction.z / horizontalDist;
+        BlockPos obstaclePos = findJumpBarrierOnPath(currentPos, dx, dz, horizontalDist);
+        boolean jumpWindow = obstaclePos != null && isJumpableBarrier(obstaclePos);
+        double speed = Math.max(0.08D, Math.min(currentSpeed * 1.08D, horizontalDist * 0.34D + 0.04D));
+        double yMotion = npc.getDeltaMovement().y;
+
+        faceMovementDirection(dx, dz, 0.75F);
+        if (npc.onGround() && jumpWindow) {
+            triggerGroundJump(0.42D);
+            yMotion = Math.max(npc.getDeltaMovement().y, 0.42D);
+            logStepMove("JUMP_OVER_BARRIER", targetNode, targetPos, horizontalDist, targetNode.standY - npc.getY());
+        } else if (!npc.onGround()) {
+            releaseAirTraversalControl();
+        }
+
+        npc.getMoveControl().setWantedPosition(npc.getX(), npc.getY(), npc.getZ(), 0.0D);
+        npc.setDeltaMovement(dx * speed, yMotion, dz * speed);
+        npc.setSpeed((float) speed);
+        npc.setZza((float) speed);
+        npc.setXxa(0.0F);
+        return true;
+    }
+
+    private boolean tryTrapdoorForwardHop(NPCPathNode targetNode, Vec3 targetPos) {
+        if (targetNode == null || targetPos == null || !npc.onGround()) {
+            return false;
+        }
+        if (!isTrapdoorTraversalScenario(targetNode, targetPos)) {
+            return false;
+        }
+
+        Vec3 currentPos = npc.position();
+        Vec3 direction = targetPos.subtract(currentPos);
+        double horizontalDist = Math.sqrt(direction.x * direction.x + direction.z * direction.z);
+        if (horizontalDist < 0.08D || horizontalDist > TRAPDOOR_HOP_MAX_DISTANCE) {
+            return false;
+        }
+
+        double heightDelta = targetNode.standY - npc.getY();
+        if (heightDelta < -0.2D || heightDelta > 1.05D) {
+            return false;
+        }
+
+        double dx = direction.x / horizontalDist;
+        double dz = direction.z / horizontalDist;
+        double hopSpeed = Math.max(TRAPDOOR_HOP_SPEED, Math.min(MAX_ASCEND_JUMP_SPEED, calculateAscendJumpSpeed(horizontalDist)));
+        faceMovementDirection(dx, dz, 0.8F);
+        triggerGroundJump(0.42D);
+        applyDirectedTraversalMotion(dx, dz, hopSpeed, Math.max(npc.getDeltaMovement().y, 0.42D));
+        logStepMove("TRAPDOOR_FORWARD_HOP", targetNode, targetPos, horizontalDist, heightDelta);
+        logTrapdoorContext("FORWARD_HOP", targetNode, targetPos);
+        stepUpPhase = StepUpPhase.LAND;
         return true;
     }
 
@@ -529,6 +635,45 @@ public class NPCMoveController {
             default:
                 return false;
         }
+    }
+
+    private double calculateAscendJumpSpeed(double horizontalDist) {
+        double speedFromCurrent = Math.max(currentSpeed * 1.12D, MIN_ASCEND_JUMP_SPEED);
+        double speedFromDistance = horizontalDist * 0.42D + 0.12D;
+        return Math.min(MAX_ASCEND_JUMP_SPEED, Math.max(MIN_ASCEND_JUMP_SPEED, Math.max(speedFromCurrent, speedFromDistance)));
+    }
+
+    private void maintainAirTraversalMotion(NPCPathNode targetNode, Vec3 targetPos) {
+        if (targetNode == null || targetPos == null) {
+            releaseAirTraversalControl();
+            return;
+        }
+
+        Vec3 currentPos = npc.position();
+        Vec3 direction = targetPos.subtract(currentPos);
+        double horizontalDist = Math.sqrt(direction.x * direction.x + direction.z * direction.z);
+        if (horizontalDist < 0.01D) {
+            releaseAirTraversalControl();
+            return;
+        }
+
+        double dx = direction.x / horizontalDist;
+        double dz = direction.z / horizontalDist;
+        double currentHorizontalSpeed = Math.sqrt(npc.getDeltaMovement().x * npc.getDeltaMovement().x + npc.getDeltaMovement().z * npc.getDeltaMovement().z);
+        double targetSpeed = targetNode.action == NPCPathNode.MovementAction.ASCEND
+                ? calculateAscendJumpSpeed(horizontalDist)
+                : Math.max(MIN_AIR_TRAVERSAL_SPEED, Math.min(Math.max(currentSpeed * 1.08D, currentHorizontalSpeed), horizontalDist * 0.34D + 0.04D));
+
+        faceMovementDirection(dx, dz, 0.75F);
+        applyDirectedTraversalMotion(dx, dz, Math.max(currentHorizontalSpeed, targetSpeed), npc.getDeltaMovement().y);
+    }
+
+    private void applyDirectedTraversalMotion(double dx, double dz, double speed, double yMotion) {
+        npc.getMoveControl().setWantedPosition(npc.getX(), npc.getY(), npc.getZ(), 0.0D);
+        npc.setDeltaMovement(dx * speed, yMotion, dz * speed);
+        npc.setSpeed((float) speed);
+        npc.setZza((float) speed);
+        npc.setXxa(0.0F);
     }
 
     private double getHighestCollisionTopAt(BlockPos blockPos, double worldX, double worldZ) {
@@ -668,17 +813,19 @@ public class NPCMoveController {
             return true;
         }
 
-        boolean blocked = !footState.getCollisionShape(level, footPos).isEmpty()
-                || !headState.getCollisionShape(level, headPos).isEmpty();
+        AABB projectedBodyBox = createCollisionCheckBox(currentPos.x + dx, currentPos.y, currentPos.z + dz);
+        boolean footBlocked = hasBlockingCollision(footState, footPos, projectedBodyBox);
+        boolean headBlocked = hasBlockingCollision(headState, headPos, projectedBodyBox);
+        boolean blocked = footBlocked || headBlocked;
         if (!blocked) {
             currentObstacleType = ObstacleType.NONE;
             return false;
         }
 
-        double collisionHeight = getCollisionHeight(footState, footPos);
-        if (isLowStepHeight(collisionHeight) && headState.getCollisionShape(level, headPos).isEmpty()) {
+        double collisionHeight = footBlocked ? getCollisionHeight(footState, footPos) : 0.0D;
+        if (footBlocked && isLowStepHeight(collisionHeight) && !headBlocked) {
             currentObstacleType = ObstacleType.STEP_UP;
-        } else if (!headState.getCollisionShape(level, headPos).isEmpty()) {
+        } else if (headBlocked) {
             currentObstacleType = ObstacleType.TIGHT_SPACE;
         } else {
             currentObstacleType = ObstacleType.SOLID_BLOCK;
@@ -747,7 +894,7 @@ public class NPCMoveController {
         BlockState footState = level.getBlockState(footPos);
         BlockState headState = level.getBlockState(footPos.above());
         VoxelShape shape = footState.getCollisionShape(level, footPos);
-        if (shape.isEmpty() || !headState.getCollisionShape(level, footPos.above()).isEmpty()) {
+        if (shape.isEmpty() || !isOpenSpacePassable(headState, footPos.above())) {
             return null;
         }
         AABB selectedBox = null;
@@ -771,7 +918,7 @@ public class NPCMoveController {
     }
 
     private boolean isBodyPathClearAt(double x, double y, double z) {
-        AABB bodyBox = npc.getBoundingBox().move(x - npc.getX(), y - npc.getY(), z - npc.getZ()).inflate(-0.03D, 0.0D, -0.03D);
+        AABB bodyBox = createCollisionCheckBox(x, y, z);
         int minX = (int) Math.floor(bodyBox.minX);
         int maxX = (int) Math.floor(bodyBox.maxX);
         int minY = (int) Math.floor(bodyBox.minY);
@@ -783,13 +930,8 @@ public class NPCMoveController {
                 for (int zPos = minZ; zPos <= maxZ; zPos++) {
                     BlockPos pos = new BlockPos(xPos, yPos, zPos);
                     BlockState state = level.getBlockState(pos);
-                    if (state.getCollisionShape(level, pos).isEmpty() || isDoorPassable(state)) {
-                        continue;
-                    }
-                    for (AABB box : state.getCollisionShape(level, pos).toAabbs()) {
-                        if (box.move(pos).intersects(bodyBox)) {
-                            return false;
-                        }
+                    if (hasBlockingCollision(state, pos, bodyBox)) {
+                        return false;
                     }
                 }
             }
@@ -864,6 +1006,66 @@ public class NPCMoveController {
         }
 
         return false;
+    }
+
+    private boolean tryForwardJumpRecovery(NPCPathNode targetNode, Vec3 targetPos) {
+        if (targetPos == null) {
+            return false;
+        }
+        if (targetNode != null && targetNode.action == NPCPathNode.MovementAction.JUMP_OVER) {
+            return executeJumpOverAction(targetNode, targetPos);
+        }
+        if (!npc.onGround()) {
+            return false;
+        }
+
+        Vec3 currentPos = npc.position();
+        Vec3 direction = targetPos.subtract(currentPos);
+        double horizontalDist = Math.sqrt(direction.x * direction.x + direction.z * direction.z);
+        if (horizontalDist < 0.2D) {
+            return false;
+        }
+
+        int stepX = 0;
+        int stepZ = 0;
+        if (Math.abs(direction.x) >= Math.abs(direction.z)) {
+            stepX = Integer.compare((int) Math.round(direction.x * 1000.0D), 0);
+        } else {
+            stepZ = Integer.compare((int) Math.round(direction.z * 1000.0D), 0);
+        }
+        if (stepX == 0 && stepZ == 0) {
+            return false;
+        }
+
+        BlockPos obstaclePos = npc.blockPosition().offset(stepX, 0, stepZ);
+        if (!isJumpableBarrier(obstaclePos)) {
+            return false;
+        }
+
+        BlockPos landingPos = findForwardJumpLandingPos(obstaclePos, stepX, stepZ);
+        if (landingPos == null) {
+            return false;
+        }
+
+        Vec3 landingTarget = new Vec3(landingPos.getX() + 0.5D, Math.max(targetPos.y, landingPos.getY()), landingPos.getZ() + 0.5D);
+        faceMovementDirection(landingTarget.x - currentPos.x, landingTarget.z - currentPos.z, 0.75F);
+        triggerGroundJump(0.42D);
+        double speed = Math.max(currentSpeed, 0.24D);
+        double length = Math.sqrt((landingTarget.x - currentPos.x) * (landingTarget.x - currentPos.x)
+                + (landingTarget.z - currentPos.z) * (landingTarget.z - currentPos.z));
+        if (length < 0.01D) {
+            return false;
+        }
+        double motionX = (landingTarget.x - currentPos.x) / length * speed;
+        double motionZ = (landingTarget.z - currentPos.z) / length * speed;
+        double motionY = Math.max(npc.getDeltaMovement().y, 0.42D);
+        npc.getMoveControl().setWantedPosition(npc.getX(), npc.getY(), npc.getZ(), 0.0D);
+        npc.setDeltaMovement(motionX, motionY, motionZ);
+        npc.setSpeed((float) speed);
+        npc.setZza((float) speed);
+        npc.setXxa(0.0F);
+        logStepMove("STUCK_FORWARD_JUMP_RECOVERY", targetNode, landingTarget, horizontalDist, landingPos.getY() - npc.getY());
+        return true;
     }
 
     private java.util.List<CustomEntity> getCrowdBlockers() {
@@ -1055,14 +1257,122 @@ public class NPCMoveController {
         BlockState headState = level.getBlockState(headPos);
         BlockState groundState = level.getBlockState(groundPos);
 
-        return (footState.getCollisionShape(level, footPos).isEmpty() || isLowStepCollision(footState, footPos))
-                && headState.getCollisionShape(level, headPos).isEmpty()
+        return (isOpenSpacePassable(footState, footPos) || isLowStepCollision(footState, footPos))
+                && isOpenSpacePassable(headState, headPos)
                 && !groundState.getCollisionShape(level, groundPos).isEmpty();
     }
 
     private boolean isLowStepCollision(BlockState state, BlockPos pos) {
         double collisionHeight = getCollisionHeight(state, pos);
         return isLowStepHeight(collisionHeight);
+    }
+
+    private boolean isJumpableBarrier(BlockPos pos) {
+        BlockState state = level.getBlockState(pos);
+        if (state.isAir() || isDoorPassable(state) || isClosedDoorBlock(state)) {
+            return false;
+        }
+
+        double collisionHeight = getCollisionHeight(state, pos);
+        if (collisionHeight <= WALK_STEP_HEIGHT + 0.05D || collisionHeight > MAX_JUMP_OVER_HEIGHT) {
+            return false;
+        }
+
+        BlockPos abovePos = pos.above();
+        BlockPos twoAbovePos = pos.above(2);
+        if (requiresJumpCoverToClear(state) && !isThinWalkableCover(level.getBlockState(abovePos), abovePos)) {
+            return false;
+        }
+        return isJumpCoverPassable(abovePos)
+                && isOpenSpacePassable(level.getBlockState(twoAbovePos), twoAbovePos);
+    }
+
+    private BlockPos findForwardJumpLandingPos(BlockPos obstaclePos, int stepX, int stepZ) {
+        for (int dy = 1; dy >= -1; dy--) {
+            BlockPos candidate = obstaclePos.offset(stepX, dy, stepZ);
+            if (isLandingSpotClear(candidate)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private boolean isJumpCoverPassable(BlockPos pos) {
+        BlockState state = level.getBlockState(pos);
+        if (isOpenSpacePassable(state, pos)) {
+            return true;
+        }
+        return isThinWalkableCover(state, pos);
+    }
+
+    private boolean isThinWalkableCover(BlockState state, BlockPos pos) {
+        if (state.getBlock() instanceof CarpetBlock) {
+            return true;
+        }
+        return getCollisionHeight(state, pos) <= 0.125D + 1.0E-5D;
+    }
+
+    private boolean requiresJumpCoverToClear(BlockState state) {
+        Block block = state.getBlock();
+        return block instanceof FenceBlock || block instanceof WallBlock || block instanceof IronBarsBlock;
+    }
+
+    private boolean isLandingSpotClear(BlockPos footPos) {
+        BlockPos headPos = footPos.above();
+        BlockPos groundPos = footPos.below();
+        BlockState footState = level.getBlockState(footPos);
+        BlockState headState = level.getBlockState(headPos);
+        BlockState groundState = level.getBlockState(groundPos);
+
+        if (!isOpenSpacePassable(footState, footPos) || !isOpenSpacePassable(headState, headPos)) {
+            return false;
+        }
+        if (groundState.getCollisionShape(level, groundPos).isEmpty()) {
+            return false;
+        }
+        return isBodyPathClearAt(footPos.getX() + 0.5D, footPos.getY(), footPos.getZ() + 0.5D);
+    }
+
+    private boolean isAscendLandingPassable(BlockPos footPos) {
+        BlockState footState = level.getBlockState(footPos);
+        if (isOpenSpacePassable(footState, footPos)) {
+            return true;
+        }
+        return isThinWalkableCover(footState, footPos);
+    }
+
+    private BlockPos findPrimaryObstaclePos(Vec3 currentPos, double dx, double dz, double probeDistance) {
+        return BlockPos.containing(currentPos.x + dx * probeDistance, currentPos.y, currentPos.z + dz * probeDistance);
+    }
+
+    private BlockPos findJumpBarrierOnPath(Vec3 currentPos, double dx, double dz, double horizontalDist) {
+        double[] probeDistances = new double[] {0.35D, 0.55D, 0.75D, 0.95D, 1.15D};
+        double maxProbeDistance = Math.min(1.15D, Math.max(0.35D, horizontalDist));
+        for (double probeDistance : probeDistances) {
+            if (probeDistance > maxProbeDistance + 1.0E-5D) {
+                continue;
+            }
+            BlockPos candidate = findPrimaryObstaclePos(currentPos, dx, dz, probeDistance);
+            if (isJumpableBarrier(candidate)) {
+                return candidate;
+            }
+            BlockPos candidateBelow = candidate.below();
+            if (isJumpableBarrier(candidateBelow)) {
+                return candidateBelow;
+            }
+        }
+        return null;
+    }
+
+    private void triggerGroundJump(double minYVelocity) {
+        if (!npc.onGround()) {
+            return;
+        }
+        npc.doJump();
+        Vec3 motion = npc.getDeltaMovement();
+        if (motion.y < minYVelocity) {
+            npc.setDeltaMovement(motion.x, minYVelocity, motion.z);
+        }
     }
 
     private boolean isLowStepHeight(double collisionHeight) {
@@ -1114,6 +1424,10 @@ public class NPCMoveController {
             return state.getValue(FenceGateBlock.OPEN);
         }
         return false;
+    }
+
+    private boolean isOpenSpacePassable(BlockState state, BlockPos pos) {
+        return state.getCollisionShape(level, pos).isEmpty() || isDoorPassable(state) || isOpenTrapdoor(state);
     }
 
     private double getCollisionHeight(BlockState state, BlockPos pos) {
@@ -1247,13 +1561,8 @@ public class NPCMoveController {
                 for (int z = minZ; z <= maxZ; z++) {
                     BlockPos pos = new BlockPos(x, y, z);
                     BlockState state = level.getBlockState(pos);
-                    if (!isFullBlockCollision(state, pos)) {
-                        continue;
-                    }
-                    for (AABB box : state.getCollisionShape(level, pos).toAabbs()) {
-                        if (box.move(pos).intersects(movedBox)) {
-                            return true;
-                        }
+                    if (hasBlockingCollision(state, pos, movedBox)) {
+                        return true;
                     }
                 }
             }
@@ -1267,6 +1576,103 @@ public class NPCMoveController {
             return false;
         }
         return true;
+    }
+
+    private AABB createCollisionCheckBox(double x, double y, double z) {
+        return npc.getBoundingBox()
+                .move(x - npc.getX(), y - npc.getY(), z - npc.getZ())
+                .inflate(-BODY_COLLISION_XZ_SHRINK, 0.0D, -BODY_COLLISION_XZ_SHRINK);
+    }
+
+    private boolean hasBlockingCollision(BlockState state, BlockPos pos, AABB baseBodyBox) {
+        if (!isFullBlockCollision(state, pos)) {
+            return false;
+        }
+        AABB collisionCheckBox = getCollisionCheckBoxForState(state, pos, baseBodyBox);
+        for (AABB box : state.getCollisionShape(level, pos).toAabbs()) {
+            if (box.move(pos).intersects(collisionCheckBox)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private AABB getCollisionCheckBoxForState(BlockState state, BlockPos pos, AABB baseBodyBox) {
+        if (!isOpenTrapdoor(state)) {
+            return baseBodyBox;
+        }
+        double[] trapdoorBounds = getTrapdoorHorizontalBounds(state, pos);
+        if (trapdoorBounds == null) {
+            double centerX = (baseBodyBox.minX + baseBodyBox.maxX) * 0.5D;
+            double centerZ = (baseBodyBox.minZ + baseBodyBox.maxZ) * 0.5D;
+            return new AABB(centerX - OPEN_TRAPDOOR_BODY_RADIUS, baseBodyBox.minY, centerZ - OPEN_TRAPDOOR_BODY_RADIUS,
+                    centerX + OPEN_TRAPDOOR_BODY_RADIUS, baseBodyBox.maxY, centerZ + OPEN_TRAPDOOR_BODY_RADIUS);
+        }
+
+        double minX = baseBodyBox.minX;
+        double maxX = baseBodyBox.maxX;
+        double minZ = baseBodyBox.minZ;
+        double maxZ = baseBodyBox.maxZ;
+        double centerX = (baseBodyBox.minX + baseBodyBox.maxX) * 0.5D;
+        double centerZ = (baseBodyBox.minZ + baseBodyBox.maxZ) * 0.5D;
+        double thicknessX = trapdoorBounds[1] - trapdoorBounds[0];
+        double thicknessZ = trapdoorBounds[3] - trapdoorBounds[2];
+
+        if (thicknessX <= thicknessZ && thicknessX <= 0.25D) {
+            minZ = centerZ - Math.min(centerZ - minZ, OPEN_TRAPDOOR_BODY_RADIUS);
+            maxZ = centerZ + Math.min(maxZ - centerZ, OPEN_TRAPDOOR_BODY_RADIUS);
+            if ((trapdoorBounds[0] + trapdoorBounds[1]) * 0.5D <= centerX) {
+                minX = centerX - Math.min(centerX - minX, OPEN_TRAPDOOR_PANEL_SIDE_RADIUS);
+            } else {
+                maxX = centerX + Math.min(maxX - centerX, OPEN_TRAPDOOR_PANEL_SIDE_RADIUS);
+            }
+        } else if (thicknessZ <= 0.25D) {
+            minX = centerX - Math.min(centerX - minX, OPEN_TRAPDOOR_BODY_RADIUS);
+            maxX = centerX + Math.min(maxX - centerX, OPEN_TRAPDOOR_BODY_RADIUS);
+            if ((trapdoorBounds[2] + trapdoorBounds[3]) * 0.5D <= centerZ) {
+                minZ = centerZ - Math.min(centerZ - minZ, OPEN_TRAPDOOR_PANEL_SIDE_RADIUS);
+            } else {
+                maxZ = centerZ + Math.min(maxZ - centerZ, OPEN_TRAPDOOR_PANEL_SIDE_RADIUS);
+            }
+        } else {
+            minX = centerX - Math.min(centerX - minX, OPEN_TRAPDOOR_BODY_RADIUS);
+            maxX = centerX + Math.min(maxX - centerX, OPEN_TRAPDOOR_BODY_RADIUS);
+            minZ = centerZ - Math.min(centerZ - minZ, OPEN_TRAPDOOR_BODY_RADIUS);
+            maxZ = centerZ + Math.min(maxZ - centerZ, OPEN_TRAPDOOR_BODY_RADIUS);
+        }
+        return new AABB(minX, baseBodyBox.minY, minZ, maxX, baseBodyBox.maxY, maxZ);
+    }
+
+    private double[] getTrapdoorHorizontalBounds(BlockState state, BlockPos pos) {
+        VoxelShape shape = state.getCollisionShape(level, pos);
+        if (shape.isEmpty()) {
+            return null;
+        }
+        boolean found = false;
+        double minX = Double.POSITIVE_INFINITY;
+        double maxX = Double.NEGATIVE_INFINITY;
+        double minZ = Double.POSITIVE_INFINITY;
+        double maxZ = Double.NEGATIVE_INFINITY;
+        for (AABB box : shape.toAabbs()) {
+            found = true;
+            minX = Math.min(minX, box.minX);
+            maxX = Math.max(maxX, box.maxX);
+            minZ = Math.min(minZ, box.minZ);
+            maxZ = Math.max(maxZ, box.maxZ);
+        }
+        if (!found) {
+            return null;
+        }
+        return new double[] {
+                pos.getX() + minX,
+                pos.getX() + maxX,
+                pos.getZ() + minZ,
+                pos.getZ() + maxZ
+        };
+    }
+
+    private boolean isOpenTrapdoor(BlockState state) {
+        return state.getBlock() instanceof TrapDoorBlock && state.getValue(TrapDoorBlock.OPEN);
     }
 
     /**
@@ -1362,25 +1768,116 @@ public class NPCMoveController {
             return;
         }
         NPCPathNode currentNode = currentPath.getCurrentNode();
+        Vec3 currentTarget = currentPath.getCurrentTarget();
+        boolean trapdoorTraversalScenario = isTrapdoorTraversalScenario(currentNode, currentTarget);
         if (currentNode != null && currentNode.action == NPCPathNode.MovementAction.ASCEND) {
             return;
         }
-        if (currentNode != null && currentNode.action == NPCPathNode.MovementAction.TRAVERSE && (isOnVanillaAutoStepBlock() || isVanillaAutoStepNear(currentNode.pos))) {
-            logStepMove("STUCK_ON_AUTO_STEP_SUPPRESSED", currentNode, currentPath.getCurrentTarget(), horizontalDistance(npc.position(), currentPath.getCurrentTarget()), currentNode.standY - npc.getY());
+        if (currentNode != null && currentNode.action == NPCPathNode.MovementAction.TRAVERSE
+                && (isOnVanillaAutoStepBlock() || isVanillaAutoStepNear(currentNode.pos))
+                && !trapdoorTraversalScenario) {
+            logStepMove("STUCK_ON_AUTO_STEP_SUPPRESSED", currentNode, currentTarget, horizontalDistance(npc.position(), currentTarget), currentNode.standY - npc.getY());
             stopVanillaMovement();
             stuckTicks = 0;
             return;
         }
+        if (stuckTicks == STUCK_THRESHOLD || stuckTicks % STUCK_THRESHOLD == 0) {
+            logTrapdoorContext("STUCK", currentNode, currentTarget);
+        }
+
+        if (trapdoorTraversalScenario && tryTrapdoorForwardHop(currentNode, currentTarget)) {
+            stuckTicks = Math.max(STUCK_THRESHOLD / 2, 1);
+            return;
+        }
+
+        if (tryForwardJumpRecovery(currentNode, currentTarget)) {
+            stuckTicks = Math.max(STUCK_THRESHOLD / 2, 1);
+            return;
+        }
+
+        if (currentTarget != null && tryBypassObstacle(currentTarget)) {
+            stuckTicks = Math.max(STUCK_THRESHOLD / 2, 1);
+            return;
+        }
 
         if (npc.onGround()) {
-            logStepMove("STUCK_JUMP_CONTROL", currentNode, currentPath.getCurrentTarget(), horizontalDistance(npc.position(), currentPath.getCurrentTarget()), currentNode != null ? currentNode.standY - npc.getY() : 0.0D);
-            npc.getJumpControl().jump();
+            logStepMove("STUCK_JUMP_CONTROL", currentNode, currentTarget, horizontalDistance(npc.position(), currentTarget), currentNode != null ? currentNode.standY - npc.getY() : 0.0D);
+            triggerGroundJump(0.42D);
         }
         
         // 如果卡住太久，放弃当前路径
         if (stuckTicks >= STUCK_THRESHOLD * 3) {
             stop();
         }
+    }
+
+    private void logTrapdoorContext(String reason, NPCPathNode currentNode, Vec3 currentTarget) {
+        java.util.Set<BlockPos> visited = new java.util.HashSet<>();
+        Vec3 currentPos = npc.position();
+        BlockPos[] candidates = new BlockPos[] {
+                npc.blockPosition(),
+                npc.blockPosition().above(),
+                npc.blockPosition().relative(npc.getDirection()),
+                npc.blockPosition().relative(npc.getDirection()).above(),
+                currentTarget != null ? BlockPos.containing(currentTarget) : null,
+                currentTarget != null ? BlockPos.containing(currentTarget).above() : null
+        };
+        for (BlockPos candidate : candidates) {
+            if (candidate == null || !visited.add(candidate)) {
+                continue;
+            }
+            BlockState state = level.getBlockState(candidate);
+            if (!isOpenTrapdoor(state)) {
+                continue;
+            }
+            Simukraft.LOGGER.warn("[NPCMoveController][TrapdoorTrace] reason={} npc={} trapdoor={} open={} facing={} half={} obstacleType={} stuckTicks={} npcPos={} target={} node={} stand=({},{},{}) shapeBoxes={}",
+                    reason,
+                    npc.getFullName(),
+                    candidate,
+                    state.getValue(TrapDoorBlock.OPEN),
+                    state.getValue(TrapDoorBlock.FACING),
+                    state.getValue(TrapDoorBlock.HALF),
+                    currentObstacleType,
+                    stuckTicks,
+                    currentPos,
+                    currentTarget,
+                    currentNode != null ? currentNode.pos : null,
+                    currentNode != null ? currentNode.standX : 0.0D,
+                    currentNode != null ? currentNode.standY : 0.0D,
+                    currentNode != null ? currentNode.standZ : 0.0D,
+                    state.getCollisionShape(level, candidate).toAabbs());
+            return;
+        }
+    }
+
+    private boolean isTrapdoorTraversalScenario(NPCPathNode targetNode, Vec3 targetPos) {
+        if (targetNode == null || targetPos == null) {
+            return false;
+        }
+        if (!(isOnVanillaAutoStepBlock() || isVanillaAutoStepNear(targetNode.pos) || targetNode.action == NPCPathNode.MovementAction.ASCEND)) {
+            return false;
+        }
+        return hasOpenTrapdoorNear(npc.blockPosition())
+                || hasOpenTrapdoorNear(targetNode.pos)
+                || hasOpenTrapdoorNear(BlockPos.containing(targetPos))
+                || hasOpenTrapdoorNear(npc.blockPosition().relative(npc.getDirection()));
+    }
+
+    private boolean hasOpenTrapdoorNear(BlockPos center) {
+        if (center == null) {
+            return false;
+        }
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                for (int dy = 0; dy <= 2; dy++) {
+                    BlockPos pos = center.offset(dx, dy, dz);
+                    if (isOpenTrapdoor(level.getBlockState(pos))) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
     
     /**
@@ -1587,10 +2084,11 @@ public class NPCMoveController {
         BlockPos nextHeadPos = nextFootPos.above();
         BlockState nextFootState = level.getBlockState(nextFootPos);
         BlockState nextHeadState = level.getBlockState(nextHeadPos);
-        if (!nextFootState.getCollisionShape(level, nextFootPos).isEmpty() && !isDoorPassable(nextFootState)) {
+        if (!isOpenSpacePassable(nextFootState, nextFootPos)
+                && !isThinWalkableCover(nextFootState, nextFootPos)) {
             return false;
         }
-        return nextHeadState.getCollisionShape(level, nextHeadPos).isEmpty() || isDoorPassable(nextHeadState);
+        return isOpenSpacePassable(nextHeadState, nextHeadPos);
     }
     
     /**
@@ -1720,7 +2218,7 @@ public class NPCMoveController {
         if (level.getBlockState(dangerPos).getBlock() == Blocks.LAVA ||
             level.getBlockState(dangerPos.below()).getBlock() == Blocks.LAVA) {
             if (npc.onGround()) {
-                npc.getJumpControl().jump();
+                triggerGroundJump(0.42D);
             }
         }
     }

@@ -520,6 +520,7 @@ public class CommandSimukraft {
                         )
                     )
                 )
+                .then(GotoRouteCommandHelper.buildGotoCommand())
                 .then(Commands.literal("jh")
                     .executes(context -> executeMarriageDebug(context.getSource())))
                 .then(Commands.literal("tt")

@@ -286,7 +286,7 @@ public class NPCPathNavigator {
     }
 
     private List<BlockPos> buildLocalBypassTargets(BlockPos currentPos, BlockPos finalTarget) {
-        List<BlockPos> candidates = new ArrayList<>();
+        Set<BlockPos> uniqueCandidates = new LinkedHashSet<>();
         int dx = Integer.compare(finalTarget.getX(), currentPos.getX());
         int dz = Integer.compare(finalTarget.getZ(), currentPos.getZ());
         BlockPos lateralLeft = currentPos.offset(-dz, 0, dx);
@@ -294,13 +294,23 @@ public class NPCPathNavigator {
         BlockPos forward = currentPos.offset(dx, 0, dz);
         BlockPos diagonalLeft = lateralLeft.offset(dx, 0, dz);
         BlockPos diagonalRight = lateralRight.offset(dx, 0, dz);
+        BlockPos fartherLeft = lateralLeft.offset(-dz, 0, dx);
+        BlockPos fartherRight = lateralRight.offset(dz, 0, -dx);
+        BlockPos fartherForward = forward.offset(dx, 0, dz);
+        BlockPos diagonalFarLeft = fartherLeft.offset(dx, 0, dz);
+        BlockPos diagonalFarRight = fartherRight.offset(dx, 0, dz);
 
-        candidates.add(diagonalLeft);
-        candidates.add(diagonalRight);
-        candidates.add(lateralLeft);
-        candidates.add(lateralRight);
-        candidates.add(forward);
-        return candidates;
+        uniqueCandidates.add(diagonalLeft);
+        uniqueCandidates.add(diagonalRight);
+        uniqueCandidates.add(lateralLeft);
+        uniqueCandidates.add(lateralRight);
+        uniqueCandidates.add(forward);
+        uniqueCandidates.add(diagonalFarLeft);
+        uniqueCandidates.add(diagonalFarRight);
+        uniqueCandidates.add(fartherLeft);
+        uniqueCandidates.add(fartherRight);
+        uniqueCandidates.add(fartherForward);
+        return new ArrayList<>(uniqueCandidates);
     }
 
     private boolean shouldRecalculatePath() {

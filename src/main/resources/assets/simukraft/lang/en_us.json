@@ -676,6 +676,7 @@
   "gui.mod_config.save": "Save",
   "gui.mod_config.cancel": "Cancel",
   "gui.mod_config.reset": "Reset",
+  "gui.mod_config.path_debug_always_show": "Always Show NPC Paths",
   "gui.mod_config.description": "Anchor determines HUD base position, offsets fine-tune it",
 
   "gui.mod_config_select.title": "Simukraft Config",

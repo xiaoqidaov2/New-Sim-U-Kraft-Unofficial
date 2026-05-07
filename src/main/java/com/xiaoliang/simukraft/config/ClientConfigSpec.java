@@ -8,11 +8,13 @@ public final class ClientConfigSpec {
     public static final ForgeConfigSpec.ConfigValue<Integer> HUD_POS_Y;
     public static final ForgeConfigSpec.ConfigValue<String> HUD_ANCHOR;
     public static final ForgeConfigSpec.ConfigValue<String> MAP_RENDER_STYLE;
+    public static final ForgeConfigSpec.ConfigValue<Boolean> ALWAYS_SHOW_NPC_PATH_DEBUG;
 
     private static final String DEFAULT_HUD_ANCHOR = "TOP_RIGHT";
     private static final int DEFAULT_HUD_POS_X = -5;
     private static final int DEFAULT_HUD_POS_Y = 5;
     private static final String DEFAULT_MAP_RENDER_STYLE = "SIMUKRAFT";
+    private static final boolean DEFAULT_ALWAYS_SHOW_NPC_PATH_DEBUG = false;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -35,6 +37,12 @@ public final class ClientConfigSpec {
                 .define("renderStyle", DEFAULT_MAP_RENDER_STYLE);
         builder.pop();
 
+        builder.push("pathDebug");
+        ALWAYS_SHOW_NPC_PATH_DEBUG = builder
+                .comment("Always render NPC path debug lines without pressing F3+K")
+                .define("alwaysShow", DEFAULT_ALWAYS_SHOW_NPC_PATH_DEBUG);
+        builder.pop();
+
         SPEC = builder.build();
     }
 
@@ -55,5 +63,9 @@ public final class ClientConfigSpec {
 
     public static String getDefaultMapRenderStyle() {
         return DEFAULT_MAP_RENDER_STYLE;
+    }
+
+    public static boolean getDefaultAlwaysShowNpcPathDebug() {
+        return DEFAULT_ALWAYS_SHOW_NPC_PATH_DEBUG;
     }
 }

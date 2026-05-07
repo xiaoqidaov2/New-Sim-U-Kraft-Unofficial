@@ -9,17 +9,20 @@ public class ClientConfig {
     private static final int DEFAULT_HUD_POS_X = ClientConfigSpec.getDefaultHudPosX();
     private static final int DEFAULT_HUD_POS_Y = ClientConfigSpec.getDefaultHudPosY();
     private static final String DEFAULT_MAP_RENDER_STYLE = ClientConfigSpec.getDefaultMapRenderStyle();
+    private static final boolean DEFAULT_ALWAYS_SHOW_NPC_PATH_DEBUG = ClientConfigSpec.getDefaultAlwaysShowNpcPathDebug();
 
     public static final ForgeConfigSpec SPEC = ClientConfigSpec.SPEC;
     public static final ForgeConfigSpec.ConfigValue<Integer> HUD_POS_X = ClientConfigSpec.HUD_POS_X;
     public static final ForgeConfigSpec.ConfigValue<Integer> HUD_POS_Y = ClientConfigSpec.HUD_POS_Y;
     public static final ForgeConfigSpec.ConfigValue<String> HUD_ANCHOR = ClientConfigSpec.HUD_ANCHOR;
     public static final ForgeConfigSpec.ConfigValue<String> MAP_RENDER_STYLE = ClientConfigSpec.MAP_RENDER_STYLE;
+    public static final ForgeConfigSpec.ConfigValue<Boolean> ALWAYS_SHOW_NPC_PATH_DEBUG = ClientConfigSpec.ALWAYS_SHOW_NPC_PATH_DEBUG;
 
     private static MapRenderStyle cachedMapRenderStyle = null;
     private static Anchor cachedAnchor = null;
     private static Integer cachedPosX = null;
     private static Integer cachedPosY = null;
+    private static Boolean cachedAlwaysShowNpcPathDebug = null;
 
     public enum Anchor {
         TOP_LEFT,
@@ -90,6 +93,20 @@ public class ClientConfig {
         SPEC.save();
     }
 
+    public static boolean isAlwaysShowNpcPathDebug() {
+        if (cachedAlwaysShowNpcPathDebug != null) {
+            return cachedAlwaysShowNpcPathDebug;
+        }
+        cachedAlwaysShowNpcPathDebug = getConfigValue(ALWAYS_SHOW_NPC_PATH_DEBUG, DEFAULT_ALWAYS_SHOW_NPC_PATH_DEBUG);
+        return cachedAlwaysShowNpcPathDebug;
+    }
+
+    public static void setAlwaysShowNpcPathDebug(boolean enabled) {
+        cachedAlwaysShowNpcPathDebug = enabled;
+        ALWAYS_SHOW_NPC_PATH_DEBUG.set(enabled);
+        SPEC.save();
+    }
+
     public static int[] calculatePosition(int screenWidth, int screenHeight, int textWidth) {
         Anchor anchor = getAnchor();
         int posX = getPosX();
@@ -134,6 +151,7 @@ public class ClientConfig {
         cachedPosX = null;
         cachedPosY = null;
         cachedMapRenderStyle = null;
+        cachedAlwaysShowNpcPathDebug = null;
     }
 
     private static <T> T getConfigValue(ForgeConfigSpec.ConfigValue<T> configValue, T defaultValue) {

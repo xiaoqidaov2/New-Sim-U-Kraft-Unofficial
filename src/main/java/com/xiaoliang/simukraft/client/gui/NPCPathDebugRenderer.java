@@ -7,6 +7,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.xiaoliang.simukraft.Simukraft;
+import com.xiaoliang.simukraft.client.config.ClientConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.network.chat.Component;
@@ -38,23 +39,36 @@ public class NPCPathDebugRenderer {
     private static final int COLOR_CURRENT_NODE = 0xAAFFFF00;
     private static final int COLOR_TARGET_NODE = 0xAAFF4040;
     private static final int COLOR_BLOCKED = 0xFFFF3030;
+    private static final int COLOR_LOW_COST = 0xAA00FF00;
+    private static final int COLOR_MID_COST = 0xAAF0C020;
+    private static final int COLOR_HIGH_COST = 0xAAFF6020;
+    private static final int COLOR_MAX_COST = 0xAAFF2020;
 
     public static boolean isPathDebugVisible() {
-        return pathDebugVisible;
+        return pathDebugVisible || ClientConfig.isAlwaysShowNpcPathDebug();
     }
 
     public static void togglePathDebug() {
         pathDebugVisible = !pathDebugVisible;
-        if (!pathDebugVisible) {
+        if (!isPathDebugVisible()) {
             NPCPathDebugClientCache.clear();
         }
         Minecraft mc = Minecraft.getInstance();
         if (mc.player != null) {
             int pathCount = NPCPathDebugClientCache.getPaths().size();
             mc.player.displayClientMessage(
-                    Component.literal((pathDebugVisible ? "NPC寻路调试显示: 开" : "NPC寻路调试显示: 关") + " | 当前路径缓存: " + pathCount),
+                    Component.literal((isPathDebugVisible() ? "NPC寻路调试显示: 开" : "NPC寻路调试显示: 关")
+                            + " | 热键: " + (pathDebugVisible ? "开" : "关")
+                            + " | 常显配置: " + (ClientConfig.isAlwaysShowNpcPathDebug() ? "开" : "关")
+                            + " | 当前路径缓存: " + pathCount),
                     true
             );
+        }
+    }
+
+    public static void refreshVisibilityState() {
+        if (!isPathDebugVisible()) {
+            NPCPathDebugClientCache.clear();
         }
     }
 
@@ -65,7 +79,7 @@ public class NPCPathDebugRenderer {
         }
 
         Minecraft mc = Minecraft.getInstance();
-        if (!pathDebugVisible || mc.level == null || mc.player == null) {
+        if (!isPathDebugVisible() || mc.level == null || mc.player == null) {
             return;
         }
 
@@ -85,6 +99,7 @@ public class NPCPathDebugRenderer {
     private static void renderPath(PoseStack poseStack, Vec3 cameraPos, NPCPathDebugClientCache.DebugPathData pathData) {
         List<Vec3> nodes = pathData.nodes();
         List<String> nodeTypes = pathData.nodeTypes();
+        List<Double> nodeCosts = pathData.nodeCosts();
         if (nodes.isEmpty()) {
             return;
         }
@@ -95,12 +110,13 @@ public class NPCPathDebugRenderer {
         int currentIndex = pathData.currentIndex();
         int targetIndex = nodes.size() - 1;
         for (int i = 0; i < nodes.size(); i++) {
-            int color = getNodeColor(pathData, nodeTypes, i, currentIndex, targetIndex);
+            int color = getNodeColor(pathData, nodeTypes, nodeCosts, i, currentIndex, targetIndex);
             renderNodeBox(poseStack, cameraPos, nodes.get(i), color);
         }
     }
 
-    private static int getNodeColor(NPCPathDebugClientCache.DebugPathData pathData, List<String> nodeTypes, int index, int currentIndex, int targetIndex) {
+    private static int getNodeColor(NPCPathDebugClientCache.DebugPathData pathData, List<String> nodeTypes, List<Double> nodeCosts,
+                                    int index, int currentIndex, int targetIndex) {
         if (pathData.blocked()) {
             return COLOR_BLOCKED;
         }
@@ -113,6 +129,23 @@ public class NPCPathDebugRenderer {
         String nodeType = index < nodeTypes.size() ? nodeTypes.get(index) : "WALKABLE";
         if ("STEP_UP".equals(nodeType)) {
             return COLOR_STEP_UP_NODE;
+        }
+        double nodeCost = index < nodeCosts.size() ? nodeCosts.get(index) : 0.0D;
+        return getColorForCost(nodeCost);
+    }
+
+    private static int getColorForCost(double nodeCost) {
+        if (nodeCost >= 100.0D) {
+            return COLOR_MAX_COST;
+        }
+        if (nodeCost >= 40.0D) {
+            return COLOR_HIGH_COST;
+        }
+        if (nodeCost >= 10.0D) {
+            return COLOR_MID_COST;
+        }
+        if (nodeCost > 0.0D) {
+            return COLOR_LOW_COST;
         }
         return COLOR_NODE;
     }

@@ -15,15 +15,37 @@ import java.util.stream.Collectors;
 public class NPCPathDebugClientCache {
     private static final Map<UUID, DebugPathData> PATHS = new ConcurrentHashMap<>();
 
-    public static void updatePath(UUID npcUuid, int currentIndex, List<Vec3> nodes, List<String> nodeTypes, boolean blocked) {
+    public static void updatePath(UUID npcUuid, int currentIndex, List<Vec3> nodes, List<String> nodeTypes,
+                                  List<Double> nodeCosts, List<String> nodeCostReasons, boolean blocked) {
         List<String> normalizedNodeTypes = new ArrayList<>(nodeTypes);
+        List<Double> normalizedNodeCosts = new ArrayList<>(nodeCosts);
+        List<String> normalizedNodeCostReasons = new ArrayList<>(nodeCostReasons);
         while (normalizedNodeTypes.size() < nodes.size()) {
             normalizedNodeTypes.add("WALKABLE");
         }
         if (normalizedNodeTypes.size() > nodes.size()) {
             normalizedNodeTypes = normalizedNodeTypes.stream().limit(nodes.size()).collect(Collectors.toList());
         }
-        PATHS.put(npcUuid, new DebugPathData(currentIndex, new ArrayList<>(nodes), normalizedNodeTypes, blocked));
+        while (normalizedNodeCosts.size() < nodes.size()) {
+            normalizedNodeCosts.add(0.0D);
+        }
+        if (normalizedNodeCosts.size() > nodes.size()) {
+            normalizedNodeCosts = normalizedNodeCosts.stream().limit(nodes.size()).collect(Collectors.toList());
+        }
+        while (normalizedNodeCostReasons.size() < nodes.size()) {
+            normalizedNodeCostReasons.add("normal");
+        }
+        if (normalizedNodeCostReasons.size() > nodes.size()) {
+            normalizedNodeCostReasons = normalizedNodeCostReasons.stream().limit(nodes.size()).collect(Collectors.toList());
+        }
+        PATHS.put(npcUuid, new DebugPathData(
+                currentIndex,
+                new ArrayList<>(nodes),
+                normalizedNodeTypes,
+                normalizedNodeCosts,
+                normalizedNodeCostReasons,
+                blocked
+        ));
     }
 
     public static void removePath(UUID npcUuid) {
@@ -38,6 +60,13 @@ public class NPCPathDebugClientCache {
         PATHS.clear();
     }
 
-    public record DebugPathData(int currentIndex, List<Vec3> nodes, List<String> nodeTypes, boolean blocked) {
+    public record DebugPathData(
+            int currentIndex,
+            List<Vec3> nodes,
+            List<String> nodeTypes,
+            List<Double> nodeCosts,
+            List<String> nodeCostReasons,
+            boolean blocked
+    ) {
     }
 }

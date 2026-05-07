@@ -2375,6 +2375,8 @@ public class CustomEntity extends PathfinderMob {
 
         java.util.List<net.minecraft.world.phys.Vec3> nodePositions = new java.util.ArrayList<>();
         java.util.List<String> nodeTypes = new java.util.ArrayList<>();
+        java.util.List<Double> nodeCosts = new java.util.ArrayList<>();
+        java.util.List<String> nodeCostReasons = new java.util.ArrayList<>();
         int currentIndex = 0;
         boolean clear = true;
         boolean blocked = false;
@@ -2385,6 +2387,8 @@ public class CustomEntity extends PathfinderMob {
             if (debugTargetPos != null) {
                 nodePositions.add(debugTargetPos);
                 nodeTypes.add("TARGET");
+                nodeCosts.add(0.0D);
+                nodeCostReasons.add("target");
             }
             com.xiaoliang.simukraft.entity.ai.path.NPCPath currentPath = npcPathNavigator.getCurrentPath();
             if (currentPath != null && !currentPath.isEmpty()) {
@@ -2392,6 +2396,8 @@ public class CustomEntity extends PathfinderMob {
                 for (com.xiaoliang.simukraft.entity.ai.path.NPCPathNode node : currentPath.getNodes()) {
                     nodePositions.add(new net.minecraft.world.phys.Vec3(node.standX, node.standY, node.standZ));
                     nodeTypes.add(node.type.name());
+                    nodeCosts.add(node.stepCost);
+                    nodeCostReasons.add(node.costReason == null ? "normal" : node.costReason);
                 }
                 clear = false;
             } else if (!nodePositions.isEmpty()) {
@@ -2400,7 +2406,16 @@ public class CustomEntity extends PathfinderMob {
         }
 
         com.xiaoliang.simukraft.network.SyncNPCPathDebugPacket packet =
-                new com.xiaoliang.simukraft.network.SyncNPCPathDebugPacket(this.getUUID(), currentIndex, nodePositions, nodeTypes, clear, blocked);
+                new com.xiaoliang.simukraft.network.SyncNPCPathDebugPacket(
+                        this.getUUID(),
+                        currentIndex,
+                        nodePositions,
+                        nodeTypes,
+                        nodeCosts,
+                        nodeCostReasons,
+                        clear,
+                        blocked
+                );
 
         if (ServerConfig.isDebugLogEnabled()) {
             Simukraft.LOGGER.info("[CustomEntity] 同步NPC路径调试数据: npc={}, clear={}, blocked={}, nodes={}", this.getFullName(), clear, blocked, nodePositions.size());

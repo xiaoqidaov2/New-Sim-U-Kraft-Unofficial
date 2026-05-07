@@ -1,0 +1,11 @@
+{
+  "_comment": "NPC 智能寻路代价配置",
+  "normalTerrainCost": 1.0,
+  "maxPenaltyCost": 100.0,
+  "carpetFenceHopCost": 1.0,
+  "ascendSurcharge": 1.2,
+  "jumpOverSurcharge": 1.4,
+  "descendSurcharge": 0.35,
+  "fallSurcharge": 0.5,
+  "doorSurcharge": 0.15
+}

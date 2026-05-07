@@ -2,8 +2,12 @@ package com.xiaoliang.simukraft.entity.ai.path;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.FenceBlock;
+import net.minecraft.world.level.block.IronBarsBlock;
 import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.StairBlock;
+import net.minecraft.world.level.block.TrapDoorBlock;
+import net.minecraft.world.level.block.WallBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -261,7 +265,7 @@ public class NPCPath {
             // 尝试找到最远的可以直接到达的节点
             int farthest = i + 1;
             for (int j = i + 2; j < nodes.size(); j++) {
-                if (isDiagonalSegment(current, nodes.get(j)) && isNearObstacleBetween(current, nodes.get(j))) {
+                if (isNearObstacleBetween(current, nodes.get(j))) {
                     break;
                 }
                 if (canWalkDirectly(current, nodes.get(j))) {
@@ -310,8 +314,8 @@ public class NPCPath {
         double distance = start.distanceTo(end);
         if (distance > 5.0) return false;
 
-        Vec3 startVec = new Vec3(start.x + 0.5D, start.y, start.z + 0.5D);
-        Vec3 endVec = new Vec3(end.x + 0.5D, end.y, end.z + 0.5D);
+        Vec3 startVec = new Vec3(start.standX, start.standY, start.standZ);
+        Vec3 endVec = new Vec3(end.standX, end.standY, end.standZ);
         int samples = Math.max(2, (int) Math.ceil(distance * 4.0D));
 
         for (int i = 1; i < samples; i++) {
@@ -335,7 +339,7 @@ public class NPCPath {
     }
 
     private boolean isPassableForPath(BlockState state, BlockPos pos) {
-        return state.getCollisionShape(level, pos).isEmpty() || isVanillaStepBlock(state, pos);
+        return state.getCollisionShape(level, pos).isEmpty() || isVanillaStepBlock(state, pos) || isOpenTrapdoor(state);
     }
 
     private boolean isVanillaStepBlock(BlockState state, BlockPos pos) {
@@ -381,7 +385,7 @@ public class NPCPath {
         for (int y = minY; y <= maxY; y++) {
             BlockPos checkPos = new BlockPos(pos.getX(), y, pos.getZ());
             BlockState state = level.getBlockState(checkPos);
-            if (state.getCollisionShape(level, checkPos).isEmpty()) {
+            if (state.getCollisionShape(level, checkPos).isEmpty() || isOpenTrapdoor(state)) {
                 continue;
             }
             double localMinY = standY - checkPos.getY() + 1.0E-5D;
@@ -405,17 +409,13 @@ public class NPCPath {
         return height;
     }
 
-    private boolean isDiagonalSegment(NPCPathNode start, NPCPathNode end) {
-        return start.x != end.x && start.z != end.z;
-    }
-
     private boolean isNearObstacleBetween(NPCPathNode start, NPCPathNode end) {
         if (level == null) {
             return false;
         }
 
-        Vec3 startVec = new Vec3(start.x + 0.5D, start.y, start.z + 0.5D);
-        Vec3 endVec = new Vec3(end.x + 0.5D, end.y, end.z + 0.5D);
+        Vec3 startVec = new Vec3(start.standX, start.standY, start.standZ);
+        Vec3 endVec = new Vec3(end.standX, end.standY, end.standZ);
         double distance = start.distanceTo(end);
         int samples = Math.max(2, (int) Math.ceil(distance * 4.0D));
 
@@ -426,6 +426,9 @@ public class NPCPath {
             double sampleZ = startVec.z + (endVec.z - startVec.z) * t;
             BlockPos centerPos = BlockPos.containing(sampleX, sampleY, sampleZ);
 
+            if (isPathSmoothingObstacle(centerPos) || isPathSmoothingObstacle(centerPos.above())) {
+                return true;
+            }
             for (int dx = -1; dx <= 1; dx++) {
                 for (int dz = -1; dz <= 1; dz++) {
                     if (dx == 0 && dz == 0) {
@@ -435,7 +438,7 @@ public class NPCPath {
                     BlockPos headPos = checkPos.above();
                     BlockState checkState = level.getBlockState(checkPos);
                     if (!isPassableForPath(checkState, checkPos)
-                            || !level.getBlockState(headPos).getCollisionShape(level, headPos).isEmpty()) {
+                            || !isPassableForPath(level.getBlockState(headPos), headPos)) {
                         return true;
                     }
                 }
@@ -443,5 +446,23 @@ public class NPCPath {
         }
 
         return false;
+    }
+
+    private boolean isPathSmoothingObstacle(BlockPos pos) {
+        BlockState state = level.getBlockState(pos);
+        if (!isPassableForPath(state, pos)) {
+            return true;
+        }
+        return isFenceLikeObstacle(state);
+    }
+
+    private boolean isFenceLikeObstacle(BlockState state) {
+        return state.getBlock() instanceof FenceBlock
+                || state.getBlock() instanceof WallBlock
+                || state.getBlock() instanceof IronBarsBlock;
+    }
+
+    private boolean isOpenTrapdoor(BlockState state) {
+        return state.getBlock() instanceof TrapDoorBlock && state.getValue(TrapDoorBlock.OPEN);
     }
 }

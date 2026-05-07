@@ -12,6 +12,9 @@ public class NPCPathNode implements Comparable<NPCPathNode> {
     public double standY;
     public double standZ;
     public String key;
+    public double stepCost;
+    public double terrainCost;
+    public String costReason;
     
     // A*算法所需的数据
     public double gCost; // 从起点到当前节点的实际代价
@@ -37,6 +40,7 @@ public class NPCPathNode implements Comparable<NPCPathNode> {
     public enum MovementAction {
         TRAVERSE,
         ASCEND,
+        JUMP_OVER,
         DESCEND,
         FALL,
         DOOR
@@ -57,6 +61,9 @@ public class NPCPathNode implements Comparable<NPCPathNode> {
         this.parent = null;
         this.type = NodeType.WALKABLE;
         this.action = MovementAction.TRAVERSE;
+        this.stepCost = 0.0D;
+        this.terrainCost = 0.0D;
+        this.costReason = "start";
     }
     
     public NPCPathNode(int x, int y, int z) {
@@ -74,6 +81,9 @@ public class NPCPathNode implements Comparable<NPCPathNode> {
         this.parent = null;
         this.type = NodeType.WALKABLE;
         this.action = MovementAction.TRAVERSE;
+        this.stepCost = 0.0D;
+        this.terrainCost = 0.0D;
+        this.costReason = "start";
     }
     
     public void setStandPosition(double standX, double standY, double standZ) {
@@ -107,8 +117,8 @@ public class NPCPathNode implements Comparable<NPCPathNode> {
     
     @Override
     public String toString() {
-        return String.format("Node[%d,%d,%d] stand=%.3f,%.3f,%.3f g=%.2f h=%.2f f=%.2f %s/%s", 
-            x, y, z, standX, standY, standZ, gCost, hCost, fCost, type, action);
+        return String.format("Node[%d,%d,%d] stand=%.3f,%.3f,%.3f g=%.2f h=%.2f f=%.2f step=%.2f terrain=%.2f %s/%s %s",
+            x, y, z, standX, standY, standZ, gCost, hCost, fCost, stepCost, terrainCost, type, action, costReason);
     }
     
     /**

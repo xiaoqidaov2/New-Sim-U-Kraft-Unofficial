@@ -273,7 +273,6 @@ public class LogisticsWorkHandler {
     }
 
     private static final class TransferContext {
-        private final ServerLevel level;
         private final boolean creativeMode;
         private final com.xiaoliang.simukraft.world.CityData cityData;
         private final Set<UUID> dirtyCities = new HashSet<>();
@@ -281,7 +280,6 @@ public class LogisticsWorkHandler {
         private int processedChannels = 0;
 
         private TransferContext(ServerLevel level, boolean creativeMode) {
-            this.level = level;
             this.creativeMode = creativeMode;
             this.cityData = com.xiaoliang.simukraft.world.CityData.get(level);
         }
