@@ -94,6 +94,8 @@ public class NPCMoveController {
     private int fatigueCooldownTicks;
     private double fatigueSpeed;
     private Consumer<BlockPos> fenceGateTracker;
+    private BlockPos repeatedJumpObstaclePos;
+    private int repeatedJumpAttempts;
 
     private enum ObstacleType {
         NONE,
@@ -136,6 +138,8 @@ public class NPCMoveController {
         this.fatigueCooldownTicks = 0;
         this.fatigueSpeed = WALK_MOVE_SPEED;
         this.fenceGateTracker = null;
+        this.repeatedJumpObstaclePos = null;
+        this.repeatedJumpAttempts = 0;
     }
     
     /**
@@ -154,6 +158,7 @@ public class NPCMoveController {
         this.lastPos = npc.position();
         this.movementBlocked = false;
         resetFatigueState();
+        resetRepeatedJumpState();
         
         return true;
     }
@@ -177,6 +182,7 @@ public class NPCMoveController {
         this.stepUpAirTicks = 0;
         this.stepUpPhase = StepUpPhase.NONE;
         resetFatigueState();
+        resetRepeatedJumpState();
         
         // 停止NPC移动
         npc.setDeltaMovement(Vec3.ZERO);
@@ -361,6 +367,10 @@ public class NPCMoveController {
             if (tryResolveCrowdedPath(targetPos)) {
                 return;
             }
+            if (tryRepeatedForwardJumpAndRetreat(targetNode, targetPos)) {
+                movementBlocked = false;
+                return;
+            }
             if (tryForwardJumpRecovery(targetNode, targetPos)) {
                 movementBlocked = false;
                 return;
@@ -376,6 +386,7 @@ public class NPCMoveController {
         movementBlocked = false;
         currentObstacleType = ObstacleType.NONE;
         resetCrowdState();
+        resetRepeatedJumpState();
 
         // 执行移动
         currentSpeed = calculateSpeed(targetPos);
@@ -1087,6 +1098,64 @@ public class NPCMoveController {
         return true;
     }
 
+    /**
+     * 平地遇阻时的固定前冲跳尝试：
+     * 连续前进跳三次，若仍无法通过则向后退一步，避免原地硬顶。
+     */
+    private boolean tryRepeatedForwardJumpAndRetreat(NPCPathNode targetNode, Vec3 targetPos) {
+        if (targetPos == null || !npc.onGround()) {
+            resetRepeatedJumpState();
+            return false;
+        }
+        if (currentObstacleType != ObstacleType.SOLID_BLOCK && currentObstacleType != ObstacleType.STEP_UP) {
+            resetRepeatedJumpState();
+            return false;
+        }
+
+        Vec3 currentPos = npc.position();
+        Vec3 direction = targetPos.subtract(currentPos);
+        double horizontalDist = Math.sqrt(direction.x * direction.x + direction.z * direction.z);
+        if (horizontalDist < 0.2D) {
+            resetRepeatedJumpState();
+            return false;
+        }
+
+        double dx = direction.x / horizontalDist;
+        double dz = direction.z / horizontalDist;
+        BlockPos obstaclePos = findJumpBarrierOnPath(currentPos, dx, dz, horizontalDist);
+        if (obstaclePos == null) {
+            obstaclePos = findLowObstacleBarrierOnPath(currentPos, dx, dz, horizontalDist);
+        }
+        if (obstaclePos == null) {
+            resetRepeatedJumpState();
+            return false;
+        }
+
+        if (!obstaclePos.equals(repeatedJumpObstaclePos)) {
+            repeatedJumpObstaclePos = obstaclePos;
+            repeatedJumpAttempts = 0;
+        }
+
+        if (repeatedJumpAttempts < 3) {
+            repeatedJumpAttempts++;
+            double jumpSpeed = Math.max(LOW_OBSTACLE_HOP_SPEED,
+                    Math.min(MAX_ASCEND_JUMP_SPEED, calculateAscendJumpSpeed(Math.min(horizontalDist, 1.2D))));
+            faceMovementDirection(dx, dz, 0.8F);
+            triggerGroundJump(0.42D);
+            applyDirectedTraversalMotion(dx, dz, jumpSpeed, Math.max(npc.getDeltaMovement().y, 0.42D));
+            logStepMove("REPEATED_FORWARD_JUMP_" + repeatedJumpAttempts, targetNode, targetPos, horizontalDist, obstaclePos.getY() - npc.getY());
+            stepUpPhase = StepUpPhase.LAND;
+            return true;
+        }
+
+        boolean retreated = tryShortBackwardRetreat(targetPos);
+        if (retreated) {
+            logStepMove("REPEATED_JUMP_RETREAT", targetNode, targetPos, horizontalDist, obstaclePos.getY() - npc.getY());
+        }
+        resetRepeatedJumpState();
+        return retreated;
+    }
+
     private boolean tryLowObstacleForwardHop(NPCPathNode targetNode, Vec3 targetPos) {
         if (targetPos == null || !npc.onGround()) {
             return false;
@@ -1262,6 +1331,11 @@ public class NPCMoveController {
         lastCrowdBlockerPos = null;
     }
 
+    private void resetRepeatedJumpState() {
+        repeatedJumpObstaclePos = null;
+        repeatedJumpAttempts = 0;
+    }
+
     private boolean tryBypassObstacle(Vec3 target) {
         Vec3 currentPos = npc.position();
         Vec3 direction = target.subtract(currentPos);
@@ -1326,6 +1400,51 @@ public class NPCMoveController {
         return (isOpenSpacePassable(footState, footPos) || isLowStepCollision(footState, footPos))
                 && isOpenSpacePassable(headState, headPos)
                 && !groundState.getCollisionShape(level, groundPos).isEmpty();
+    }
+
+    /**
+     * 向后轻退一步，给下一轮重新起跳或绕障留出空间。
+     */
+    private boolean tryShortBackwardRetreat(Vec3 targetPos) {
+        if (targetPos == null || !npc.onGround()) {
+            return false;
+        }
+
+        Vec3 currentPos = npc.position();
+        Vec3 direction = targetPos.subtract(currentPos);
+        double horizontalDist = Math.sqrt(direction.x * direction.x + direction.z * direction.z);
+        if (horizontalDist < 0.01D) {
+            return false;
+        }
+
+        double dx = direction.x / horizontalDist;
+        double dz = direction.z / horizontalDist;
+        double retreatDistance = 0.45D;
+        double retreatX = currentPos.x - dx * retreatDistance;
+        double retreatZ = currentPos.z - dz * retreatDistance;
+        if (!isBodyPathClearAt(retreatX, currentPos.y, retreatZ)) {
+            return false;
+        }
+
+        BlockPos retreatFootPos = BlockPos.containing(retreatX, currentPos.y, retreatZ);
+        BlockPos retreatHeadPos = retreatFootPos.above();
+        BlockPos retreatGroundPos = retreatFootPos.below();
+        BlockState retreatFootState = level.getBlockState(retreatFootPos);
+        BlockState retreatHeadState = level.getBlockState(retreatHeadPos);
+        BlockState retreatGroundState = level.getBlockState(retreatGroundPos);
+        if (!isOpenSpacePassable(retreatFootState, retreatFootPos)
+                || !isOpenSpacePassable(retreatHeadState, retreatHeadPos)
+                || retreatGroundState.getCollisionShape(level, retreatGroundPos).isEmpty()) {
+            return false;
+        }
+
+        double retreatSpeed = 0.12D;
+        npc.getMoveControl().setWantedPosition(npc.getX(), npc.getY(), npc.getZ(), 0.0D);
+        npc.setDeltaMovement(-dx * retreatSpeed, npc.getDeltaMovement().y, -dz * retreatSpeed);
+        npc.setSpeed((float) retreatSpeed);
+        npc.setZza((float) retreatSpeed);
+        npc.setXxa(0.0F);
+        return true;
     }
 
     private boolean isLowStepCollision(BlockState state, BlockPos pos) {
