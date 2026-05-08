@@ -125,8 +125,8 @@ public class UpgradeCanvas extends AbstractWidget {
         Minecraft mc = Minecraft.getInstance();
         int titleX = getX() + 14;
         int titleY = getY() + 10;
-        guiGraphics.drawString(mc.font, Component.literal("城市发展路线"), titleX, titleY, COLOR_TEXT);
-        guiGraphics.drawString(mc.font, Component.literal("拖拽查看路线，滚轮缩放视图，点击节点查看详情"), titleX + 92, titleY, COLOR_TEXT_MUTED);
+        guiGraphics.drawString(mc.font, Component.literal("城市发展路线"), titleX, titleY, COLOR_TEXT, false);
+        guiGraphics.drawString(mc.font, Component.literal("拖拽查看路线，滚轮缩放视图，点击节点查看详情"), titleX + 92, titleY, COLOR_TEXT_MUTED, false);
     }
     private void renderMap(GuiGraphics guiGraphics, int startX, int startY, int width, int height, int mouseX, int mouseY) {
         hoveredMarker = null;
@@ -227,7 +227,7 @@ public class UpgradeCanvas extends AbstractWidget {
         int labelY = point.y - 9;
         guiGraphics.fill(labelX, labelY, labelX + labelWidth, labelY + 18, expanded ? 0xFFF4E8C9 : 0xFFF7EFD9);
         drawBorder(guiGraphics, labelX, labelY, labelX + labelWidth, labelY + 18, expanded ? color : 0xFFB79D77);
-        guiGraphics.drawString(mc.font, Component.literal(trimToWidth(mc, title, labelWidth - 9)), labelX + 5, labelY + 5, expanded ? COLOR_TEXT : COLOR_TEXT_MUTED);
+        guiGraphics.drawString(mc.font, Component.literal(trimToWidth(mc, title, labelWidth - 9)), labelX + 5, labelY + 5, expanded ? COLOR_TEXT : COLOR_TEXT_MUTED, false);
     }
 
     private String trimToWidth(Minecraft mc, String text, int width) {
@@ -355,8 +355,8 @@ public class UpgradeCanvas extends AbstractWidget {
         }
         guiGraphics.fill(boxX, boxY, boxX + maxWidth, boxY + 36, 0xFFF4E8C9);
         drawBorder(guiGraphics, boxX, boxY, boxX + maxWidth, boxY + 36, 0xFFB79D77);
-        guiGraphics.drawString(mc.font, Component.literal(title), boxX + 8, boxY + 7, COLOR_TEXT);
-        guiGraphics.drawString(mc.font, status, boxX + 8, boxY + 21, getStateColor(level, cityLevel));
+        guiGraphics.drawString(mc.font, Component.literal(title), boxX + 8, boxY + 7, COLOR_TEXT, false);
+        guiGraphics.drawString(mc.font, status, boxX + 8, boxY + 21, getStateColor(level, cityLevel), false);
     }
 
     @Override

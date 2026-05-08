@@ -12,7 +12,10 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.level.block.EnderChestBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -353,14 +356,42 @@ public final class CheeseFactoryWorkController {
         updateHeldItemForStage(npc, Stage.STORE_CHEESE);
 
         if (state.carriedCheeseBlocks <= 0) {
+            closeAnimatedChest(level, state.activeChestPos);
+            state.activeChestPos = null;
             setStage(state, resolveNextStage(level, buildingPos, state));
             return;
         }
 
-        if (!insertNearbyItem(level, buildingPos, ModBlocks.CHEESE_BLOCK_ITEM.get(), state.carriedCheeseBlocks)) {
+        BlockPos chestPos = findInsertableChestPos(level, buildingPos, ModBlocks.CHEESE_BLOCK_ITEM.get(), state.carriedCheeseBlocks);
+        if (chestPos == null) {
+            closeAnimatedChest(level, state.activeChestPos);
+            state.activeChestPos = null;
             return;
         }
 
+        if (state.activeChestPos == null || !state.activeChestPos.equals(chestPos)) {
+            closeAnimatedChest(level, state.activeChestPos);
+            state.activeChestPos = chestPos.immutable();
+            openAnimatedChest(level, state.activeChestPos);
+        }
+
+        if (!isActionScheduled(state)) {
+            scheduleNextAction(level, state, 20L);
+        }
+        if (!isActionReady(level, state)) {
+            swingWorkingHand(npc, level);
+            return;
+        }
+
+        if (!insertItemIntoChest(level, chestPos, ModBlocks.CHEESE_BLOCK_ITEM.get(), state.carriedCheeseBlocks)) {
+            closeAnimatedChest(level, state.activeChestPos);
+            state.activeChestPos = null;
+            state.nextActionGameTime = 0L;
+            return;
+        }
+
+        closeAnimatedChest(level, state.activeChestPos);
+        state.activeChestPos = null;
         state.carriedCheeseBlocks = 0;
         resetProductionCycle(state);
         setStage(state, resolveNextStage(level, buildingPos, state));
@@ -924,20 +955,54 @@ public final class CheeseFactoryWorkController {
         return remaining <= 0;
     }
 
-    private static boolean insertNearbyItem(ServerLevel level, BlockPos buildingPos, Item item, int count) {
-        int remaining = count;
-        for (BlockPos containerPos : findNearbyContainers(level, buildingPos)) {
-            if (remaining <= 0) {
-                break;
-            }
-            ItemStack stack = new ItemStack(item, remaining);
-            if (!ContainerUtils.canInsertItem(level, containerPos, stack)) {
-                continue;
-            }
-            int inserted = ContainerUtils.insertItem(level, containerPos, stack);
-            remaining -= inserted;
+    @Nullable
+    private static BlockPos findInsertableChestPos(ServerLevel level, BlockPos buildingPos, Item item, int count) {
+        if (level == null || buildingPos == null || item == null || count <= 0) {
+            return null;
         }
-        return remaining <= 0;
+        ItemStack stack = new ItemStack(item, count);
+        for (BlockPos containerPos : findNearbyContainers(level, buildingPos)) {
+            if (ContainerUtils.canInsertItem(level, containerPos, stack)) {
+                return containerPos;
+            }
+        }
+        return null;
+    }
+
+    private static boolean insertItemIntoChest(ServerLevel level, BlockPos chestPos, Item item, int count) {
+        if (level == null || chestPos == null || item == null || count <= 0) {
+            return false;
+        }
+        ItemStack stack = new ItemStack(item, count);
+        if (!ContainerUtils.canInsertItem(level, chestPos, stack)) {
+            return false;
+        }
+        return ContainerUtils.insertItem(level, chestPos, stack) >= count;
+    }
+
+    private static void openAnimatedChest(ServerLevel level, @Nullable BlockPos chestPos) {
+        animateChest(level, chestPos, true);
+    }
+
+    private static void closeAnimatedChest(ServerLevel level, @Nullable BlockPos chestPos) {
+        animateChest(level, chestPos, false);
+    }
+
+    private static void animateChest(ServerLevel level, @Nullable BlockPos chestPos, boolean open) {
+        if (level == null || chestPos == null || !level.isLoaded(chestPos)) {
+            return;
+        }
+        BlockState state = level.getBlockState(chestPos);
+        Block block = state.getBlock();
+        int eventType = isChestLikeBlock(block) ? 1 : 0;
+        if (eventType <= 0) {
+            return;
+        }
+        level.blockEvent(chestPos, block, eventType, open ? 1 : 0);
+    }
+
+    private static boolean isChestLikeBlock(Block block) {
+        return block instanceof ChestBlock || block instanceof EnderChestBlock;
     }
 
     private static void returnEmptyBuckets(ServerLevel level, BlockPos buildingPos, int count) {
@@ -1010,6 +1075,7 @@ public final class CheeseFactoryWorkController {
         private int pendingMilkBuckets;
         private int routeIndex;
         private StructureRotation rotation;
+        private BlockPos activeChestPos;
         private long nextActionGameTime;
     }
 

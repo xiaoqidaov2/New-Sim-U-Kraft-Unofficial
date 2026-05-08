@@ -100,7 +100,6 @@ public class CityUpgradeScreen extends Screen {
     public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTicks) {
         renderScreenBackground(guiGraphics);
         updateAnimation();
-        super.renderBackground(guiGraphics);
         super.render(guiGraphics, mouseX, mouseY, partialTicks);
         renderHeader(guiGraphics);
         renderFooter(guiGraphics);
@@ -132,8 +131,8 @@ public class CityUpgradeScreen extends Screen {
     }
 
     private void renderHeader(GuiGraphics guiGraphics) {
-        guiGraphics.drawString(nn(this.font), nn(Component.translatable("gui.city_upgrade.title")), 30, 24, 0xFFFFFFFF);
-        guiGraphics.drawString(nn(this.font), nn(Component.literal("Lv." + cityLevel)), this.width - 78, 24, COLOR_AVAILABLE);
+        guiGraphics.drawString(nn(this.font), nn(Component.translatable("gui.city_upgrade.title")), 30, 24, 0xFFFFFFFF, false);
+        guiGraphics.drawString(nn(this.font), nn(Component.literal("Lv." + cityLevel)), this.width - 78, 24, COLOR_AVAILABLE, false);
         renderLegend(guiGraphics, 150, 24);
     }
 
@@ -142,7 +141,7 @@ public class CityUpgradeScreen extends Screen {
             int x = 118;
             int y = this.height - 31;
             for (FormattedCharSequence line : this.font.split(nn(feedbackMessage), this.width - 150)) {
-                guiGraphics.drawString(nn(this.font), nn(line), x, y, feedbackColor);
+                guiGraphics.drawString(nn(this.font), nn(line), x, y, feedbackColor, false);
                 y += this.font.lineHeight + 1;
                 if (y > this.height - 16) {
                     break;
@@ -159,7 +158,7 @@ public class CityUpgradeScreen extends Screen {
 
     private void drawLegendItem(GuiGraphics guiGraphics, int x, int y, int color, Component text) {
         guiGraphics.fill(x, y + 3, x + 7, y + 10, color);
-        guiGraphics.drawString(nn(this.font), nn(text), x + 11, y + 2, COLOR_TEXT_MUTED);
+        guiGraphics.drawString(nn(this.font), nn(text), x + 11, y + 2, COLOR_TEXT_MUTED, false);
     }
 
     private void updateAnimation() {
@@ -219,10 +218,10 @@ public class CityUpgradeScreen extends Screen {
 
     private int renderPanelTitle(GuiGraphics guiGraphics, int upgradeLevel, @Nullable CityUpgradeManager.CityUpgrade upgrade, int contentLeft, int contentRight, int y) {
         int titleColor = getLevelColor(upgradeLevel);
-        guiGraphics.drawString(nn(this.font), nn(Component.literal("Lv." + upgradeLevel)), contentLeft, y, titleColor);
+        guiGraphics.drawString(nn(this.font), nn(Component.literal("Lv." + upgradeLevel)), contentLeft, y, titleColor, false);
         String name = upgrade != null ? upgrade.name() : getUpgradeNameFromMarker();
         int levelTextWidth = this.font.width(nn(Component.literal("Lv." + upgradeLevel)));
-        guiGraphics.drawString(nn(this.font), nn(Component.literal(safeString(name))), Math.min(contentLeft + levelTextWidth + 16, contentRight - 40), y, 0xFFFFFFFF);
+        guiGraphics.drawString(nn(this.font), nn(Component.literal(safeString(name))), Math.min(contentLeft + levelTextWidth + 16, contentRight - 40), y, 0xFFFFFFFF, false);
         return y + 20;
     }
 
@@ -232,7 +231,7 @@ public class CityUpgradeScreen extends Screen {
         drawCard(guiGraphics, x, y, width, 30);
         Component status = getStatusText(upgradeLevel);
         int color = getLevelColor(upgradeLevel);
-        guiGraphics.drawString(nn(this.font), nn(status), x + 10, y + 10, color);
+        guiGraphics.drawString(nn(this.font), nn(status), x + 10, y + 10, color, false);
         return y + 38;
     }
 
@@ -249,7 +248,7 @@ public class CityUpgradeScreen extends Screen {
             return contentBottom;
         }
         drawCard(guiGraphics, x, y, width, height);
-        guiGraphics.drawString(nn(this.font), nn(Component.literal("城市阶段")), x + 10, y + 8, COLOR_WARN);
+        guiGraphics.drawString(nn(this.font), nn(Component.literal("城市阶段")), x + 10, y + 8, COLOR_WARN, false);
         drawWrapped(guiGraphics, Component.literal(safeString(upgrade.description())), x + 10, y + 22, textWidth, COLOR_TEXT, y + height - 6);
         return y + height + 8;
     }
@@ -269,7 +268,7 @@ public class CityUpgradeScreen extends Screen {
             return contentBottom;
         }
         drawCard(guiGraphics, x, y, width, height);
-        guiGraphics.drawString(nn(this.font), nn(Component.translatable("gui.city_upgrade.requirements")), x + 10, y + 8, COLOR_WARN);
+        guiGraphics.drawString(nn(this.font), nn(Component.translatable("gui.city_upgrade.requirements")), x + 10, y + 8, COLOR_WARN, false);
         int rowY = y + 24;
         net.minecraft.world.entity.player.Player player = Minecraft.getInstance().player;
         if (requirements.population() > 0) {
@@ -310,7 +309,7 @@ public class CityUpgradeScreen extends Screen {
             return contentBottom;
         }
         drawCard(guiGraphics, x, y, width, height);
-        guiGraphics.drawString(nn(this.font), nn(Component.translatable("gui.city_upgrade.unlocks")), x + 10, y + 8, COLOR_WARN);
+        guiGraphics.drawString(nn(this.font), nn(Component.translatable("gui.city_upgrade.unlocks")), x + 10, y + 8, COLOR_WARN, false);
         drawWrapped(guiGraphics, Component.literal(unlockText), x + 10, y + 24, textWidth, COLOR_TEXT, y + height - 6);
         return Math.min(contentBottom, y + height + 8);
     }
@@ -361,7 +360,7 @@ public class CityUpgradeScreen extends Screen {
 
     private int drawRequirementText(GuiGraphics guiGraphics, Component text, boolean pass, int x, int y) {
         guiGraphics.fill(x, y + 3, x + 7, y + 10, pass ? COLOR_AVAILABLE : COLOR_LOCKED);
-        guiGraphics.drawString(nn(this.font), nn(text), x + 16, y + 2, pass ? COLOR_AVAILABLE : COLOR_LOCKED);
+        guiGraphics.drawString(nn(this.font), nn(text), x + 16, y + 2, pass ? COLOR_AVAILABLE : COLOR_LOCKED, false);
         return y + 22;
     }
 
@@ -371,7 +370,7 @@ public class CityUpgradeScreen extends Screen {
         }
         boolean pass = current >= required;
         guiGraphics.renderItem(nn(itemStack), x, y - 2);
-        guiGraphics.drawString(nn(this.font), nn(Component.literal(current + " / " + required)), x + 24, y + 2, pass ? COLOR_AVAILABLE : COLOR_LOCKED);
+        guiGraphics.drawString(nn(this.font), nn(Component.literal(current + " / " + required)), x + 24, y + 2, pass ? COLOR_AVAILABLE : COLOR_LOCKED, false);
         return y + 22;
     }
 
@@ -390,7 +389,7 @@ public class CityUpgradeScreen extends Screen {
             if (y > maxY) {
                 break;
             }
-            guiGraphics.drawString(nn(this.font), nn(line), x, y, color);
+            guiGraphics.drawString(nn(this.font), nn(line), x, y, color, false);
             y += this.font.lineHeight + 2;
         }
     }
