@@ -191,6 +191,7 @@ public class IndustrialClientData {
         }
         hiredEmployees.remove(industrialPos);
         jobTypes.remove(industrialPos);
+        buildingFileNames.remove(industrialPos);
         // 注意：不再自动保存到服务器，服务器端的保存由 NPCWorkStatusPacket 处理
     }
 

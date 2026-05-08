@@ -25,10 +25,12 @@ import net.minecraftforge.fml.common.Mod;
 
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Mod.EventBusSubscriber(modid = Simukraft.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 @SuppressWarnings("null")
 public class NPCInteractionHandler {
+    private static final AtomicBoolean WORK_UI_CACHE_AVAILABLE = new AtomicBoolean(true);
 
     @SubscribeEvent
     public static void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
@@ -335,7 +337,15 @@ public class NPCInteractionHandler {
 
     @OnlyIn(Dist.CLIENT)
     private static WorkUiContext resolveWorkUiContext(CustomEntity npc) {
-        EmploymentAssignment assignment = WorkBlockHireClientCache.findByNpc(npc.getUUID()).orElse(null);
+        if (npc == null) {
+            return null;
+        }
+        String currentJob = npc.getJob();
+        if (currentJob == null || currentJob.isBlank() || "unemployed".equals(currentJob)) {
+            return null;
+        }
+
+        EmploymentAssignment assignment = findAssignmentFromClientCache(npc);
         if (assignment != null) {
             String buildingFileName = switch (assignment.workBlockType()) {
                 case COMMERCIAL_CONTROL_BOX -> resolveCommercialBuildingFileName(assignment.workplacePos());
@@ -344,6 +354,9 @@ public class NPCInteractionHandler {
             };
             if (assignment.workBlockType() == WorkBlockType.COMMERCIAL_CONTROL_BOX
                     || assignment.workBlockType() == WorkBlockType.INDUSTRIAL_CONTROL_BOX) {
+                if (!isValidWorkUiContext(assignment.workBlockType(), assignment.workplacePos(), buildingFileName)) {
+                    return null;
+                }
                 return new WorkUiContext(assignment.workBlockType(), assignment.workplacePos(), buildingFileName);
             }
         }
@@ -357,6 +370,21 @@ public class NPCInteractionHandler {
     }
 
     @OnlyIn(Dist.CLIENT)
+    private static EmploymentAssignment findAssignmentFromClientCache(CustomEntity npc) {
+        if (npc == null || !WORK_UI_CACHE_AVAILABLE.get()) {
+            return null;
+        }
+        try {
+            return WorkBlockHireClientCache.findByNpc(npc.getUUID()).orElse(null);
+        } catch (Throwable throwable) {
+            if (WORK_UI_CACHE_AVAILABLE.compareAndSet(true, false)) {
+                Simukraft.LOGGER.error("[NPCInteractionHandler] 工作区客户端缓存不可用，已降级为旧缓存回退，避免右键 NPC 时崩溃", throwable);
+            }
+            return null;
+        }
+    }
+
+    @OnlyIn(Dist.CLIENT)
     private static WorkUiContext findCommercialWorkUiContext(CustomEntity npc) {
         UUID npcUuid = npc.getUUID();
         Map<BlockPos, CommercialClientData.HireInfo> allHires = CommercialClientData.getAllHiredEmployeeUuids();
@@ -367,7 +395,10 @@ public class NPCInteractionHandler {
                 if (buildingFileName == null || buildingFileName.isEmpty()) {
                     buildingFileName = readCommercialBuildingFileNameFromClient(entry.getKey());
                 }
-                return new WorkUiContext(WorkBlockType.COMMERCIAL_CONTROL_BOX, entry.getKey(), buildingFileName);
+                if (isValidWorkUiContext(WorkBlockType.COMMERCIAL_CONTROL_BOX, entry.getKey(), buildingFileName)) {
+                    return new WorkUiContext(WorkBlockType.COMMERCIAL_CONTROL_BOX, entry.getKey(), buildingFileName);
+                }
+                return null;
             }
         }
         return null;
@@ -384,10 +415,31 @@ public class NPCInteractionHandler {
                 if (buildingFileName == null || buildingFileName.isEmpty()) {
                     buildingFileName = readIndustrialBuildingFileNameFromClient(entry.getKey());
                 }
-                return new WorkUiContext(WorkBlockType.INDUSTRIAL_CONTROL_BOX, entry.getKey(), buildingFileName);
+                if (isValidWorkUiContext(WorkBlockType.INDUSTRIAL_CONTROL_BOX, entry.getKey(), buildingFileName)) {
+                    return new WorkUiContext(WorkBlockType.INDUSTRIAL_CONTROL_BOX, entry.getKey(), buildingFileName);
+                }
+                return null;
             }
         }
         return null;
+    }
+
+    @OnlyIn(Dist.CLIENT)
+    private static boolean isValidWorkUiContext(WorkBlockType workBlockType, BlockPos workplacePos, String buildingFileName) {
+        if (workBlockType == null || workplacePos == null || buildingFileName == null || buildingFileName.isBlank()) {
+            return false;
+        }
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.level == null || !minecraft.level.isLoaded(workplacePos)) {
+            return false;
+        }
+        return switch (workBlockType) {
+            case COMMERCIAL_CONTROL_BOX ->
+                    minecraft.level.getBlockState(workplacePos).is(com.xiaoliang.simukraft.init.ModBlocks.COMMERCIAL_CONTROL_BOX.get());
+            case INDUSTRIAL_CONTROL_BOX ->
+                    minecraft.level.getBlockState(workplacePos).is(com.xiaoliang.simukraft.init.ModBlocks.INDUSTRIAL_CONTROL_BOX.get());
+            default -> false;
+        };
     }
 
     @OnlyIn(Dist.CLIENT)

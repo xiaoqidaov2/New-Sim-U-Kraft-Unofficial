@@ -2,8 +2,12 @@ package com.xiaoliang.simukraft.block;
 
 import com.xiaoliang.simukraft.building.ControlBoxDataManager;
 import com.xiaoliang.simukraft.building.ConstructionBoxMapping;
+import com.xiaoliang.simukraft.employment.domain.EmploymentAssignment;
+import com.xiaoliang.simukraft.employment.domain.EmploymentStatus;
+import com.xiaoliang.simukraft.employment.domain.WorkBlockType;
 import com.xiaoliang.simukraft.employment.service.EmploymentCommands;
 import com.xiaoliang.simukraft.employment.service.EmploymentServices;
+import com.xiaoliang.simukraft.employment.service.LegacyJobTypeMapper;
 import com.xiaoliang.simukraft.utils.BuildingDataManager;
 import com.xiaoliang.simukraft.utils.ClientRuntimeBridge;
 import com.xiaoliang.simukraft.world.CityData;
@@ -189,6 +193,7 @@ public class CommercialControlBoxBlock extends Block {
             var releaseResult = EmploymentServices.get(server).onWorkBlockRemoved(
                     new EmploymentCommands.WorkBlockRemovedCommand(serverLevel.dimension().location().toString(), pos)
             );
+            boolean firedByService = releaseResult.success() && releaseResult.assignment() != null;
             if (releaseResult.success() && releaseResult.assignment() != null) {
                 com.xiaoliang.simukraft.network.EmploymentCommandPacket.applyFireSideEffectsAndBroadcast(
                         server, releaseResult.assignment(), false
@@ -201,6 +206,23 @@ public class CommercialControlBoxBlock extends Block {
             if (hiredEmployees.containsKey(pos)) {
                 CommercialHiredData.CommercialHireInfo hireInfo = hiredEmployees.get(pos);
                 UUID npcUuid = hireInfo.getNpcUuid();
+
+                if (!firedByService && npcUuid != null) {
+                    EmploymentAssignment legacyAssignment = new EmploymentAssignment(
+                            npcUuid,
+                            serverLevel.dimension().location().toString(),
+                            pos,
+                            WorkBlockType.COMMERCIAL_CONTROL_BOX,
+                            LegacyJobTypeMapper.fromLegacy(hireInfo.getJobType(), hireInfo.getBuildingFileName()),
+                            EmploymentStatus.ASSIGNED,
+                            System.currentTimeMillis(),
+                            System.currentTimeMillis()
+                    );
+                    com.xiaoliang.simukraft.network.EmploymentCommandPacket.applyFireSideEffectsAndBroadcast(
+                            server, legacyAssignment, false
+                    );
+                    firedByService = true;
+                }
 
                 // 查找对应的NPC实体
                 var npc = CommercialHiredData.findNPCByUuid(server, npcUuid);

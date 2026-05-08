@@ -1,5 +1,9 @@
 package com.xiaoliang.simukraft.block;
 
+import com.xiaoliang.simukraft.employment.domain.EmploymentAssignment;
+import com.xiaoliang.simukraft.employment.domain.EmploymentStatus;
+import com.xiaoliang.simukraft.employment.domain.JobType;
+import com.xiaoliang.simukraft.employment.domain.WorkBlockType;
 import com.xiaoliang.simukraft.employment.service.EmploymentCommands;
 import com.xiaoliang.simukraft.employment.service.DefaultEmploymentService;
 import com.xiaoliang.simukraft.employment.service.EmploymentServices;
@@ -26,9 +30,11 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.MapColor;
 import net.minecraft.world.phys.BlockHitResult;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import javax.annotation.Nonnull;
 
@@ -68,6 +74,7 @@ public class BuildBoxBlock extends Block {
             MinecraftServer server = serverLevel.getServer();
             DefaultEmploymentService employmentService = EmploymentServices.get(server);
             String dimensionId = serverLevel.dimension().location().toString();
+            Set<UUID> firedNpcUuids = new HashSet<>();
             
             // 1. 取消该建筑盒关联的所有规划任务
             var taskManager = PlanningTaskManager.get(serverLevel);
@@ -91,6 +98,7 @@ public class BuildBoxBlock extends Block {
                             com.xiaoliang.simukraft.network.EmploymentCommandPacket.applyFireSideEffectsAndBroadcast(
                                     server, releaseResult.assignment(), false
                             );
+                            firedNpcUuids.add(npcUuid);
                         }
 
                         if (npc != null) {
@@ -110,14 +118,48 @@ public class BuildBoxBlock extends Block {
                         }
                     });
 
-            // 3. 同步清理旧系统的映射关系（如果有遗留）
             Map<BlockPos, UUID> hiredBuilders = BuildBoxHiredData.loadHiredBuilders(server);
+            UUID legacyBuilderUuid = hiredBuilders.get(pos);
+            if (legacyBuilderUuid != null && firedNpcUuids.add(legacyBuilderUuid)) {
+                EmploymentAssignment legacyAssignment = new EmploymentAssignment(
+                        legacyBuilderUuid,
+                        dimensionId,
+                        pos,
+                        WorkBlockType.BUILD_BOX,
+                        JobType.BUILDER,
+                        EmploymentStatus.ASSIGNED,
+                        System.currentTimeMillis(),
+                        System.currentTimeMillis()
+                );
+                com.xiaoliang.simukraft.network.EmploymentCommandPacket.applyFireSideEffectsAndBroadcast(
+                        server, legacyAssignment, false
+                );
+            }
+
+            Map<BlockPos, UUID> hiredPlanners = BuildBoxHiredData.loadHiredPlanners(server);
+            UUID legacyPlannerUuid = hiredPlanners.get(pos);
+            if (legacyPlannerUuid != null && firedNpcUuids.add(legacyPlannerUuid)) {
+                EmploymentAssignment legacyAssignment = new EmploymentAssignment(
+                        legacyPlannerUuid,
+                        dimensionId,
+                        pos,
+                        WorkBlockType.BUILD_BOX,
+                        JobType.PLANNER,
+                        EmploymentStatus.ASSIGNED,
+                        System.currentTimeMillis(),
+                        System.currentTimeMillis()
+                );
+                com.xiaoliang.simukraft.network.EmploymentCommandPacket.applyFireSideEffectsAndBroadcast(
+                        server, legacyAssignment, false
+                );
+            }
+
+            // 3. 同步清理旧系统的映射关系（如果有遗留）
             if (hiredBuilders.containsKey(pos)) {
                 hiredBuilders.remove(pos);
                 BuildBoxHiredData.saveHiredBuilders(server, hiredBuilders);
             }
             
-            Map<BlockPos, UUID> hiredPlanners = BuildBoxHiredData.loadHiredPlanners(server);
             if (hiredPlanners.containsKey(pos)) {
                 hiredPlanners.remove(pos);
                 BuildBoxHiredData.saveHiredPlanners(server, hiredPlanners);

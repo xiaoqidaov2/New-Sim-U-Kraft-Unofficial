@@ -31,6 +31,11 @@ public final class CheeseFactoryWorkController {
     private static final String BUILDING_ID = "cheeseFactory";
     private static final int CHEST_SEARCH_RADIUS = 8;
     private static final int MAX_POUR_BUCKETS = 20;
+    private static final int POUR_ACTION_TICKS = 100;
+    private static final int CHECK_VISCOSITY_TICKS = 40;
+    private static final int SECRET_INGREDIENT_TICKS = 100;
+    private static final int COAGULATE_TICKS = 100;
+    private static final long ACTION_SWING_INTERVAL_TICKS = 10L;
     private static final BlockPos[] CONTAINER_ANCHORS = new BlockPos[]{
             new BlockPos(2, 1, 0),
             new BlockPos(2, 1, 1)
@@ -58,13 +63,13 @@ public final class CheeseFactoryWorkController {
 
     private static final String[] PROCESS_STATUS_KEYS = new String[]{
             "gui.npc.status.cheese_factory_check_viscosity",
-            "gui.npc.status.cheese_factory_stir_milk",
             "gui.npc.status.cheese_factory_secret_ingredient",
-            "gui.npc.status.cheese_factory_add_culture",
-            "gui.npc.status.cheese_factory_remove_spores",
-            "gui.npc.status.cheese_factory_check_fermentation",
-            "gui.npc.status.cheese_factory_add_rennet",
             "gui.npc.status.cheese_factory_coagulating"
+    };
+    private static final int[] PROCESS_STEP_DURATIONS = new int[]{
+            CHECK_VISCOSITY_TICKS,
+            SECRET_INGREDIENT_TICKS,
+            COAGULATE_TICKS
     };
 
     private static final ConcurrentMap<BlockPos, CheeseFactoryState> STATES = new ConcurrentHashMap<>();
@@ -128,13 +133,9 @@ public final class CheeseFactoryWorkController {
         state.rotation = resolveRotation(level, key, null);
         STATES.put(key, state);
         ensureWorkingState(npc);
-        state.stage = resolveNextStage(level, key, state);
+        setStage(state, resolveResumeStage(level, key, state));
         updateHeldItemForStage(npc, state.stage);
-        if (state.stage == Stage.WAITING) {
-            npc.setStatusLabel("gui.npc.status.cheese_factory_waiting_milk");
-        } else {
-            npc.setStatusLabel("gui.npc.status.cheese_factory_go_pour");
-        }
+        updateStatusLabelForStage(npc, state);
     }
 
     public static void restoreNpcAfterRest(CustomEntity npc, ServerLevel level, BlockPos buildingPos) {
@@ -144,10 +145,29 @@ public final class CheeseFactoryWorkController {
         BlockPos key = buildingPos.immutable();
         CheeseFactoryState state = STATES.computeIfAbsent(key, ignored -> new CheeseFactoryState());
         state.rotation = resolveRotation(level, key, state.rotation);
-        if (state.stage == Stage.WAITING) {
-            state.stage = resolveNextStage(level, key, state);
-        }
+        setStage(state, resolveResumeStage(level, key, state));
+        ensureWorkingState(npc);
         updateHeldItemForStage(npc, state.stage);
+        updateStatusLabelForStage(npc, state);
+    }
+
+    /**
+     * 奶酪工厂需要在首次雇佣后的启动阶段持续推进状态机，
+     * 不能完全受普通工业工作时间限制，否则夜间首次雇佣会直接停在挂机态。
+     */
+    public static boolean shouldRunOutsideWorkTime(ServerLevel level, BlockPos buildingPos) {
+        if (level == null || buildingPos == null) {
+            return false;
+        }
+        BlockPos key = buildingPos.immutable();
+        CheeseFactoryState state = STATES.get(key);
+        if (isActiveWorkStage(state)) {
+            return true;
+        }
+
+        CheeseFactoryState previewState = new CheeseFactoryState();
+        previewState.rotation = resolveRotation(level, key, state != null ? state.rotation : null);
+        return resolveNextStage(level, key, previewState) != Stage.WAITING;
     }
 
     public static void tickWork(CustomEntity npc,
@@ -207,9 +227,6 @@ public final class CheeseFactoryWorkController {
             setStage(state, hasMilkInPool(level, buildingPos) ? Stage.MOVE_TO_STIR : resolveNextStage(level, buildingPos, state));
             return;
         }
-        if (!isActionReady(level, state)) {
-            return;
-        }
 
         if (state.pendingMilkBuckets <= 0) {
             if (!canStartBatchPour(level, buildingPos)) {
@@ -223,33 +240,25 @@ public final class CheeseFactoryWorkController {
             returnEmptyBuckets(level, buildingPos, MAX_POUR_BUCKETS);
             state.pendingMilkBuckets = MAX_POUR_BUCKETS;
             state.pouredBuckets = 0;
+            state.nextActionGameTime = 0L;
         }
 
-        if (state.pendingMilkBuckets <= 0) {
+        if (!isActionScheduled(state)) {
+            scheduleNextAction(level, state, POUR_ACTION_TICKS);
+        }
+        if (!isActionReady(level, state)) {
+            swingWorkingHand(npc, level);
             return;
         }
 
-        BlockPos poolPos = findFirstEmptyPoolPos(level, buildingPos);
-        BlockPos visualPos = findFirstEmptyPourVisualPos(level, buildingPos);
-        if (poolPos == null || visualPos == null) {
+        int pouredCount = pourPendingMilkBatch(level, buildingPos, state);
+        state.nextActionGameTime = 0L;
+        if (pouredCount <= 0) {
             clearPendingMilkBatch(state);
             setStage(state, hasMilkInPool(level, buildingPos) ? Stage.MOVE_TO_STIR : Stage.WAITING);
             return;
         }
-
-        level.setBlockAndUpdate(poolPos, ModBlocks.MILK_BLOCK.get().defaultBlockState());
-        level.setBlockAndUpdate(visualPos, ModBlocks.MILK_BLOCK.get().defaultBlockState());
-        npc.swing(InteractionHand.MAIN_HAND);
-        scheduleNextAction(level, state, 20L);
-        state.pouredBuckets++;
-        state.pendingMilkBuckets--;
-
-        if (state.pendingMilkBuckets <= 0
-                || state.pouredBuckets >= MAX_POUR_BUCKETS
-                || !hasEmptyPoolSlot(level, buildingPos)
-                || !hasEmptyPourVisualSlot(level, buildingPos)) {
-            setStage(state, Stage.MOVE_TO_STIR);
-        }
+        setStage(state, Stage.MOVE_TO_STIR);
     }
 
     private static void tickMoveToStir(CustomEntity npc, ServerLevel level, BlockPos buildingPos, CheeseFactoryState state) {
@@ -272,31 +281,37 @@ public final class CheeseFactoryWorkController {
         if (!hasMilkInPool(level, buildingPos)) {
             setStage(state, resolveNextStage(level, buildingPos, state));
             state.operationIndex = 0;
-            return;
-        }
-        if (!isActionReady(level, state)) {
+            state.nextActionGameTime = 0L;
             return;
         }
 
         int step = Math.max(0, Math.min(PROCESS_STATUS_KEYS.length - 1, state.operationIndex));
         npc.setStatusLabelForTicks(PROCESS_STATUS_KEYS[step], 40);
         updateHeldItemForStage(npc, Stage.PROCESSING);
-        npc.swing(InteractionHand.MAIN_HAND);
-        scheduleNextAction(level, state, step % 2 == 0 ? 20L : 40L);
+        if (!isActionScheduled(state)) {
+            scheduleNextAction(level, state, PROCESS_STEP_DURATIONS[step]);
+        }
+        if (!isActionReady(level, state)) {
+            swingWorkingHand(npc, level);
+            return;
+        }
 
         if (step == PROCESS_STATUS_KEYS.length - 1) {
             coagulateMilkIntoCheese(level, buildingPos);
             clearPourVisualMilk(level, buildingPos);
             state.pouredBuckets = 0;
-        }
-
-        state.operationIndex++;
-        if (state.operationIndex >= PROCESS_STATUS_KEYS.length) {
             state.operationIndex = 0;
+            state.nextActionGameTime = 0L;
             if (hasCheeseInPool(level, buildingPos)) {
                 setStage(state, Stage.HARVEST_CHEESE);
+            } else {
+                setStage(state, resolveResumeStage(level, buildingPos, state));
             }
+            return;
         }
+
+        state.operationIndex = Math.min(PROCESS_STATUS_KEYS.length - 1, state.operationIndex + 1);
+        state.nextActionGameTime = 0L;
     }
 
     private static void tickHarvestCheese(CustomEntity npc, ServerLevel level, BlockPos buildingPos, CheeseFactoryState state) {
@@ -387,6 +402,22 @@ public final class CheeseFactoryWorkController {
         return Stage.WAITING;
     }
 
+    private static Stage resolveResumeStage(ServerLevel level, BlockPos buildingPos, CheeseFactoryState state) {
+        if (state != null && state.carriedCheeseBlocks > 0) {
+            return Stage.MOVE_TO_CHEST;
+        }
+        if (hasCheeseInPool(level, buildingPos)) {
+            return Stage.HARVEST_CHEESE;
+        }
+        if (state != null && state.pendingMilkBuckets > 0) {
+            return Stage.POUR_MILK;
+        }
+        if (hasMilkInPool(level, buildingPos) || hasMilkInPourVisual(level, buildingPos)) {
+            return state != null && state.stage == Stage.PROCESSING ? Stage.PROCESSING : Stage.MOVE_TO_STIR;
+        }
+        return resolveNextStage(level, buildingPos, state != null ? state : new CheeseFactoryState());
+    }
+
     private static void ensureWorkingState(CustomEntity npc) {
         if (npc.getWorkStatus() != WorkStatus.WORKING) {
             npc.setWorkStatus(WorkStatus.WORKING);
@@ -420,7 +451,58 @@ public final class CheeseFactoryWorkController {
         }
         state.pouredBuckets = 0;
         state.pendingMilkBuckets = 0;
+        state.operationIndex = 0;
         state.nextActionGameTime = 0L;
+    }
+
+    private static boolean isActionScheduled(CheeseFactoryState state) {
+        return state != null && state.nextActionGameTime > 0L;
+    }
+
+    private static void swingWorkingHand(CustomEntity npc, ServerLevel level) {
+        if (npc == null || level == null) {
+            return;
+        }
+        if (level.getGameTime() % ACTION_SWING_INTERVAL_TICKS == 0L) {
+            npc.swing(InteractionHand.MAIN_HAND);
+        }
+    }
+
+    private static void updateStatusLabelForStage(CustomEntity npc, CheeseFactoryState state) {
+        if (npc == null || state == null) {
+            return;
+        }
+        String key = switch (state.stage) {
+            case MOVE_TO_POUR -> "gui.npc.status.cheese_factory_go_pour";
+            case POUR_MILK -> "gui.npc.status.cheese_factory_pouring_milk";
+            case MOVE_TO_STIR -> "gui.npc.status.cheese_factory_go_stir";
+            case PROCESSING -> PROCESS_STATUS_KEYS[Math.max(0, Math.min(PROCESS_STATUS_KEYS.length - 1, state.operationIndex))];
+            case HARVEST_CHEESE -> "gui.npc.status.cheese_factory_collecting";
+            case MOVE_TO_CHEST -> "gui.npc.status.cheese_factory_go_store";
+            case STORE_CHEESE -> "gui.npc.status.cheese_factory_storing";
+            case WAITING -> "gui.npc.status.cheese_factory_waiting_milk";
+        };
+        npc.setStatusLabel(key);
+    }
+
+    private static int pourPendingMilkBatch(ServerLevel level, BlockPos buildingPos, CheeseFactoryState state) {
+        if (level == null || buildingPos == null || state == null || state.pendingMilkBuckets <= 0) {
+            return 0;
+        }
+        int pouredCount = 0;
+        while (state.pendingMilkBuckets > 0) {
+            BlockPos poolPos = findFirstEmptyPoolPos(level, buildingPos);
+            BlockPos visualPos = findFirstEmptyPourVisualPos(level, buildingPos);
+            if (poolPos == null || visualPos == null) {
+                break;
+            }
+            level.setBlockAndUpdate(poolPos, ModBlocks.MILK_BLOCK.get().defaultBlockState());
+            level.setBlockAndUpdate(visualPos, ModBlocks.MILK_BLOCK.get().defaultBlockState());
+            pouredCount++;
+            state.pouredBuckets++;
+            state.pendingMilkBuckets--;
+        }
+        return pouredCount;
     }
 
     private static boolean isActionReady(ServerLevel level, CheeseFactoryState state) {
@@ -687,10 +769,6 @@ public final class CheeseFactoryWorkController {
             }
         }
         return false;
-    }
-
-    private static boolean hasEmptyPourVisualSlot(ServerLevel level, BlockPos buildingPos) {
-        return findFirstEmptyPourVisualPos(level, buildingPos) != null;
     }
 
     private static boolean canStartBatchPour(ServerLevel level, BlockPos buildingPos) {

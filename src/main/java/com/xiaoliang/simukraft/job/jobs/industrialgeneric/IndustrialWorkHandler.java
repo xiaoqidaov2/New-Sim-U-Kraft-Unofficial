@@ -135,8 +135,10 @@ public class IndustrialWorkHandler {
 
                 // 检查是否在工作时间内（考虑配方自定义时间）
                 boolean isWorkTime = config.isWorkTimeForRecipe(selectedRecipeId, gameTime);
+                boolean shouldRunCheeseFactory = CheeseFactoryWorkController.handles(config, buildingFileName)
+                        && CheeseFactoryWorkController.shouldRunOutsideWorkTime(level, buildingPos);
 
-                if (isWorkTime) {
+                if (isWorkTime || shouldRunCheeseFactory) {
                     ensureNpcReadyForWork(npc, level, buildingPos, buildingFileName);
 
                     if (CheeseFactoryWorkController.handles(config, buildingFileName)) {
@@ -504,15 +506,17 @@ public class IndustrialWorkHandler {
         // 发送雇佣消息
         sendHireMessage(npc, level.getServer(), config);
 
-        if (CheeseFactoryWorkController.handles(config, buildingFileName)) {
-            CheeseFactoryWorkController.onNpcAssigned(npc, level, farmPos);
-        }
-
         // 设置手持物品（使用配方配置）
         setHeldItemFromConfig(npc, config, selectedRecipeId);
 
         // 生成生物（附加项）
         spawnEntitiesIfNeeded(level, farmPos, config);
+
+        if (CheeseFactoryWorkController.handles(config, buildingFileName)) {
+            // 奶酪工厂在首次雇佣时立刻推进一次状态机，避免等后续恢复链路才进入工作。
+            CheeseFactoryWorkController.onNpcAssigned(npc, level, farmPos);
+            CheeseFactoryWorkController.tickWork(npc, farmPos, level, config);
+        }
 
         LOGGER.info(Component.translatable("message.industrial_work_handler.hire.npc_hired", config.getBuildingName(), farmPos, npc.getFullName()).getString());
     }

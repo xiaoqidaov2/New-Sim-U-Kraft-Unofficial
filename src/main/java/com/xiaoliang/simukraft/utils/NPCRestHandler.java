@@ -486,6 +486,7 @@ public class NPCRestHandler {
 
         // 设置isWorking为false，允许NPC移动
         npc.setWorking(false);
+        npc.stopAllMovement();
 
         // 恢复AI
         npc.setNoAi(false);
@@ -1537,17 +1538,19 @@ public class NPCRestHandler {
         }
 
         // simukraft: 躺在床上时限制寻路和移动
+        npc.stopNewPathfinder();
         npc.getNavigation().stop();
         npc.setNoAi(true);
         npc.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
 
-        // 确保NPC位置在床头上，防止"躺着跑"
+        // 确保NPC保持在与上床时一致的躺姿锚点，避免被纠偏到床边后掉到地上抽搐
         if (restData.bedPos != null) {
             BlockPos headPos = getBedHeadPos(level, restData.bedPos);
-            double distance = npc.position().distanceTo(net.minecraft.world.phys.Vec3.atCenterOf(headPos));
-            if (distance > 1.0D) {
-                // 如果位置偏移，传送回床头
-                npc.teleportTo(headPos.getX() + 0.5, headPos.getY() + 0.5625D, headPos.getZ() + 0.5);
+            net.minecraft.world.phys.Vec3 sleepAnchor = resolveSleepAnchor(level, restData.bedPos);
+            double distance = npc.position().distanceTo(sleepAnchor);
+            if (distance > 0.35D) {
+                npc.teleportTo(sleepAnchor.x, sleepAnchor.y, sleepAnchor.z);
+                npc.startSleeping(headPos);
             }
         }
 
@@ -1582,48 +1585,16 @@ public class NPCRestHandler {
         npcLastBedTime.put(npcUuid, currentTime);
 
         // simukraft: 停止寻路，防止"躺着跑"
+        npc.stopNewPathfinder();
         npc.getNavigation().stop();
+        npc.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
 
         // simukraft: 计算床头位置和睡觉位置（根据床朝向调整）
         BlockPos headPos = getBedHeadPos(level, bedPos);
-
-        // simukraft: 获取床的朝向，计算NPC应该躺下的精确位置
-        BlockState bedState = level.getBlockState(bedPos);
-        Direction bedFacing = Direction.NORTH;
-        if (bedState.getBlock() instanceof BedBlock && bedState.hasProperty(BedBlock.FACING)) {
-            bedFacing = bedState.getValue(BedBlock.FACING);
-        }
-
-        // simukraft: 根据床朝向计算NPC躺下位置（menglannnn: 原版风格，NPC身体与床方向对齐）
-        double sleepX, sleepZ;
-        switch (bedFacing) {
-            case NORTH:
-                // 床头朝北，NPC在床头位置向南躺下
-                sleepX = headPos.getX() + 0.5;
-                sleepZ = headPos.getZ() + 0.8;
-                break;
-            case SOUTH:
-                // 床头朝南，NPC在床头位置向北躺下
-                sleepX = headPos.getX() + 0.5;
-                sleepZ = headPos.getZ() + 0.2;
-                break;
-            case WEST:
-                // 床头朝西，NPC在床头位置向东躺下
-                sleepX = headPos.getX() + 0.8;
-                sleepZ = headPos.getZ() + 0.5;
-                break;
-            case EAST:
-                // 床头朝东，NPC在床头位置向西躺下
-                sleepX = headPos.getX() + 0.2;
-                sleepZ = headPos.getZ() + 0.5;
-                break;
-            default:
-                sleepX = headPos.getX() + 0.5;
-                sleepZ = headPos.getZ() + 0.5;
-        }
+        net.minecraft.world.phys.Vec3 sleepAnchor = resolveSleepAnchor(level, bedPos);
 
         // simukraft: 将NPC传送到计算好的睡觉位置
-        npc.teleportTo(sleepX, headPos.getY() + 0.5625D, sleepZ);
+        npc.teleportTo(sleepAnchor.x, sleepAnchor.y, sleepAnchor.z);
 
         // simukraft: 使用床头位置开始睡觉
         npc.startSleeping(headPos);
@@ -1652,6 +1623,27 @@ public class NPCRestHandler {
         }
 
         return footPos;
+    }
+
+    private static net.minecraft.world.phys.Vec3 resolveSleepAnchor(ServerLevel level, BlockPos bedPos) {
+        BlockPos headPos = getBedHeadPos(level, bedPos);
+        BlockState bedState = level.getBlockState(bedPos);
+        Direction bedFacing = Direction.NORTH;
+        if (bedState.getBlock() instanceof BedBlock && bedState.hasProperty(BedBlock.FACING)) {
+            bedFacing = bedState.getValue(BedBlock.FACING);
+        }
+
+        double sleepX = headPos.getX() + 0.5D;
+        double sleepZ = headPos.getZ() + 0.5D;
+        switch (bedFacing) {
+            case NORTH -> sleepZ = headPos.getZ() + 0.8D;
+            case SOUTH -> sleepZ = headPos.getZ() + 0.2D;
+            case WEST -> sleepX = headPos.getX() + 0.8D;
+            case EAST -> sleepX = headPos.getX() + 0.2D;
+            default -> {
+            }
+        }
+        return new net.minecraft.world.phys.Vec3(sleepX, headPos.getY() + 0.5625D, sleepZ);
     }
 
     private static void stopSleepingIfNeeded(CustomEntity npc) {

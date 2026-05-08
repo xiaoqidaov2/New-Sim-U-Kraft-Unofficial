@@ -77,6 +77,7 @@ public class CustomEntity extends PathfinderMob {
     private static final float CHILD_HEIGHT = 1.0F;
     private static final long CHILD_GROWTH_DAYS = 3L;
     private static final AtomicBoolean VOICE_SYSTEM_AVAILABLE = new AtomicBoolean(true);
+    private static final AtomicBoolean ATTACK_NOTIFICATION_AVAILABLE = new AtomicBoolean(true);
     private static final EntityDataAccessor<String> DATA_NAME = SynchedEntityData.defineId(CustomEntity.class, EntityDataSerializers.STRING);
     private static final EntityDataAccessor<String> DATA_GENDER = SynchedEntityData.defineId(CustomEntity.class, EntityDataSerializers.STRING);
     private static final EntityDataAccessor<String> DATA_SKIN_PATH = SynchedEntityData.defineId(CustomEntity.class, EntityDataSerializers.STRING);
@@ -379,7 +380,13 @@ public class CustomEntity extends PathfinderMob {
         }
 
         // simukraft: NPC受到攻击后获得发光效果并通知市长和官员
-        handleNPCAttacked(damageSource);
+        if (ATTACK_NOTIFICATION_AVAILABLE.get()) {
+            try {
+                handleNPCAttacked(damageSource);
+            } catch (Throwable throwable) {
+                disableAttackNotification("attacked_notify", throwable);
+            }
+        }
     }
 
     /**
@@ -1732,6 +1739,12 @@ public class CustomEntity extends PathfinderMob {
     private void disableVoiceSystem(String action, Throwable throwable) {
         if (VOICE_SYSTEM_AVAILABLE.compareAndSet(true, false)) {
             Simukraft.LOGGER.error("[CustomEntity] NPC 语音系统在 {} 阶段发生异常，已自动停用后续语音播放以避免实体 tick 崩溃", action, throwable);
+        }
+    }
+
+    private void disableAttackNotification(String action, Throwable throwable) {
+        if (ATTACK_NOTIFICATION_AVAILABLE.compareAndSet(true, false)) {
+            Simukraft.LOGGER.error("[CustomEntity] NPC 受击通知在 {} 阶段发生异常，已自动停用后续受击通知以避免玩家攻击 NPC 时崩溃", action, throwable);
         }
     }
 

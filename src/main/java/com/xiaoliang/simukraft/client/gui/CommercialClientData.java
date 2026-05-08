@@ -205,6 +205,7 @@ public class CommercialClientData {
         }
         hiredEmployees.remove(commercialPos);
         jobTypes.remove(commercialPos);
+        buildingFileNames.remove(commercialPos);
     }
 
     public static boolean hasHiredEmployee(BlockPos commercialPos) {
