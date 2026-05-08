@@ -1261,15 +1261,17 @@ public class NPCRestHandler {
      */
     private static void teleportNPCHomeWithEffects(CustomEntity npc, BlockPos homePos) {
         if (npc == null || homePos == null) return;
+        ServerLevel level = npc.level() instanceof ServerLevel serverLevel ? serverLevel : null;
+        BlockPos teleportPos = resolveHomeTeleportPos(npc, level, homePos);
 
         // 在原地生成传送粒子效果
         spawnTeleportParticles(npc);
 
         // 传送NPC到家中
         npc.teleportTo(
-            homePos.getX() + 0.5,
-            homePos.getY() + 1,
-            homePos.getZ() + 0.5
+            teleportPos.getX() + 0.5,
+            teleportPos.getY(),
+            teleportPos.getZ() + 0.5
         );
 
         // 在目的地生成传送粒子效果
@@ -1278,6 +1280,30 @@ public class NPCRestHandler {
         if (ServerConfig.isDebugLogEnabled()) {
             LOGGER.info("[NPCRestHandler] NPC {} 已传送回家并添加粒子效果", npc.getFullName());
         }
+    }
+
+    /**
+     * 住宅控制盒可切换“回家传送上方/下方”。
+     * 为了避免把NPC直接送进方块里，目标点不可站立时会回退到另一侧。
+     */
+    private static BlockPos resolveHomeTeleportPos(CustomEntity npc, ServerLevel level, BlockPos homePos) {
+        if (npc == null || level == null || level.getServer() == null) {
+            return homePos.above();
+        }
+
+        boolean teleportToAbove = com.xiaoliang.simukraft.building.ControlBoxDataManager
+                .isResidentialHomeTeleportToAbove(level.getServer(), homePos);
+        BlockPos preferredPos = teleportToAbove ? homePos.above() : homePos.below();
+        if (canNpcStandAt(level, preferredPos)) {
+            return preferredPos;
+        }
+
+        BlockPos fallbackPos = teleportToAbove ? homePos.below() : homePos.above();
+        if (canNpcStandAt(level, fallbackPos)) {
+            return fallbackPos;
+        }
+
+        return homePos.above();
     }
 
     private static void markArrivedHome(CustomEntity npc, RestData restData) {

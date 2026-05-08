@@ -1,11 +1,14 @@
 package com.xiaoliang.simukraft.network;
 
 import com.xiaoliang.simukraft.Simukraft;
+import com.xiaoliang.simukraft.employment.domain.WorkBlockType;
 import com.xiaoliang.simukraft.entity.CustomEntity;
 import com.xiaoliang.simukraft.utils.NPCDataManager;
 import com.xiaoliang.simukraft.utils.ResidentManager;
+import com.xiaoliang.simukraft.world.CommercialHiredData;
 import com.xiaoliang.simukraft.world.CityData;
 import com.xiaoliang.simukraft.world.CityPermissionManager;
+import com.xiaoliang.simukraft.world.IndustrialHiredData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.MinecraftServer;
@@ -186,7 +189,7 @@ public record CitizenListRequestPacket(BlockPos cityCorePos) {
      */
     private static String getJobFromV2Storage(MinecraftServer server, UUID npcUuid) {
         // 1. 首先检查商业建筑雇佣数据
-        var commercialEmployees = com.xiaoliang.simukraft.world.CommercialHiredData.loadHiredEmployees(server);
+        var commercialEmployees = CommercialHiredData.loadHiredEmployees(server);
         for (var entry : commercialEmployees.entrySet()) {
             var hireInfo = entry.getValue();
             if (hireInfo != null && hireInfo.getNpcUuid().equals(npcUuid)) {
@@ -195,7 +198,7 @@ public record CitizenListRequestPacket(BlockPos cityCorePos) {
         }
 
         // 2. 然后检查工业建筑雇佣数据
-        var industrialEmployees = com.xiaoliang.simukraft.world.IndustrialHiredData.loadHiredEmployees(server);
+        var industrialEmployees = IndustrialHiredData.loadHiredEmployees(server);
         for (var entry : industrialEmployees.entrySet()) {
             var hireInfo = entry.getValue();
             if (hireInfo != null && hireInfo.getNpcUuid().equals(npcUuid)) {
@@ -207,10 +210,37 @@ public record CitizenListRequestPacket(BlockPos cityCorePos) {
         var v2Assignments = com.xiaoliang.simukraft.employment.bridge.EmploymentLegacyBridge.loadAllHiredNPCs(server);
         var assignment = v2Assignments.get(npcUuid);
         if (assignment != null && assignment.jobType() != null) {
+            String resolvedJob = resolveConcreteJobTypeFromAssignment(server, assignment);
+            if (resolvedJob != null && !resolvedJob.isBlank()) {
+                return resolvedJob;
+            }
             return assignment.jobType().name().toLowerCase();
         }
 
         // 4. 如果没有找到，返回null（调用方会处理为unemployed）
+        return null;
+    }
+
+    private static String resolveConcreteJobTypeFromAssignment(MinecraftServer server,
+                                                               com.xiaoliang.simukraft.employment.domain.EmploymentAssignment assignment) {
+        if (server == null || assignment == null) {
+            return null;
+        }
+
+        if (assignment.workBlockType() == WorkBlockType.COMMERCIAL_CONTROL_BOX) {
+            CommercialHiredData.CommercialHireInfo info = CommercialHiredData.loadHiredEmployees(server).get(assignment.workplacePos());
+            if (info != null && info.getJobType() != null && !info.getJobType().isBlank()) {
+                return info.getJobType();
+            }
+        }
+
+        if (assignment.workBlockType() == WorkBlockType.INDUSTRIAL_CONTROL_BOX) {
+            IndustrialHiredData.IndustrialHireInfo info = IndustrialHiredData.loadHiredEmployees(server).get(assignment.workplacePos());
+            if (info != null && info.getJobType() != null && !info.getJobType().isBlank()) {
+                return info.getJobType();
+            }
+        }
+
         return null;
     }
 

@@ -113,20 +113,7 @@ public class NPCInteractionScreen extends ModularUIGuiContainer {
 
         // 职业
         createInfoRow(rootGroup, "job", labelX, startY + lineHeight * 3, valueOffsetX,
-                () -> {
-                    String job = npc.getJob();
-                    // 先检查工业建筑配置
-                    String industrialJobName = IndustrialClientData.getJobNameByJobType(job);
-                    if (industrialJobName != null) {
-                        return industrialJobName;
-                    }
-                    // 再检查商业建筑配置
-                    String commercialJobName = CommercialClientData.getJobNameByJobType(job);
-                    if (commercialJobName != null) {
-                        return commercialJobName;
-                    }
-                    return Component.translatable("job." + job).getString();
-                });
+                () -> JobDisplayNameResolver.resolve(npc.getJob(), npc.getUUID()));
 
         // 年龄
         createInfoRow(rootGroup, "age", labelX, startY + lineHeight * 4, valueOffsetX,

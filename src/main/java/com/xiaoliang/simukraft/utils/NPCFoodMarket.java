@@ -3,6 +3,7 @@ package com.xiaoliang.simukraft.utils;
 import com.xiaoliang.simukraft.Simukraft;
 import com.xiaoliang.simukraft.building.CommercialBuildingConfig;
 import com.xiaoliang.simukraft.building.CommercialBuildingManager;
+import com.xiaoliang.simukraft.building.ControlBoxDataManager;
 import com.xiaoliang.simukraft.entity.CustomEntity;
 import com.xiaoliang.simukraft.world.CityData;
 import com.xiaoliang.simukraft.world.CommercialHiredData;
@@ -19,16 +20,18 @@ import net.minecraft.world.item.ItemStack;
 
 import javax.annotation.Nullable;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 @SuppressWarnings("null")
 public final class NPCFoodMarket {
-    private static final int MAX_DISTANCE = 256;
+    private static final double MAX_DISTANCE_SQR = 256.0D * 256.0D;
 
     // NPC交易税记录：城市ID -> 税额
     private static final Map<UUID, Double> npcTradeTaxByCity = new ConcurrentHashMap<>();
@@ -37,23 +40,23 @@ public final class NPCFoodMarket {
     private NPCFoodMarket() {}
 
     public record PurchasePlan(BlockPos shopPos, String buildingFileName, String itemId, int nutrition, double pricePerItem) {}
+    private record ShopCandidate(BlockPos shopPos, String buildingFileName) {}
 
     @Nullable
     public static PurchasePlan findPurchasePlan(ServerLevel level, CustomEntity npc) {
         MinecraftServer server = level.getServer();
 
-        UUID cityId = npc.getCityId();
-        if (cityId == null) return null;
-
         BlockPos npcPos = npc.blockPosition();
 
         try {
-            Map<BlockPos, CommercialHiredData.CommercialHireInfo> hires = CommercialHiredData.loadHiredEmployees(server);
-            if (hires.isEmpty()) return null;
+            Set<ShopCandidate> candidates = collectFoodShopCandidates(server);
+            if (candidates.isEmpty()) {
+                return null;
+            }
 
-            return hires.values().stream()
+            return candidates.stream()
                     .filter(Objects::nonNull)
-                    .map(hire -> findBestFoodInShop(level, npc, hire))
+                    .map(candidate -> findBestFoodInShop(level, npc, candidate))
                     .filter(Objects::nonNull)
                     .min(Comparator.comparingDouble(plan -> score(npcPos, plan)))
                     .orElse(null);
@@ -64,18 +67,17 @@ public final class NPCFoodMarket {
     }
 
     @Nullable
-    private static PurchasePlan findBestFoodInShop(ServerLevel level, CustomEntity npc, CommercialHiredData.CommercialHireInfo hire) {
-        if (hire.getPosition() == null) return null;
-        if (hire.getBuildingFileName() == null || hire.getBuildingFileName().isEmpty()) return null;
+    private static PurchasePlan findBestFoodInShop(ServerLevel level, CustomEntity npc, ShopCandidate candidate) {
+        if (candidate.shopPos() == null) return null;
+        if (candidate.buildingFileName() == null || candidate.buildingFileName().isEmpty()) return null;
 
-        BlockPos shopPos = hire.getPosition();
-        if (npc.blockPosition().distManhattan(Objects.requireNonNull(shopPos)) > MAX_DISTANCE) return null;
+        BlockPos shopPos = candidate.shopPos();
+        if (npc.blockPosition().distSqr(Objects.requireNonNull(shopPos)) > MAX_DISTANCE_SQR) return null;
 
-        CommercialBuildingConfig config = CommercialBuildingManager.getConfig(hire.getBuildingFileName());
+        CommercialBuildingConfig config = CommercialBuildingManager.getConfig(candidate.buildingFileName());
         if (config == null) return null;
 
-        CommercialBuildingConfig.ShopMode mode = config.getShopMode();
-        if (mode != CommercialBuildingConfig.ShopMode.NPC_SELL && mode != CommercialBuildingConfig.ShopMode.MIXED) {
+        if (!canNpcBuyFoodFromShop(config)) {
             return null;
         }
 
@@ -107,11 +109,60 @@ public final class NPCFoodMarket {
             double ratio = trade.getSellPrice() / food.getNutrition();
             if (ratio < bestRatio) {
                 bestRatio = ratio;
-                best = new PurchasePlan(shopPos, hire.getBuildingFileName(), trade.getItemId(), food.getNutrition(), trade.getSellPrice());
+                best = new PurchasePlan(shopPos, candidate.buildingFileName(), trade.getItemId(), food.getNutrition(), trade.getSellPrice());
             }
         }
 
         return best;
+    }
+
+    private static Set<ShopCandidate> collectFoodShopCandidates(MinecraftServer server) {
+        Map<BlockPos, String> buildingNamesByPos = new HashMap<>();
+
+        for (CommercialHiredData.CommercialHireInfo hire : CommercialHiredData.loadHiredEmployees(server).values()) {
+            if (hire == null || hire.getPosition() == null || hire.getBuildingFileName() == null || hire.getBuildingFileName().isBlank()) {
+                continue;
+            }
+            buildingNamesByPos.put(hire.getPosition(), hire.getBuildingFileName());
+        }
+
+        for (ControlBoxDataManager.ControlBoxData data : ControlBoxDataManager.getAllControlBoxes(server, "commercial_control_box")) {
+            if (data == null || data.position == null || data.buildingFileName == null || data.buildingFileName.isBlank()) {
+                continue;
+            }
+            buildingNamesByPos.putIfAbsent(data.position, data.buildingFileName);
+        }
+
+        return buildingNamesByPos.entrySet().stream()
+                .map(entry -> new ShopCandidate(entry.getKey(), entry.getValue()))
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    private static boolean canNpcBuyFoodFromShop(@Nullable CommercialBuildingConfig config) {
+        if (config == null) {
+            return false;
+        }
+        CommercialBuildingConfig.ShopMode mode = config.getShopMode();
+        if (mode != CommercialBuildingConfig.ShopMode.NPC_SELL && mode != CommercialBuildingConfig.ShopMode.MIXED) {
+            return false;
+        }
+        return hasEdibleRetailTrade(config);
+    }
+
+    private static boolean hasEdibleRetailTrade(CommercialBuildingConfig config) {
+        if (config == null || config.getTrades() == null) {
+            return false;
+        }
+        for (CommercialBuildingConfig.TradeItem trade : config.getTrades()) {
+            if (trade == null || !trade.isRetail() || trade.getSellPrice() <= 0) {
+                continue;
+            }
+            ItemStack stack = parseItemStack(trade.getItemId());
+            if (!stack.isEmpty() && stack.isEdible()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static double score(BlockPos npcPos, PurchasePlan plan) {
@@ -152,8 +203,7 @@ public final class NPCFoodMarket {
             CommercialBuildingConfig config = CommercialBuildingManager.getConfig(plan.buildingFileName());
             if (config == null) return ItemStack.EMPTY;
 
-            CommercialBuildingConfig.ShopMode mode = config.getShopMode();
-            if (mode != CommercialBuildingConfig.ShopMode.NPC_SELL && mode != CommercialBuildingConfig.ShopMode.MIXED) {
+            if (!canNpcBuyFoodFromShop(config)) {
                 return ItemStack.EMPTY;
             }
 
@@ -173,6 +223,9 @@ public final class NPCFoodMarket {
             // 检查库存（支持实时库存系统）
             CommercialBuildingConfig tradeConfig = CommercialBuildingManager.getConfig(plan.buildingFileName());
             CommercialBuildingConfig.TradeItem trade = tradeConfig != null ? tradeConfig.getTradeByItemId(plan.itemId()) : null;
+            if (trade == null || !trade.isRetail()) {
+                return ItemStack.EMPTY;
+            }
 
             int availableStock;
             if (trade != null && trade.requiresMaterial()) {

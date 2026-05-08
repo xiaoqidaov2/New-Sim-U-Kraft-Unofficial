@@ -117,8 +117,13 @@ public class BuyFoodGoal extends Goal {
 
         if (isAtTarget()) {
             npc.setStatusLabel(NPCFoodMarket.getBuyingStatusLabel(plan));
-            // 到店即视为已经买到并吃完，避免库存校验或中间态把NPC卡在饿疯了状态。
-            NPCFoodMarket.tryPurchaseFood(level, npc, plan);
+            // 与肯打鸡等现有食物店保持一致：NPC 到达可买饭店铺后即视为完成进食，
+            // 库存/税收扣减仍尽力执行，但不再阻塞恢复饥饿值。
+            ItemStack purchasedFood = NPCFoodMarket.tryPurchaseFood(level, npc, plan);
+            if (purchasedFood.isEmpty() && ServerConfig.isDebugLogEnabled()) {
+                Simukraft.LOGGER.info("[BuyFoodGoal] NPC {} 到达店铺 {} 后未生成食物物品，按店内进食逻辑恢复饥饿值",
+                        npc.getFullName(), targetPos);
+            }
             NPCFoodMarket.finishPurchasedMeal(level, npc, plan);
             nextStartTick = npc.tickCount + 600;
             SelfFeedingManager.finishSelfFeeding(npc, level);

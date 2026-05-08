@@ -213,18 +213,7 @@ public class NPCCardScreen extends ModularUIGuiContainer {
     }
 
     private String getJobText() {
-        String job = npc.getJob();
-        // 先检查工业建筑配置
-        String ind = IndustrialClientData.getJobNameByJobType(job);
-        if (ind != null) {
-            return ind;
-        }
-        // 再检查商业建筑配置
-        String commercial = CommercialClientData.getJobNameByJobType(job);
-        if (commercial != null) {
-            return commercial;
-        }
-        return safeString(Component.translatable("job." + job).getString());
+        return JobDisplayNameResolver.resolve(npc.getJob(), npc.getUUID());
     }
 
     private String getWorkStatusText() {

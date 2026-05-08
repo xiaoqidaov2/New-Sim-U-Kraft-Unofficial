@@ -40,11 +40,13 @@ public class ControlBoxDataManager {
         public String buildingFileName; // 建筑文件名（如 "mill"）
         public UUID cityId; // 城市ID
         public String selectedRecipe; // 当前选择的配方ID（工业建筑使用）
+        public boolean homeTeleportToAbove; // 住宅NPC回家传送到控制盒上方
         
         public ControlBoxData(BlockPos position, String type, String world) {
             this.position = position;
             this.type = type;
             this.world = world;
+            this.homeTeleportToAbove = true;
         }
         
         public ControlBoxData(BlockPos position, String type, String world, UUID residentUuid, UUID cityId) {
@@ -308,7 +310,7 @@ public class ControlBoxDataManager {
         // 从sk文件读取租金并除以2
         double originalRent = getRentFromSkFile(buildingFileName, "residential");
         double rent = originalRent / 2.0;
-        writeResidentialControlBoxWithRent(server, pos, "residential_control_box", buildingDisplayName, RESIDENCE_DIR, residentUuid, cityId, rent);
+        writeResidentialControlBoxWithRent(server, pos, "residential_control_box", buildingDisplayName, RESIDENCE_DIR, residentUuid, cityId, rent, true);
     }
     
     /**
@@ -354,8 +356,9 @@ public class ControlBoxDataManager {
     /**
      * 写入住宅控制盒数据（包含租金）
      */
-    private static void writeResidentialControlBoxWithRent(MinecraftServer server, BlockPos pos, String type, 
-                                       String buildingName, String subDir, UUID residentUuid, UUID cityId, double rent) {
+    private static void writeResidentialControlBoxWithRent(MinecraftServer server, BlockPos pos, String type,
+                                       String buildingName, String subDir, UUID residentUuid, UUID cityId, double rent,
+                                       boolean homeTeleportToAbove) {
         try {
             Path worldPath = server.getWorldPath(WORLD_ROOT);
             Path controlBoxDir = worldPath.resolve("simukraft").resolve(subDir);
@@ -379,6 +382,7 @@ public class ControlBoxDataManager {
                 if (cityId != null) {
                     writer.write("cityid: " + cityId.toString() + "\n");
                 }
+                writer.write("home_teleport_to_above: " + homeTeleportToAbove + "\n");
             }
             
             LOGGER.info("[ControlBoxDataManager] 写入住宅控制盒数据: {}, 建筑: {}, 租金: {}元", 
@@ -433,8 +437,18 @@ public class ControlBoxDataManager {
     /**
      * 通用写入控制盒数据方法
      */
-    private static void writeControlBox(MinecraftServer server, BlockPos pos, String type, 
-                                       String buildingName, String buildingFileName, String subDir, UUID residentUuid, UUID cityId) {
+    private static void writeControlBox(MinecraftServer server, BlockPos pos, String type,
+                                       String buildingName, String buildingFileName, String subDir, UUID residentUuid,
+                                       UUID cityId) {
+        writeControlBox(server, pos, type, buildingName, buildingFileName, subDir, residentUuid, cityId, null);
+    }
+
+    /**
+     * 通用写入控制盒数据方法
+     */
+    private static void writeControlBox(MinecraftServer server, BlockPos pos, String type,
+                                       String buildingName, String buildingFileName, String subDir, UUID residentUuid,
+                                       UUID cityId, Boolean homeTeleportToAbove) {
         try {
             Path worldPath = server.getWorldPath(WORLD_ROOT);
             Path controlBoxDir = worldPath.resolve("simukraft").resolve(subDir);
@@ -457,6 +471,9 @@ public class ControlBoxDataManager {
                 }
                 if (cityId != null) {
                     writer.write("cityid: " + cityId.toString() + "\n");
+                }
+                if ("residence".equals(subDir) && homeTeleportToAbove != null) {
+                    writer.write("home_teleport_to_above: " + homeTeleportToAbove + "\n");
                 }
             }
             
@@ -537,7 +554,7 @@ public class ControlBoxDataManager {
         ControlBoxData data = readControlBox(server, pos, type);
         if (data != null) {
             data.residentUuid = residentUuid;
-            writeControlBox(server, pos, data.type, data.buildingName, data.buildingFileName, getSubDirByType(type), residentUuid, data.cityId);
+            writeControlBox(server, pos, data.type, data.buildingName, data.buildingFileName, getSubDirByType(type), residentUuid, data.cityId, data.homeTeleportToAbove);
         }
     }
     
@@ -640,6 +657,8 @@ public class ControlBoxDataManager {
                     data.buildingFileName = line.substring(19).trim();
                 } else if (line.startsWith("selected_recipe:")) {
                     data.selectedRecipe = line.substring(16).trim();
+                } else if (line.startsWith("home_teleport_to_above:")) {
+                    data.homeTeleportToAbove = Boolean.parseBoolean(line.substring(23).trim());
                 }
             }
 
@@ -696,6 +715,28 @@ public class ControlBoxDataManager {
         } catch (Exception e) {
             LOGGER.error("[ControlBoxDataManager] 更新配方选择失败: {}", e.getMessage());
         }
+    }
+
+    /**
+     * 获取住宅NPC回家时是否优先传送到控制盒上方。
+     * 旧档没有该字段时默认返回 true，保持兼容当前行为。
+     */
+    public static boolean isResidentialHomeTeleportToAbove(MinecraftServer server, BlockPos pos) {
+        ControlBoxData data = readControlBox(server, pos, "residential");
+        return data == null || data.homeTeleportToAbove;
+    }
+
+    /**
+     * 更新住宅控制盒的回家传送方向开关。
+     */
+    public static void updateResidentialHomeTeleportMode(MinecraftServer server, BlockPos pos, boolean homeTeleportToAbove) {
+        ControlBoxData data = readControlBox(server, pos, "residential");
+        if (data == null) {
+            return;
+        }
+        data.homeTeleportToAbove = homeTeleportToAbove;
+        writeControlBox(server, pos, data.type, data.buildingName, data.buildingFileName, RESIDENCE_DIR,
+                data.residentUuid, data.cityId, data.homeTeleportToAbove);
     }
 
     /**

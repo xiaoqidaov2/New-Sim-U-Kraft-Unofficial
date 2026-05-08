@@ -816,6 +816,7 @@
   "gui.residential_control_box.building_type": "Type: Residential (Available)",
   "gui.residential_control_box.loading": "Loading...",
   "gui.residential_control_box.no_resident": "No residents",
+  "gui.residential_control_box.home_teleport_above": "Teleport Home Above Control Box: %s",
 
 
   "message.building_material_buy.no_selection": "Please select items to purchase",
@@ -923,6 +924,8 @@
 
 
   "gui.residential_control_box.panel_title": "Building Control Panel",
+  "gui.switch.on": "On",
+  "gui.switch.off": "Off",
 
   "gui.employee_info.empty": "No employees",
 

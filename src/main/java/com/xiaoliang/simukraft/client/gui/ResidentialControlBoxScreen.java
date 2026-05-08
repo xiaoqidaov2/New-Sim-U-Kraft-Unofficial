@@ -32,7 +32,9 @@ public class ResidentialControlBoxScreen extends Screen {
 
     // simukraft: 界限显示开关状态
     private boolean showBuildingBounds = false;
+    private boolean homeTeleportToAbove = true;
     private Button buildingBoundsButton;
+    private Button homeTeleportButton;
 
     /**
      * 从渲染器同步开关状态
@@ -97,6 +99,13 @@ public class ResidentialControlBoxScreen extends Screen {
                 .bounds(switchX, switchY, switchWidth, switchHeight)
                 .build());
         this.addRenderableWidget(buildingBoundsButton);
+
+        homeTeleportButton = nn(Button.builder(
+                        nn(Component.translatable("gui.residential_control_box.home_teleport_above", getOnOffText(homeTeleportToAbove))),
+                        button -> this.toggleHomeTeleportMode())
+                .bounds(switchX, switchY + 24, 150, switchHeight)
+                .build());
+        this.addRenderableWidget(homeTeleportButton);
     }
 
     /**
@@ -129,6 +138,23 @@ public class ResidentialControlBoxScreen extends Screen {
     private void updateBuildingBoundsButton() {
         if (buildingBoundsButton != null) {
             buildingBoundsButton.setMessage(nn(Component.translatable("gui.residential_control_box.show_building_bounds", getOnOffText(showBuildingBounds))));
+        }
+    }
+
+    /**
+     * 切换NPC回家传送到控制盒上方/下方。
+     */
+    private void toggleHomeTeleportMode() {
+        homeTeleportToAbove = !homeTeleportToAbove;
+        updateHomeTeleportButton();
+        com.xiaoliang.simukraft.network.NetworkManager.INSTANCE.sendToServer(
+            new com.xiaoliang.simukraft.network.RequestControlBoxInfoPacket(controlBoxPos, "residential", true, homeTeleportToAbove)
+        );
+    }
+
+    private void updateHomeTeleportButton() {
+        if (homeTeleportButton != null) {
+            homeTeleportButton.setMessage(nn(Component.translatable("gui.residential_control_box.home_teleport_above", getOnOffText(homeTeleportToAbove))));
         }
     }
 
@@ -282,6 +308,11 @@ public class ResidentialControlBoxScreen extends Screen {
     public void setBuildingName(String name) {
         this.buildingName = name;
         this.buildingNameCacheTime = System.currentTimeMillis();
+    }
+
+    public void setHomeTeleportToAbove(boolean homeTeleportToAbove) {
+        this.homeTeleportToAbove = homeTeleportToAbove;
+        updateHomeTeleportButton();
     }
 
     /**

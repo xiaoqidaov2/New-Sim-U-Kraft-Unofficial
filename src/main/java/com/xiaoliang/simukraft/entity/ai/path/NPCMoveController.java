@@ -864,17 +864,17 @@ public class NPCMoveController {
     }
 
     private boolean tryCalibratedStepPass(Vec3 target) {
-        StepCollisionMeasure measure = measureForwardStepCollision(target);
-        if (measure == null || !isLowStepHeight(measure.height)) {
+        Vec3 measure = measureForwardStepCollision(target);
+        if (measure == null || !isLowStepHeight(measure.y)) {
             return false;
         }
-        if (!measure.headClear || !isBodyPathClearAt(measure.calibratedX, npc.getY() + measure.height, measure.calibratedZ)) {
+        if (!isBodyPathClearAt(measure.x, npc.getY() + measure.y, measure.z)) {
             return false;
         }
 
         Vec3 currentPos = npc.position();
-        double toCenterX = measure.calibratedX - currentPos.x;
-        double toCenterZ = measure.calibratedZ - currentPos.z;
+        double toCenterX = measure.x - currentPos.x;
+        double toCenterZ = measure.z - currentPos.z;
         double centerDistance = Math.sqrt(toCenterX * toCenterX + toCenterZ * toCenterZ);
         double targetDirectionX = target.x - currentPos.x;
         double targetDirectionZ = target.z - currentPos.z;
@@ -896,7 +896,7 @@ public class NPCMoveController {
         double speed = Math.max(0.035D, Math.min(WALK_MOVE_SPEED, Math.max(centerDistance, targetDistance) * 0.22D));
         double yMotion = npc.getDeltaMovement().y;
         if (centerDistance <= 0.18D && npc.onGround()) {
-            yMotion = Math.max(yMotion, Math.min(0.035D, measure.height * 0.2D));
+            yMotion = Math.max(yMotion, Math.min(0.035D, measure.y * 0.2D));
         }
 
         npc.getMoveControl().setWantedPosition(npc.getX(), npc.getY(), npc.getZ(), 0.0D);
@@ -904,11 +904,11 @@ public class NPCMoveController {
         npc.setSpeed((float) speed);
         npc.setZza((float) speed);
         npc.setXxa(0.0F);
-        logStepMove("CALIBRATED_STEP_PASS", currentPath != null ? currentPath.getCurrentNode() : null, target, targetDistance, measure.height);
+        logStepMove("CALIBRATED_STEP_PASS", currentPath != null ? currentPath.getCurrentNode() : null, target, targetDistance, measure.y);
         return true;
     }
 
-    private StepCollisionMeasure measureForwardStepCollision(Vec3 target) {
+    private Vec3 measureForwardStepCollision(Vec3 target) {
         Vec3 currentPos = npc.position();
         Vec3 direction = target.subtract(currentPos);
         double horizontalDist = Math.sqrt(direction.x * direction.x + direction.z * direction.z);
@@ -944,7 +944,8 @@ public class NPCMoveController {
         }
         double calibratedX = footPos.getX() + Math.max(selectedBox.minX + 0.08D, Math.min(selectedBox.maxX - 0.08D, localX));
         double calibratedZ = footPos.getZ() + Math.max(selectedBox.minZ + 0.08D, Math.min(selectedBox.maxZ - 0.08D, localZ));
-        return new StepCollisionMeasure(selectedHeight, calibratedX, calibratedZ, true);
+        // 直接复用 Vec3 承载“台阶高度 + 校准落点”，避免额外内部类产物在增量编译时不同步。
+        return new Vec3(calibratedX, selectedHeight, calibratedZ);
     }
 
     private boolean isBodyPathClearAt(double x, double y, double z) {
@@ -967,20 +968,6 @@ public class NPCMoveController {
             }
         }
         return true;
-    }
-
-    private static class StepCollisionMeasure {
-        private final double height;
-        private final double calibratedX;
-        private final double calibratedZ;
-        private final boolean headClear;
-
-        private StepCollisionMeasure(double height, double calibratedX, double calibratedZ, boolean headClear) {
-            this.height = height;
-            this.calibratedX = calibratedX;
-            this.calibratedZ = calibratedZ;
-            this.headClear = headClear;
-        }
     }
 
     private boolean tryResolveCrowdedPath(Vec3 targetPos) {

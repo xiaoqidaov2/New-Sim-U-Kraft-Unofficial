@@ -15,20 +15,24 @@ import java.util.function.Supplier;
 public class ControlBoxInfoResponsePacket {
     private final BlockPos controlBoxPos;
     private final String buildingName;
+    private final boolean homeTeleportToAbove;
 
-    public ControlBoxInfoResponsePacket(BlockPos pos, String buildingName) {
+    public ControlBoxInfoResponsePacket(BlockPos pos, String buildingName, boolean homeTeleportToAbove) {
         this.controlBoxPos = pos;
         this.buildingName = buildingName;
+        this.homeTeleportToAbove = homeTeleportToAbove;
     }
 
     public ControlBoxInfoResponsePacket(FriendlyByteBuf buf) {
         this.controlBoxPos = buf.readBlockPos();
         this.buildingName = buf.readUtf();
+        this.homeTeleportToAbove = buf.readBoolean();
     }
 
     public void encode(FriendlyByteBuf buf) {
         buf.writeBlockPos(controlBoxPos);
         buf.writeUtf(buildingName != null ? buildingName : "");
+        buf.writeBoolean(homeTeleportToAbove);
     }
 
     public void handle(Supplier<NetworkEvent.Context> ctx) {
@@ -45,6 +49,7 @@ public class ControlBoxInfoResponsePacket {
                 // 检查位置是否匹配
                 if (screen.getControlBoxPos().equals(controlBoxPos)) {
                     screen.setBuildingName(buildingName != null && !buildingName.isEmpty() ? buildingName : null);
+                    screen.setHomeTeleportToAbove(homeTeleportToAbove);
                 }
             }
         });

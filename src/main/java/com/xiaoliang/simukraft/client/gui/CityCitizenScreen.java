@@ -1,10 +1,6 @@
 package com.xiaoliang.simukraft.client.gui;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.xiaoliang.simukraft.building.CommercialBuildingConfig;
-import com.xiaoliang.simukraft.building.CommercialBuildingManager;
-import com.xiaoliang.simukraft.building.IndustrialBuildingConfig;
-import com.xiaoliang.simukraft.building.IndustrialBuildingManager;
 import com.xiaoliang.simukraft.init.ModSoundEvents;
 import com.xiaoliang.simukraft.Simukraft;
 import com.xiaoliang.simukraft.network.CitizenListRequestPacket;
@@ -25,9 +21,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import javax.annotation.Nonnull;
@@ -383,7 +377,7 @@ public class CityCitizenScreen extends AbstractTransitionScreen {
             // 打开确认屏幕
             ConfirmationScreen.open(
                 Component.translatable("gui.city_citizen.confirm_fire_title"),
-                Component.translatable("gui.city_citizen.confirm_fire_message", selectedCitizen.name(), getJobDisplayName(job)),
+                Component.translatable("gui.city_citizen.confirm_fire_message", selectedCitizen.name(), getJobDisplayName(job, selectedCitizen.uuid())),
                 confirmed -> {
                     if (confirmed) {
                         // 用户确认解雇
@@ -430,62 +424,12 @@ public class CityCitizenScreen extends AbstractTransitionScreen {
         }
     }
 
-    // 职业名称缓存，避免重复查找
-    private static final Map<String, String> jobNameCache = new HashMap<>();
-
     /**
      * 获取职业显示名称
-     * 优先从JSON配置文件中读取，如果找不到则使用默认映射
+     * 优先从建筑配置和客户端已同步的雇佣关系中解析真实职业名。
      */
-    private static String getJobDisplayName(String job) {
-        if (job == null || job.isEmpty() || "unemployed".equals(job)) {
-            return nn(Component.translatable("job.unemployed")).getString();
-        }
-
-        // 检查缓存
-        if (jobNameCache.containsKey(job)) {
-            return nn(jobNameCache.get(job));
-        }
-
-        // 1. 先从商业建筑配置中查找
-        List<CommercialBuildingConfig> commercialConfigs = CommercialBuildingManager.getConfigsByJobType(job);
-        if (!commercialConfigs.isEmpty()) {
-            String jobName = commercialConfigs.get(0).getJobName();
-            if (jobName != null && !jobName.isEmpty()) {
-                jobNameCache.put(job, jobName);
-                return jobName;
-            }
-        }
-
-        // 2. 再从工业建筑配置中查找
-        List<IndustrialBuildingConfig> industrialConfigs = IndustrialBuildingManager.getConfigsByJobType(job);
-        if (!industrialConfigs.isEmpty()) {
-            String jobName = industrialConfigs.get(0).getJobName();
-            if (jobName != null && !jobName.isEmpty()) {
-                jobNameCache.put(job, jobName);
-                return jobName;
-            }
-        }
-
-        // 3. 使用默认映射作为后备
-        String defaultName = getDefaultJobDisplayName(job);
-        jobNameCache.put(job, defaultName);
-        return defaultName;
-    }
-
-    /**
-     * 默认职业名称映射（硬编码作为后备）
-     */
-    private static String getDefaultJobDisplayName(String job) {
-        return switch (job) {
-            case "builder" -> nn(Component.translatable("job.builder")).getString();
-            case "planner" -> nn(Component.translatable("job.planner")).getString();
-            case "shepherd" -> nn(Component.translatable("job.shepherd")).getString();
-            case "butcher" -> nn(Component.translatable("job.butcher")).getString();
-            case "farmer" -> nn(Component.translatable("job.farmer")).getString();
-            case "warehouse_manager" -> nn(Component.translatable("job.warehouse_manager")).getString();
-            default -> job; // 如果找不到，返回原始的jobType
-        };
+    private static String getJobDisplayName(String job, UUID npcUuid) {
+        return JobDisplayNameResolver.resolve(job, npcUuid);
     }
 
     private void deleteCitizen() {
@@ -796,7 +740,7 @@ public class CityCitizenScreen extends AbstractTransitionScreen {
                 );
 
                 // 职业 - 使用翻译键或直接显示
-                String jobDisplay = getJobDisplayName(citizen.job());
+                String jobDisplay = getJobDisplayName(citizen.job(), citizen.uuid());
                 guiGraphics.drawString(
                     nn(Minecraft.getInstance().font),
                     nn(Component.translatable("gui.citizen.job", safeString(jobDisplay))),
