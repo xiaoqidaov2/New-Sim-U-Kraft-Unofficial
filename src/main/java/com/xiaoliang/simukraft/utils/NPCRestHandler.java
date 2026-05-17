@@ -40,6 +40,8 @@ public class NPCRestHandler {
     private static final int MAX_REST_STARTS_PER_UPDATE = 2;
     private static final int MAX_REST_STOPS_PER_UPDATE = 8;
     private static final int MAX_HOME_PATH_STARTS_PER_UPDATE = 1;
+    private static final long HOME_REPATH_RETRY_INTERVAL_TICKS = 40L;
+    private static final long HOME_PATH_FAIL_RETRY_INTERVAL_TICKS = 80L;
     private static final int BED_SEARCH_HORIZONTAL_RADIUS = 8;
     private static final int BED_SEARCH_VERTICAL_RADIUS = 4;
     private static final long BED_REPATH_INTERVAL_TICKS = 40L;
@@ -1358,11 +1360,11 @@ public class NPCRestHandler {
                     teleportNPCHomeWithEffects(npc, homePos);
                     markArrivedHome(npc, restData);
                 } else {
-                    // 重新启动寻路
+                    // 重新进入延迟队列，避免失败NPC在连续多个tick内反复重算路径
                     if (ServerConfig.isDebugLogEnabled()) {
-                        LOGGER.info("[NPCRestHandler] NPC {} 重新启动寻路回家，当前距离: {}", npc.getFullName(), distance);
+                        LOGGER.info("[NPCRestHandler] NPC {} 回家寻路待重试，当前距离: {}", npc.getFullName(), distance);
                     }
-                    startPathfindingToHome(npc, homePos);
+                    queuePathfindingToHome(npc.getUUID(), level, HOME_REPATH_RETRY_INTERVAL_TICKS);
                 }
             }
         }
@@ -1522,6 +1524,7 @@ public class NPCRestHandler {
         restData.restStage = REST_STAGE_AT_HOME;
         pendingHomePathStartTicks.remove(npc.getUUID());
         npcPathfindingStatus.put(npc.getUUID(), false);
+        clearHomePathCallbacks(npc);
         npc.stopAllMovement();
         npc.setStatusLabel("gui.npc.status.at_home");
     }
@@ -1975,10 +1978,19 @@ public class NPCRestHandler {
     }
 
     private static void clearRestWorkflowData(UUID npcUuid, boolean clearPreviousWorkData) {
+        CustomEntity npc = null;
+        RestData restData = restingNPCs.get(npcUuid);
+        if (restData != null) {
+            npc = restData.npc;
+        }
         restingNPCs.remove(npcUuid);
         npcSubStates.remove(npcUuid);
         npcPathfindingStatus.remove(npcUuid);
         npcHomePositions.remove(npcUuid);
+        pendingHomePathStartTicks.remove(npcUuid);
+        if (npc != null) {
+            clearHomePathCallbacks(npc);
+        }
         if (clearPreviousWorkData) {
             npcPreviousWorkStatus.remove(npcUuid);
             npcPreviousJob.remove(npcUuid);
@@ -2531,6 +2543,7 @@ public class NPCRestHandler {
         if (npc == null || workPos == null) return;
 
         try {
+            clearHomePathCallbacks(npc);
             if (npc.moveToWithNewPathfinder(workPos, 1.0D)) {
                 if (ServerConfig.isDebugLogEnabled()) {
                     LOGGER.info("[NPCRestHandler] NPC {} 开始前往工作位置，当前位置: {}，目标位置: {}，目的: 上班", npc.getFullName(), npc.blockPosition(), workPos);
@@ -2551,8 +2564,13 @@ public class NPCRestHandler {
      * menglannnn: 完全使用新的自定义寻路系统，不再使用原版寻路
      */
     private static void queuePathfindingToHome(UUID npcUuid, ServerLevel level) {
+        queuePathfindingToHome(npcUuid, level, 0L);
+    }
+
+    private static void queuePathfindingToHome(UUID npcUuid, ServerLevel level, long delayTicks) {
         if (npcUuid == null || level == null) return;
-        pendingHomePathStartTicks.putIfAbsent(npcUuid, level.getGameTime());
+        long scheduledTick = level.getGameTime() + Math.max(0L, delayTicks);
+        pendingHomePathStartTicks.merge(npcUuid, scheduledTick, Math::min);
         npcPathfindingStatus.put(npcUuid, false);
     }
 
@@ -2560,8 +2578,12 @@ public class NPCRestHandler {
         if (npc == null || level == null) return false;
         UUID npcUuid = npc.getUUID();
         RestData restData = restingNPCs.get(npcUuid);
+        Long scheduledTick = pendingHomePathStartTicks.get(npcUuid);
         if (restData == null || restData.hasArrivedHome || restData.homePos == null) {
             pendingHomePathStartTicks.remove(npcUuid);
+            return false;
+        }
+        if (scheduledTick == null || level.getGameTime() < scheduledTick) {
             return false;
         }
         pendingHomePathStartTicks.remove(npcUuid);
@@ -2573,6 +2595,7 @@ public class NPCRestHandler {
         if (npc == null || homePos == null) return;
 
         try {
+            bindHomePathCallbacks(npc);
             if (npc.moveToWithNewPathfinder(homePos, 1.0D)) {
                 npcPathfindingStatus.put(npc.getUUID(), true);
                 if (ServerConfig.isDebugLogEnabled()) {
@@ -2590,9 +2613,42 @@ public class NPCRestHandler {
                 restData.restStage = REST_STAGE_AT_HOME;
             }
             npcPathfindingStatus.put(npcUuid, false);
+            clearHomePathCallbacks(npc);
             npc.stopNewPathfinder();
         } catch (Exception e) {
             LOGGER.error("NPC {} 寻路回家时发生错误", npc.getFullName(), e);
+        }
+    }
+
+    private static void bindHomePathCallbacks(CustomEntity npc) {
+        if (npc == null || !(npc.level() instanceof ServerLevel level) || npc.getNPCPathNavigator() == null) {
+            return;
+        }
+
+        UUID npcUuid = npc.getUUID();
+        npc.getNPCPathNavigator().setOnPathComplete(() -> onHomePathFinished(npcUuid, level, false));
+        npc.getNPCPathNavigator().setOnPathFail(() -> onHomePathFinished(npcUuid, level, true));
+    }
+
+    private static void clearHomePathCallbacks(CustomEntity npc) {
+        if (npc == null || npc.getNPCPathNavigator() == null) {
+            return;
+        }
+        npc.getNPCPathNavigator().setOnPathComplete(null);
+        npc.getNPCPathNavigator().setOnPathFail(null);
+    }
+
+    private static void onHomePathFinished(UUID npcUuid, ServerLevel level, boolean failed) {
+        if (npcUuid == null) {
+            return;
+        }
+
+        npcPathfindingStatus.put(npcUuid, false);
+        if (failed && level != null) {
+            RestData restData = restingNPCs.get(npcUuid);
+            if (restData != null && !restData.hasArrivedHome && restData.homePos != null) {
+                queuePathfindingToHome(npcUuid, level, HOME_PATH_FAIL_RETRY_INTERVAL_TICKS);
+            }
         }
     }
 
