@@ -113,6 +113,7 @@ public final class JobDisplayNameResolver {
             case "shepherd" -> translatedOrDefault("job.shepherd", jobType);
             case "butcher" -> translatedOrDefault("job.butcher", jobType);
             case "farmer" -> translatedOrDefault("job.farmer", jobType);
+            case "banker" -> translatedOrDefault("job.banker", jobType);
             case "doctor" -> firstNonBlank(
                     translateIfPresent("job.doctor"),
                     translateIfPresent("gui.employee_info.job.doctor")

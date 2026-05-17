@@ -296,6 +296,7 @@ public class WorldEvents {
         SimukraftWorldData data = SimukraftWorldData.get(level);
         data.incrementDay();
         CityLoanService.applyDailyInterest(level);
+        com.xiaoliang.simukraft.world.StockMarketService.refreshDailyMarket(level);
 
         // 同步HUD数据给所有玩家
         syncHUDDataToAllPlayers(level);

@@ -160,6 +160,24 @@ public class NetworkManager {
                 CityLoanActionPacket::handle);
 
         INSTANCE.registerMessage(id++,
+                GetStockMarketInfoPacket.class,
+                GetStockMarketInfoPacket::encode,
+                GetStockMarketInfoPacket::decode,
+                GetStockMarketInfoPacket::handle);
+
+        INSTANCE.registerMessage(id++,
+                StockMarketInfoResponsePacket.class,
+                StockMarketInfoResponsePacket::encode,
+                StockMarketInfoResponsePacket::decode,
+                StockMarketInfoResponsePacket::handle);
+
+        INSTANCE.registerMessage(id++,
+                StockTradeActionPacket.class,
+                StockTradeActionPacket::encode,
+                StockTradeActionPacket::decode,
+                StockTradeActionPacket::handle);
+
+        INSTANCE.registerMessage(id++,
                 GetCityChunksPacket.class,
                 GetCityChunksPacket::encode,
                 GetCityChunksPacket::decode,

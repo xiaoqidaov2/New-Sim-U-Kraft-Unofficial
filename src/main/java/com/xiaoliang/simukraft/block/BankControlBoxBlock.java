@@ -15,7 +15,7 @@ import net.minecraft.world.phys.BlockHitResult;
 
 import javax.annotation.Nonnull;
 import java.util.Objects;
-
+@SuppressWarnings("null")
 /**
  * NSUK-银行控制箱
  * 一个带有简单GUI的装饰性方块
@@ -34,7 +34,6 @@ public class BankControlBoxBlock extends Block {
     }
 
     @Override
-    @SuppressWarnings("deprecation")
     public @Nonnull InteractionResult use(@Nonnull BlockState state, @Nonnull Level level, @Nonnull BlockPos pos, @Nonnull Player player, @Nonnull InteractionHand hand, @Nonnull BlockHitResult hit) {
         if (level.isClientSide) {
             try {

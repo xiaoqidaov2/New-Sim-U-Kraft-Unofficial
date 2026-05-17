@@ -85,6 +85,11 @@ public class SyncWorkBlockHireStatusPacket {
                             screen.refreshButtonStates();
                         }
                     }
+                    if (minecraft.screen instanceof com.xiaoliang.simukraft.client.gui.BankControlBoxScreen screen) {
+                        if (screen.getControlBoxPos().equals(workBlockPos)) {
+                            screen.refreshButtonStates();
+                        }
+                    }
                     break;
 
                 case "industrial":
