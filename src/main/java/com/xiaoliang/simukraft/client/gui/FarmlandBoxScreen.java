@@ -239,7 +239,8 @@ public class FarmlandBoxScreen extends Screen {
                     new com.xiaoliang.simukraft.network.StartFarmingPacket(
                         farmlandBoxPos,
                         nn(FarmlandData.getSelectedCrop(farmlandBoxPos)),
-                        FarmlandData.getSelectedAreaSize(farmlandBoxPos)
+                        FarmlandData.getSelectedAreaSize(farmlandBoxPos),
+                        FarmlandData.getSelectedPlot(farmlandBoxPos)
                     )
             );
             

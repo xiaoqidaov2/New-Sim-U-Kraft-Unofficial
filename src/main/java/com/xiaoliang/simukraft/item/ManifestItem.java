@@ -6,7 +6,6 @@ import com.xiaoliang.simukraft.building.ConstructionTask;
 import com.xiaoliang.simukraft.building.ControlBoxDataManager;
 import com.xiaoliang.simukraft.building.IndustrialBuildingConfig;
 import com.xiaoliang.simukraft.building.IndustrialBuildingManager;
-import com.xiaoliang.simukraft.client.gui.ManifestScreen;
 import com.xiaoliang.simukraft.entity.CustomEntity;
 import com.xiaoliang.simukraft.world.BuildBoxHiredData;
 import net.minecraft.core.BlockPos;
@@ -318,11 +317,7 @@ public class ManifestItem extends Item {
      */
     private void openManifestScreen(@Nonnull ItemStack stack) {
         DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> {
-            if (net.minecraft.client.Minecraft.getInstance().level != null) {
-                net.minecraft.client.Minecraft.getInstance().setScreen(
-                    new ManifestScreen(stack)
-                );
-            }
+            com.xiaoliang.simukraft.client.ManifestClientHooks.openManifestScreen(stack);
         });
     }
 
