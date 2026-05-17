@@ -41,6 +41,10 @@ public class PlacedBuildingManager {
     // simukraft: 服务器实例引用，用于自动保存（menglannnn: 在loadFromWorld时设置）
     private static MinecraftServer serverInstance = null;
 
+    public record PlacedBuildingSnapshot(Map<UUID, PlacedBuildingData> placedBuildings,
+                                         Map<BlockPos, UUID> controlBoxToBuilding) {
+    }
+
     /**
      * 已放置建筑数据结构
      */
@@ -545,9 +549,12 @@ public class PlacedBuildingManager {
     public static void loadFromWorld(MinecraftServer server) {
         // simukraft: 保存服务器实例引用（menglannnn: 用于自动保存）
         serverInstance = server;
+        applySnapshot(server, loadSnapshotFromWorld(server));
+    }
 
-        placedBuildings.clear();
-        controlBoxToBuilding.clear();
+    public static PlacedBuildingSnapshot loadSnapshotFromWorld(MinecraftServer server) {
+        Map<UUID, PlacedBuildingData> loadedBuildings = new ConcurrentHashMap<>();
+        Map<BlockPos, UUID> loadedControlBoxIndex = new ConcurrentHashMap<>();
 
         try {
             Path worldPath = server.getWorldPath(WORLD_ROOT);
@@ -555,7 +562,7 @@ public class PlacedBuildingManager {
 
             if (!dataFile.exists()) {
                 LOGGER.info("[PlacedBuildingManager] 没有找到建筑数据文件");
-                return;
+                return new PlacedBuildingSnapshot(loadedBuildings, loadedControlBoxIndex);
             }
 
             try (FileInputStream fis = new FileInputStream(dataFile)) {
@@ -567,59 +574,68 @@ public class PlacedBuildingManager {
 
                     UUID buildingId = buildingTag.getUUID("buildingId");
                     BlockPos controlBoxPos = new BlockPos(
-                        (int) buildingTag.getLong("controlBoxX"),
-                        (int) buildingTag.getLong("controlBoxY"),
-                        (int) buildingTag.getLong("controlBoxZ")
+                            (int) buildingTag.getLong("controlBoxX"),
+                            (int) buildingTag.getLong("controlBoxY"),
+                            (int) buildingTag.getLong("controlBoxZ")
                     );
                     String buildingName = buildingTag.getString("buildingName");
                     String category = buildingTag.getString("category");
                     String worldId = buildingTag.getString("worldId");
-                    // placedTime 读取但不使用，保留用于未来扩展
 
-                    // 加载边界
                     CompoundTag minTag = buildingTag.getCompound("minPos");
                     BlockPos minPos = new BlockPos(
-                        minTag.getInt("x"), minTag.getInt("y"), minTag.getInt("z")
+                            minTag.getInt("x"), minTag.getInt("y"), minTag.getInt("z")
                     );
                     CompoundTag maxTag = buildingTag.getCompound("maxPos");
                     BlockPos maxPos = new BlockPos(
-                        maxTag.getInt("x"), maxTag.getInt("y"), maxTag.getInt("z")
+                            maxTag.getInt("x"), maxTag.getInt("y"), maxTag.getInt("z")
                     );
 
-                    // 加载方块列表
                     List<BlockEntry> blockEntries = new ArrayList<>();
                     ListTag blocksList = buildingTag.getList("blocks", 10);
                     for (int j = 0; j < blocksList.size(); j++) {
                         CompoundTag blockTag = blocksList.getCompound(j);
                         BlockPos relPos = new BlockPos(
-                            blockTag.getInt("relX"),
-                            blockTag.getInt("relY"),
-                            blockTag.getInt("relZ")
+                                blockTag.getInt("relX"),
+                                blockTag.getInt("relY"),
+                                blockTag.getInt("relZ")
                         );
                         String blockId = blockTag.getString("blockId");
-                        CompoundTag stateTag = blockTag.contains("blockState") ?
-                            blockTag.getCompound("blockState") : null;
+                        CompoundTag stateTag = blockTag.contains("blockState")
+                                ? blockTag.getCompound("blockState") : null;
                         BlockPos originalNbtPos = blockTag.contains("nbtX") && blockTag.contains("nbtY") && blockTag.contains("nbtZ")
                                 ? new BlockPos(blockTag.getInt("nbtX"), blockTag.getInt("nbtY"), blockTag.getInt("nbtZ"))
                                 : null;
                         blockEntries.add(new BlockEntry(relPos, blockId, stateTag, originalNbtPos));
                     }
 
-                    // 创建建筑数据（使用特殊构造函数绕过final限制）
                     PlacedBuildingData buildingData = new PlacedBuildingData(
-                        buildingId, controlBoxPos, buildingName, category, worldId,
-                        blockEntries, minPos, maxPos
+                            buildingId, controlBoxPos, buildingName, category, worldId,
+                            blockEntries, minPos, maxPos
                     );
 
-                    placedBuildings.put(buildingId, buildingData);
-                    controlBoxToBuilding.put(controlBoxPos, buildingId);
+                    loadedBuildings.put(buildingId, buildingData);
+                    loadedControlBoxIndex.put(controlBoxPos, buildingId);
                 }
-
-                LOGGER.info("[PlacedBuildingManager] 加载了 {} 个建筑数据", placedBuildings.size());
             }
-
         } catch (IOException e) {
             LOGGER.error("[PlacedBuildingManager] 加载建筑数据失败: {}", e.getMessage(), e);
         }
+
+        return new PlacedBuildingSnapshot(loadedBuildings, loadedControlBoxIndex);
+    }
+
+    public static void applySnapshot(MinecraftServer server, PlacedBuildingSnapshot snapshot) {
+        if (server != null) {
+            serverInstance = server;
+        }
+        if (snapshot == null) {
+            return;
+        }
+        placedBuildings.clear();
+        controlBoxToBuilding.clear();
+        placedBuildings.putAll(snapshot.placedBuildings());
+        controlBoxToBuilding.putAll(snapshot.controlBoxToBuilding());
+        LOGGER.info("[PlacedBuildingManager] 加载了 {} 个建筑数据", placedBuildings.size());
     }
 }

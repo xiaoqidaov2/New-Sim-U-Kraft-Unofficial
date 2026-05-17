@@ -82,6 +82,10 @@ public class FileUtils {
     public static final String INDUSTRIAL_DIR = "industrial"; // 添加工业文件夹常量
     public static final String COMMERCIAL_DIR = "commercial"; // 添加商业文件夹常量
 
+    public record SkCacheSnapshot(Map<String, BuildingCacheEntry> buildingCache,
+                                  Map<String, String> legacyCache) {
+    }
+
     public static String getWorldId(MinecraftServer server) {
         try {
             Path worldPath = getWorldPath(server);
@@ -909,8 +913,7 @@ public class FileUtils {
             LOGGER.info("[FileUtils] SK文件缓存已初始化，跳过");
             return;
         }
-        reloadSkFileCache(server);
-        cacheInitialized = true;
+        applySkCacheSnapshot(buildSkCacheSnapshot(server));
     }
 
     /**
@@ -918,43 +921,60 @@ public class FileUtils {
      * 同时缓存SK文件信息和对应的JSON配置
      */
     public static void reloadSkFileCache(MinecraftServer server) {
-        SK_FILE_CACHE.clear();
-        BUILDING_CACHE.clear();
-        
+        applySkCacheSnapshot(buildSkCacheSnapshot(server));
+    }
+
+    public static SkCacheSnapshot buildSkCacheSnapshot(MinecraftServer server) {
+        Map<String, BuildingCacheEntry> buildingCache = new ConcurrentHashMap<>();
+        Map<String, String> legacyCache = new ConcurrentHashMap<>();
+
         try {
             Path worldDir = getWorldPath(server);
             Path simukraftDir = worldDir.resolve(MODE_DIR);
-            
+
             LOGGER.info("[FileUtils] 开始加载建筑缓存，世界目录: {}", worldDir);
-            
-            // 加载商业建筑SK文件
+
             Path commercialDir = simukraftDir.resolve(COMMERCIAL_DIR);
             if (Files.exists(commercialDir)) {
                 LOGGER.info("[FileUtils] 加载商业建筑缓存，目录: {}", commercialDir);
-                loadBuildingCacheFromDirectory(commercialDir, "commercial");
+                loadBuildingCacheFromDirectory(commercialDir, "commercial", buildingCache, legacyCache);
             } else {
                 LOGGER.warn("[FileUtils] 商业建筑目录不存在: {}", commercialDir);
             }
-            
-            // 加载工业建筑SK文件
+
             Path industrialDir = simukraftDir.resolve(INDUSTRIAL_DIR);
             if (Files.exists(industrialDir)) {
                 LOGGER.info("[FileUtils] 加载工业建筑缓存，目录: {}", industrialDir);
-                loadBuildingCacheFromDirectory(industrialDir, "industrial");
+                loadBuildingCacheFromDirectory(industrialDir, "industrial", buildingCache, legacyCache);
             } else {
                 LOGGER.warn("[FileUtils] 工业建筑目录不存在: {}", industrialDir);
             }
-            
-            LOGGER.info("[FileUtils] 建筑缓存已重新加载，共缓存 {} 个建筑", BUILDING_CACHE.size());
         } catch (Exception e) {
-            LOGGER.error("[FileUtils] 重新加载建筑缓存失败", e);
+            LOGGER.error("[FileUtils] 构建建筑缓存快照失败", e);
         }
+
+        return new SkCacheSnapshot(buildingCache, legacyCache);
+    }
+
+    public static void applySkCacheSnapshot(SkCacheSnapshot snapshot) {
+        if (snapshot == null) {
+            return;
+        }
+        BUILDING_CACHE.clear();
+        BUILDING_CACHE.putAll(snapshot.buildingCache());
+        SK_FILE_CACHE.clear();
+        SK_FILE_CACHE.putAll(snapshot.legacyCache());
+        cacheInitialized = true;
+        LOGGER.info("[FileUtils] 建筑缓存已应用，共缓存 {} 个建筑", BUILDING_CACHE.size());
     }
 
     /**
      * 从目录加载所有建筑到缓存（同时加载SK和JSON）
      */
-    private static void loadBuildingCacheFromDirectory(Path directory, String type) {
+    private static void loadBuildingCacheFromDirectory(Path directory,
+                                                       String type,
+                                                       Map<String, BuildingCacheEntry> buildingCache,
+                                                       Map<String, String> legacyCache) {
         int loadedCount = 0;
         try (var stream = Files.newDirectoryStream(directory, "*.sk")) {
             for (Path filePath : stream) {
@@ -976,12 +996,9 @@ public class FileUtils {
                             if (jsonConfig != null) {
                                 entry.setJsonConfig(jsonConfig);
                             }
-                            
-                            // 存入新缓存
-                            BUILDING_CACHE.put(cacheKey, entry);
-                            
-                            // 兼容旧缓存
-                            SK_FILE_CACHE.put(cacheKey, entry.getBuildingFileName());
+
+                            buildingCache.put(cacheKey, entry);
+                            legacyCache.put(cacheKey, entry.getBuildingFileName());
                             
                             loadedCount++;
                             LOGGER.debug("[FileUtils] 已缓存建筑 [{}] => {}", cacheKey, entry.getBuildingFileName());

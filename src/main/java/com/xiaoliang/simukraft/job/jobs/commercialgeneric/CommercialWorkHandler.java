@@ -78,8 +78,16 @@ public class CommercialWorkHandler {
 
         // 初始化商业建筑配置管理器
         CommercialBuildingManager.init(server);
+    }
 
-        // 加载库存数据
+    /**
+     * 预热商业持久化数据
+     * 启动阶段由分帧预热协调器延后执行，避免与核心世界加载抢占主线程。
+     */
+    public static void loadPersistentState(MinecraftServer server) {
+        if (server == null) {
+            return;
+        }
         CommercialHiredData.loadStockData(server);
 
     }

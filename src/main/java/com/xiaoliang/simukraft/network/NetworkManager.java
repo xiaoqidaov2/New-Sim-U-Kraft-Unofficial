@@ -13,15 +13,19 @@ import net.minecraftforge.network.NetworkDirection;
 import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.simple.SimpleChannel;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentHashMap;
 
 @SuppressWarnings("null")
 public class NetworkManager {
     private static final String PROTOCOL_VERSION = "1";
     private static final Map<UUID, HudSyncState> LAST_HUD_SYNC = new ConcurrentHashMap<>();
+    private static final ConcurrentLinkedQueue<UUID> PENDING_CITY_CHUNK_SYNC_PLAYERS = new ConcurrentLinkedQueue<>();
+    private static final int MAX_CITY_CHUNK_SYNC_PLAYERS_PER_TICK = 2;
     public static final SimpleChannel INSTANCE = NetworkRegistry.newSimpleChannel(
             ResourceLocation.fromNamespaceAndPath("simukraft", "main"),
             () -> PROTOCOL_VERSION,
@@ -1010,17 +1014,60 @@ public class NetworkManager {
     }
 
     public static void sendAllCityChunksToPlayer(ServerPlayer player) {
+        if (player == null) {
+            return;
+        }
+        queueAllCityChunksToPlayer(player);
+    }
+
+    public static void queueAllCityChunksToPlayer(ServerPlayer player) {
+        if (player == null) {
+            return;
+        }
+        PENDING_CITY_CHUNK_SYNC_PLAYERS.offer(player.getUUID());
+    }
+
+    public static void flushQueuedCityChunkSyncs(net.minecraft.server.MinecraftServer server) {
+        if (server == null || PENDING_CITY_CHUNK_SYNC_PLAYERS.isEmpty()) {
+            return;
+        }
+
+        ServerLevel level = server.overworld();
+        if (level == null) {
+            return;
+        }
+
         com.xiaoliang.simukraft.world.CityChunkData cityChunkData =
-                com.xiaoliang.simukraft.world.CityChunkData.get(player.serverLevel());
+                com.xiaoliang.simukraft.world.CityChunkData.get(level);
         com.xiaoliang.simukraft.world.CityData cityData =
-                com.xiaoliang.simukraft.world.CityData.get(player.serverLevel());
-        java.util.Map<UUID, java.util.Set<Long>> allChunks = new java.util.HashMap<>();
-        for (java.util.Map.Entry<UUID, java.util.Set<Long>> entry : cityChunkData.getAllCityChunks().entrySet()) {
+                com.xiaoliang.simukraft.world.CityData.get(level);
+        Map<UUID, java.util.Set<Long>> allChunksSnapshot = copyCityChunkSnapshot(cityChunkData);
+
+        int syncedPlayers = 0;
+        while (syncedPlayers < MAX_CITY_CHUNK_SYNC_PLAYERS_PER_TICK) {
+            UUID playerUuid = PENDING_CITY_CHUNK_SYNC_PLAYERS.poll();
+            if (playerUuid == null) {
+                break;
+            }
+
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUuid);
+            if (player == null || player.hasDisconnected()) {
+                continue;
+            }
+
+            UUID playerCityId = cityData.refreshPlayerCityAccess(player);
+            SyncAllCityChunksPacket packet = new SyncAllCityChunksPacket(playerCityId, allChunksSnapshot);
+            sendToPlayer(packet, player);
+            syncedPlayers++;
+        }
+    }
+
+    private static Map<UUID, java.util.Set<Long>> copyCityChunkSnapshot(com.xiaoliang.simukraft.world.CityChunkData cityChunkData) {
+        Map<UUID, java.util.Set<Long>> allChunks = new HashMap<>();
+        for (Map.Entry<UUID, java.util.Set<Long>> entry : cityChunkData.getAllCityChunks().entrySet()) {
             allChunks.put(entry.getKey(), new java.util.HashSet<>(entry.getValue()));
         }
-        UUID playerCityId = cityData.refreshPlayerCityAccess(player);
-        SyncAllCityChunksPacket packet = new SyncAllCityChunksPacket(playerCityId, allChunks);
-        sendToPlayer(packet, player);
+        return allChunks;
     }
 
     public static void broadcastAllCityCores(net.minecraft.server.MinecraftServer server) {

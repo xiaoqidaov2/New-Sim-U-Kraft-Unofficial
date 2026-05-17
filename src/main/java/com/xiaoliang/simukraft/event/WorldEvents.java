@@ -472,8 +472,8 @@ public class WorldEvents {
         PlayerCitySnapshot citySnapshot = resolvePlayerCitySnapshot(serverLevel, serverPlayer);
         NetworkManager.sendHUDDataToPlayer(currentDay, worldPopulation, citySnapshot.cityName(), citySnapshot.cityFunds(), citySnapshot.cityPopulation(), serverPlayer);
 
-        // 同步城市区块数据给登录的玩家
-        NetworkManager.sendAllCityChunksToPlayer(serverPlayer);
+        // 城市区块属于外围地图资源，改为排队分帧同步，避免玩家登录时主线程突发卡顿
+        NetworkManager.queueAllCityChunksToPlayer(serverPlayer);
     }
 
     private static boolean firstLoad = true;
@@ -493,6 +493,9 @@ public class WorldEvents {
 
         // 处理工业控制箱每日工作（统一处理牧羊人和屠夫）
         if (event.getServer() != null) {
+            StartupWarmupCoordinator.tick(event.getServer());
+            NetworkManager.flushQueuedCityChunkSyncs(event.getServer());
+
             // 修复：执行延迟的工商业雇佣状态恢复
             executeCommercialIndustrialHireStatusRestore(event.getServer());
 
@@ -533,32 +536,12 @@ public class WorldEvents {
         Simukraft.LOGGER.info("[WorldEvents] onServerStarting");
         NotificationServiceManager.bindServer(event.getServer());
 
-        // 服务器启动时初始化SK文件缓存
-        com.xiaoliang.simukraft.utils.FileUtils.initSkFileCache(event.getServer());
-
         // 服务器启动时初始化工业控制箱工作处理器（统一处理牧羊人和屠夫）
         com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler.onServerStart(event.getServer());
         // 服务器启动时初始化商业建筑工作处理器
         com.xiaoliang.simukraft.job.jobs.commercialgeneric.CommercialWorkHandler.onServerStart(event.getServer());
 
-        // 服务器启动时加载动物生成数据
-        IndustrialHiredData.loadAnimalGenerationData(event.getServer());
-
-        // 服务器启动时加载农田盒数据
-        FarmlandHiredData.loadAllFarmlandData(event.getServer());
-
         runEmploymentStartupMaintenance(event.getServer());
-
-        // 服务器启动时初始化农民工作处理器（重要：确保农民状态被正确恢复）
-        com.xiaoliang.simukraft.job.jobs.farmer.FarmerWorkService.INSTANCE.onServerStart(event.getServer().overworld());
-
-        // 服务器启动时加载NPC休息处理器的工作状态数据
-        com.xiaoliang.simukraft.utils.NPCRestHandler.onServerStart(event.getServer());
-
-        // simukraft: 服务器启动时加载已放置的建筑结构数据（支持一键拆除和NPC识别）
-        com.xiaoliang.simukraft.building.PlacedBuildingManager.loadFromWorld(event.getServer());
-
-        com.xiaoliang.simukraft.utils.NpcChunkLoadManager.restoreForcedChunks(event.getServer());
 
         // 修复：延迟恢复建造盒雇佣状态，等待世界和实体完全加载
         // 使用 BuilderWorkService 在服务器启动后持续尝试恢复建筑师状态
@@ -566,8 +549,7 @@ public class WorldEvents {
 
         // 修复：延迟恢复工商业雇佣状态，等待世界和NPC实体完全加载
         scheduleCommercialIndustrialHireStatusRestore();
-
-        com.xiaoliang.simukraft.integration.IntegrationBridge.onServerStarted(event.getServer());
+        StartupWarmupCoordinator.schedule(event.getServer());
 
         Simukraft.LOGGER.info("[WorldEvents] 工业/商业/农田/NPC 工作处理器和相关持久化数据已初始化");
     }
@@ -939,6 +921,7 @@ public class WorldEvents {
     @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
         NotificationServiceManager.clearServer();
+        StartupWarmupCoordinator.reset();
 
         // 服务器停止时保存动物生成数据
         com.xiaoliang.simukraft.job.core.JobRuntimeService.get().onServerStopping(event.getServer().overworld());

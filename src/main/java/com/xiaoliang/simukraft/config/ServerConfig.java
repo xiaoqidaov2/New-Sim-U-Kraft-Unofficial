@@ -294,6 +294,15 @@ public class ServerConfig {
         return (T) configCache.computeIfAbsent(key, k -> configValue.get());
     }
 
+    private static int getCachedIntOrDefault(String key, ForgeConfigSpec.ConfigValue<Integer> configValue, int fallback) {
+        try {
+            return getCached(key, configValue);
+        } catch (IllegalStateException ignored) {
+            // 兼容单元测试等未装载 Forge 配置上下文的场景
+            return fallback;
+        }
+    }
+
     private static <T> void setCached(String key, ForgeConfigSpec.ConfigValue<T> configValue, T value) {
         configCache.put(key, value);
         configValue.set(value);
@@ -522,7 +531,7 @@ public class ServerConfig {
      */
     private static int calculateSpeedByLevel(int baseSpeed, int level) {
         int safeLevel = Math.max(1, level);
-        int maxLevel = getCached("npcMaxLevel", NPC_MAX_LEVEL);
+        int maxLevel = getNpcMaxLevel();
         float progress = (float) (safeLevel - 1) / (maxLevel - 1);
         // 1级=1倍, 20级=0.2倍（最快5倍）
         double multiplier = 1.0 - progress * 0.8;
@@ -567,7 +576,7 @@ public class ServerConfig {
      */
     public static double getBuilderBlocksPerSecond(int level) {
         double baseSpeed = getCached("builderBlocksPerSecond", BUILDER_BLOCKS_PER_SECOND);
-        int maxLevel = getCached("npcMaxLevel", NPC_MAX_LEVEL);
+        int maxLevel = getNpcMaxLevel();
         float progress = (float) (level - 1) / (maxLevel - 1);
         return baseSpeed * (1 + progress * 19); // 1级=1倍, 20级=20倍
     }
@@ -630,7 +639,7 @@ public class ServerConfig {
     // ==================== NPC等级配置获取方法 ====================
 
     public static int getNpcMaxLevel() {
-        return getCached("npcMaxLevel", NPC_MAX_LEVEL);
+        return getCachedIntOrDefault("npcMaxLevel", NPC_MAX_LEVEL, 20);
     }
 
     public static int getNpcSpeedBonusPerLevel() {

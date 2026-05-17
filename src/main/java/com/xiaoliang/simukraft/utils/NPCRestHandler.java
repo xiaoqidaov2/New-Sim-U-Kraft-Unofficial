@@ -80,6 +80,8 @@ public class NPCRestHandler {
 
     private static final Map<UUID, GoingToWorkData> goingToWorkNPCs = new ConcurrentHashMap<>();
     private static final Map<UUID, Long> pendingHomePathStartTicks = new ConcurrentHashMap<>();
+    private static final Map<UUID, RestDispatchPlan> pendingRestDispatchPlans = new ConcurrentHashMap<>();
+    private static final Map<String, Integer> restDispatchSequenceByWindow = new ConcurrentHashMap<>();
     private static final Map<String, Optional<BlockPos>> homeTeleportNbtPosCache = new ConcurrentHashMap<>();
     private static final Map<String, Optional<BlockPos>> residentialControlBoxNbtPosCache = new ConcurrentHashMap<>();
 
@@ -121,6 +123,16 @@ public class NPCRestHandler {
             this.job = job;
             this.previousWorkStatus = previousWorkStatus;
             this.startTime = level.getDayTime() % 24000L;
+        }
+    }
+
+    private static final class RestDispatchPlan {
+        private final String windowKey;
+        private final long scheduledTick;
+
+        private RestDispatchPlan(String windowKey, long scheduledTick) {
+            this.windowKey = windowKey;
+            this.scheduledTick = scheduledTick;
         }
     }
 
@@ -477,6 +489,8 @@ public class NPCRestHandler {
             LOGGER.info("NPC {} 开始休息流程，准备返回住宅: {}，原状态: {}，原职业: {}",
                 npc.getFullName(), homePos, resumeWorkStatus, currentJob);
         }
+
+        clearRestDispatchPlan(npcUuid);
 
         // 开始寻路回家
         queuePathfindingToHome(npcUuid, level);
@@ -1022,6 +1036,11 @@ public class NPCRestHandler {
     private static void updateRestStatusInternal(ServerLevel level, List<CustomEntity> npcs) {
         if (level == null || npcs == null || npcs.isEmpty()) return;
 
+        if (shouldStopResting(level)) {
+            pendingRestDispatchPlans.clear();
+            restDispatchSequenceByWindow.clear();
+        }
+
         int startedRestCount = 0;
         int stoppedRestCount = 0;
         int homePathStartCount = 0;
@@ -1058,7 +1077,7 @@ public class NPCRestHandler {
             if (shouldStartResting(level, npc)) {
                 // 应该开始休息 - 所有NPC都进入休息状态（优先级最高）
                 if (restData == null) {
-                    if (!isRestStartWindowOpen(level, npcUuid) || startedRestCount >= MAX_REST_STARTS_PER_UPDATE) {
+                    if (!isRestDispatchReady(level, npc) || startedRestCount >= MAX_REST_STARTS_PER_UPDATE) {
                         continue;
                     }
                 }
@@ -1116,6 +1135,7 @@ public class NPCRestHandler {
                     updateRestingNPC(npc, restData, level);
                 }
             } else if (shouldStopResting(level, npc)) {
+                clearRestDispatchPlan(npcUuid);
                 // 应该结束休息（工作开始时间）
                 if (restData != null) {
                     if (stoppedRestCount >= MAX_REST_STOPS_PER_UPDATE) {
@@ -1129,6 +1149,8 @@ public class NPCRestHandler {
                 if (workData != null) {
                     updateGoingToWorkStatus(npc, workData, level);
                 }
+            } else {
+                clearRestDispatchPlan(npcUuid);
             }
         }
 
@@ -1140,16 +1162,94 @@ public class NPCRestHandler {
         PerformanceMonitor.recordValue("rest.goingToWork", goingToWorkNPCs.size());
     }
 
-    private static boolean isRestStartWindowOpen(ServerLevel level, UUID npcUuid) {
-        if (level == null || npcUuid == null) {
+    private static boolean isRestDispatchReady(ServerLevel level, CustomEntity npc) {
+        if (level == null || npc == null) {
             return true;
         }
-        long timeOfDay = level.getDayTime() % 24000L;
-        if (timeOfDay < EVENING_START_TIME || timeOfDay >= EVENING_START_TIME + REST_START_SPREAD_TICKS) {
-            return true;
+
+        UUID npcUuid = npc.getUUID();
+        RestDispatchPlan plan = pendingRestDispatchPlans.get(npcUuid);
+        String currentWindowKey = buildRestDispatchWindowKey(level, npc);
+        if (plan == null || !plan.windowKey.equals(currentWindowKey)) {
+            plan = createRestDispatchPlan(level, npc, currentWindowKey);
+            pendingRestDispatchPlans.put(npcUuid, plan);
         }
-        long offset = Math.floorMod(npcUuid.hashCode(), REST_START_SPREAD_TICKS);
-        return timeOfDay - EVENING_START_TIME >= offset;
+        return level.getGameTime() >= plan.scheduledTick;
+    }
+
+    private static RestDispatchPlan createRestDispatchPlan(ServerLevel level, CustomEntity npc, String windowKey) {
+        BlockPos homePos = getNPCHomePosition(npc, level.getServer());
+        int queueIndex = restDispatchSequenceByWindow.merge(windowKey, 1, Integer::sum) - 1;
+        double travelDistance = resolveRestDispatchDistance(npc, level, homePos);
+        boolean hasWorkplace = getWorkplacePosition(npc, level.getServer(), npc.getJob()) != null;
+        long dayBaseTick = level.getGameTime() - (level.getDayTime() % 24000L);
+        long restWindowStartTick = dayBaseTick + resolveRestWindowStartTime(level, npc);
+        var dispatchPlan = NPCRestDispatchPlanner.createPlan(
+                restWindowStartTick,
+                travelDistance,
+                npc.getWorkStatus() == WorkStatus.WORKING,
+                hasWorkplace,
+                queueIndex
+        );
+        return new RestDispatchPlan(windowKey, dispatchPlan.scheduledTick());
+    }
+
+    private static double resolveRestDispatchDistance(CustomEntity npc, ServerLevel level, BlockPos homePos) {
+        if (npc == null || level == null || homePos == null) {
+            return 0.0D;
+        }
+        BlockPos workPos = getWorkplacePosition(npc, level.getServer(), npc.getJob());
+        BlockPos origin = workPos != null ? workPos : npc.blockPosition();
+        return Math.sqrt(origin.distSqr(homePos));
+    }
+
+    private static String buildRestDispatchWindowKey(ServerLevel level, CustomEntity npc) {
+        long dayBaseTick = level.getGameTime() - (level.getDayTime() % 24000L);
+        return level.dimension().location() + ":" + dayBaseTick + ":" + resolveRestWindowStartTime(level, npc);
+    }
+
+    private static int resolveRestWindowStartTime(ServerLevel level, CustomEntity npc) {
+        if (level == null || npc == null) {
+            return EVENING_START_TIME;
+        }
+
+        String job = npc.getJob();
+        if (job == null || job.equals("unemployed")) {
+            return EVENING_START_TIME;
+        }
+
+        BlockPos workPos = getWorkplacePosition(npc, level.getServer(), job);
+        if (workPos == null) {
+            return EVENING_START_TIME;
+        }
+
+        String industrialBuildingFileName =
+                com.xiaoliang.simukraft.job.jobs.industrialgeneric.IndustrialWorkHandler.getBuildingFileName(level, workPos);
+        if (industrialBuildingFileName != null) {
+            var config = com.xiaoliang.simukraft.building.IndustrialBuildingManager.getConfig(industrialBuildingFileName);
+            if (config != null) {
+                return config.getWorkEndTime();
+            }
+        }
+
+        if (com.xiaoliang.simukraft.building.CommercialBuildingManager.isCommercialJobType(job)) {
+            String commercialBuildingFileName =
+                    com.xiaoliang.simukraft.job.jobs.commercialgeneric.CommercialWorkHandler.getBuildingFileName(level, workPos);
+            if (commercialBuildingFileName != null) {
+                var config = com.xiaoliang.simukraft.building.CommercialBuildingManager.getConfig(commercialBuildingFileName);
+                if (config != null) {
+                    return config.getWorkEndTime();
+                }
+            }
+        }
+        return EVENING_START_TIME;
+    }
+
+    private static void clearRestDispatchPlan(UUID npcUuid) {
+        if (npcUuid == null) {
+            return;
+        }
+        pendingRestDispatchPlans.remove(npcUuid);
     }
 
     private static void enqueueMainThreadLevelTask(ServerLevel level, Runnable task, String taskName) {
@@ -2599,6 +2699,8 @@ public class NPCRestHandler {
         npcHomePositions.clear();
         npcPathfindingStatus.clear();
         pendingHomePathStartTicks.clear();
+        pendingRestDispatchPlans.clear();
+        restDispatchSequenceByWindow.clear();
         npcPreviousWorkStatus.clear();
         npcPreviousJob.clear();
         // 不再使用npcPreviousConstructionTask，建造任务统一从JSON恢复
@@ -2624,6 +2726,8 @@ public class NPCRestHandler {
         LOGGER.info("[NPCRestHandler] 服务器启动，开始加载NPC工作状态...");
 
         // 清空现有数据
+        pendingRestDispatchPlans.clear();
+        restDispatchSequenceByWindow.clear();
         npcPreviousWorkStatus.clear();
         npcPreviousJob.clear();
 
