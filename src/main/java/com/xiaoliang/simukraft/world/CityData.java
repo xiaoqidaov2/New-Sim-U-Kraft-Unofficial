@@ -47,6 +47,7 @@ public class CityData extends SavedData {
         private final BlockPos cityCorePos;
         private double funds;
         private int cityLevel = 0; // 城市等级，初始为0级（拓荒者）
+        private double outstandingLoanDebt; // 当前未偿还贷款本息
         
         // 官员列表：存储官员的玩家名称
         private final List<String> officials = new ArrayList<>();
@@ -172,6 +173,14 @@ public class CityData extends SavedData {
             this.cityLevel = cityLevel;
         }
 
+        public double getOutstandingLoanDebt() {
+            return outstandingLoanDebt;
+        }
+
+        public void setOutstandingLoanDebt(double outstandingLoanDebt) {
+            this.outstandingLoanDebt = outstandingLoanDebt;
+        }
+
         public CompoundTag serialize() {
             CompoundTag tag = new CompoundTag();
             tag.putUUID("cityId", Objects.requireNonNull(cityId));
@@ -181,6 +190,7 @@ public class CityData extends SavedData {
             tag.putLong("cityCorePos", cityCorePos.asLong());
             tag.putDouble("funds", funds);
             tag.putInt("cityLevel", cityLevel);
+            tag.putDouble("outstandingLoanDebt", outstandingLoanDebt);
             
             ListTag citizens = new ListTag();
             for (UUID citizenId : citizenIds) {
@@ -225,6 +235,7 @@ public class CityData extends SavedData {
             CityInfo info = new CityInfo(cityId, cityName, mayorId, mayorName, cityCorePos);
             info.setFunds(tag.getDouble("funds"));
             info.setCityLevel(tag.getInt("cityLevel")); // 读取城市等级
+            info.setOutstandingLoanDebt(tag.getDouble("outstandingLoanDebt"));
             
             ListTag citizens = tag.getList("citizens", Tag.TAG_COMPOUND);
             for (Tag citizenTag : citizens) {

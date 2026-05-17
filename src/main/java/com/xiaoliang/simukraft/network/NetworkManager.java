@@ -142,6 +142,24 @@ public class NetworkManager {
                 CityInfoResponsePacket::handle);
 
         INSTANCE.registerMessage(id++,
+                GetCityFinanceInfoPacket.class,
+                GetCityFinanceInfoPacket::encode,
+                GetCityFinanceInfoPacket::decode,
+                GetCityFinanceInfoPacket::handle);
+
+        INSTANCE.registerMessage(id++,
+                CityFinanceInfoResponsePacket.class,
+                CityFinanceInfoResponsePacket::encode,
+                CityFinanceInfoResponsePacket::decode,
+                CityFinanceInfoResponsePacket::handle);
+
+        INSTANCE.registerMessage(id++,
+                CityLoanActionPacket.class,
+                CityLoanActionPacket::encode,
+                CityLoanActionPacket::decode,
+                CityLoanActionPacket::handle);
+
+        INSTANCE.registerMessage(id++,
                 GetCityChunksPacket.class,
                 GetCityChunksPacket::encode,
                 GetCityChunksPacket::decode,

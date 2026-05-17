@@ -295,6 +295,7 @@ public class WorldEvents {
     private static void incrementDay(ServerLevel level) {
         SimukraftWorldData data = SimukraftWorldData.get(level);
         data.incrementDay();
+        CityLoanService.applyDailyInterest(level);
 
         // 同步HUD数据给所有玩家
         syncHUDDataToAllPlayers(level);
