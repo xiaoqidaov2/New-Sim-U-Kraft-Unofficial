@@ -2,6 +2,8 @@
   "itemGroup.simukraft": "§f新：模拟大都市",
   "generator.simukraft.debug_void": "SimuKraft 调试世界",
   
+  "item.minecraft.blaze_rod": "大火杆",
+  "block.minecraft.repeater": "雷石东直放站",
   "block.simukraft.build_box": "NSUK-建造盒",
   "block.simukraft.nsuk_farmland_box": "NSUK-农田工作盒",
   "block.simukraft.city_core": "NSUK-城市核心方块",
