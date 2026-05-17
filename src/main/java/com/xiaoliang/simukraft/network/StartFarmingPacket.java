@@ -46,8 +46,8 @@ public class StartFarmingPacket {
         buf.writeInt(areaSize);
         buf.writeBoolean(plot != null);
         if (plot != null) {
-            buf.writeBlockPos(plot.minPos());
-            buf.writeBlockPos(plot.maxPos());
+            buf.writeBlockPos(Objects.requireNonNull(plot.minPos()));
+            buf.writeBlockPos(Objects.requireNonNull(plot.maxPos()));
         }
     }
 

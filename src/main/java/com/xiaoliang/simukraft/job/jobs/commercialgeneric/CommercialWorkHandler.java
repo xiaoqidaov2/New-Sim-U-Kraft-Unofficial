@@ -258,6 +258,22 @@ public class CommercialWorkHandler {
             }
         }
 
+        // 也处理仅有库存数据但未雇佣NPC的建筑（例如纯PLAYER_SELL）
+        for (BlockPos buildingPos : CommercialHiredData.getAllStockPositions()) {
+            if (hiredEmployees.containsKey(buildingPos)) {
+                continue;
+            }
+            CommercialBuildingConfig config = findConfigForPosition(buildingPos, level);
+            if (config == null) {
+                continue;
+            }
+            if (config.getShopMode() == CommercialBuildingConfig.ShopMode.PLAYER_SELL
+                    || config.getShopMode() == CommercialBuildingConfig.ShopMode.MIXED) {
+                checkAndResetDailyBuyAmount(buildingPos, level, config);
+                anyChange = true;
+            }
+        }
+
         // 只有在数据可能发生变化时才保存
         if (anyChange) {
             CommercialHiredData.saveStockData(level.getServer());
@@ -319,7 +335,7 @@ public class CommercialWorkHandler {
         processRestock(pos, level, config);
 
         // 检查并重置每日收购数量
-        checkAndResetDailyBuyAmount(pos, level);
+        checkAndResetDailyBuyAmount(pos, level, config);
     }
 
     /**
@@ -330,7 +346,7 @@ public class CommercialWorkHandler {
         if (npc == null || level == null || config == null) return;
 
         // 检查并重置每日收购数量
-        checkAndResetDailyBuyAmount(pos, level);
+        checkAndResetDailyBuyAmount(pos, level, config);
 
         // `handleNPCSellMode` 内部已经包含补货逻辑，这里直接复用即可，
         // 避免混合模式在同一 tick 内重复跑两次补货与持久化。
@@ -342,7 +358,7 @@ public class CommercialWorkHandler {
      * @param pos 商店位置
      * @param level 服务器世界
      */
-    private static void checkAndResetDailyBuyAmount(BlockPos pos, ServerLevel level) {
+    private static void checkAndResetDailyBuyAmount(BlockPos pos, ServerLevel level, CommercialBuildingConfig config) {
         if (level == null || level.getServer() == null) return;
 
         long gameTime = level.getDayTime();
@@ -352,12 +368,34 @@ public class CommercialWorkHandler {
         if (stockMap == null || stockMap.isEmpty()) return;
 
         // 检查是否需要重置（新的一天）
-        for (CommercialHiredData.StockInfo stockInfo : stockMap.values()) {
-            long lastRestockDay = stockInfo.getLastRestockTime() / 24000L;
-            long currentDay = gameTime / 24000L;
-
-            if (currentDay > lastRestockDay) {
+        long currentDay = gameTime / 24000L;
+        java.util.Set<String> buyIds = new java.util.HashSet<>();
+        for (CommercialBuildingConfig.BuyTradeItem bt : config.getBuyTrades()) {
+            buyIds.add(bt.getItemId());
+        }
+        java.util.Set<String> sellIds = new java.util.HashSet<>();
+        for (CommercialBuildingConfig.TradeItem t : config.getTrades()) {
+            sellIds.add(t.getItemId());
+        }
+        for (Map.Entry<String, CommercialHiredData.StockInfo> e : stockMap.entrySet()) {
+            CommercialHiredData.StockInfo stockInfo = e.getValue();
+            long lastBuyResetDay = stockInfo.getLastBuyResetDay();
+            if (currentDay > lastBuyResetDay) {
                 stockInfo.resetDailyBoughtAmount();
+                stockInfo.setLastBuyResetDay(currentDay);
+                if (buyIds.contains(e.getKey()) && !sellIds.contains(e.getKey())) {
+                    stockInfo.setCurrentStock(0);
+                    CommercialBuildingConfig.BuyTradeItem bt = null;
+                    for (CommercialBuildingConfig.BuyTradeItem x : config.getBuyTrades()) {
+                        if (x.getItemId().equals(e.getKey())) {
+                            bt = x; break;
+                        }
+                    }
+                    if (bt != null) {
+                        int targetMaxStock = Math.max(stockInfo.getMaxStock(), bt.getMaxBuyAmount() * 64);
+                        stockInfo.setMaxStock(targetMaxStock);
+                    }
+                }
             }
         }
 

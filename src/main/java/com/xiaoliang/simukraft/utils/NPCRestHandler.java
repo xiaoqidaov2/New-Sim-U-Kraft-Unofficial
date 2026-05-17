@@ -37,7 +37,6 @@ public class NPCRestHandler {
     private static final int MORNING_END_TIME = 0; // 早上结束时间（约6:00）
     private static final int MORNING_PREPARE_TIME = 23000; // 早上准备出发时间（约5:00）
     private static final int MAX_GOING_TO_WORK_TIME = 6000; // 最长去工作时间（游戏刻5分钟）
-    private static final int REST_START_SPREAD_TICKS = 600; // 将下班入口摊平到约30秒
     private static final int MAX_REST_STARTS_PER_UPDATE = 2;
     private static final int MAX_REST_STOPS_PER_UPDATE = 8;
     private static final int MAX_HOME_PATH_STARTS_PER_UPDATE = 1;

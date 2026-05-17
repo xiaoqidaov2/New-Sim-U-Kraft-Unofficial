@@ -96,6 +96,7 @@ public class CommercialHiredData {
         private int maxBuyAmount;      // 每天最大收购数量
         private int dailySoldAmount;   // 今日已售出数量（用于限制每日销售上限）
         private long lastSaleDay;      // 最后销售日期（用于重置每日销售计数）
+        private long lastBuyResetDay;  // 最后一次重置“每日收购数量”的天数（防止与补货时间混淆）
 
         public StockInfo() {
             this.itemId = null;
@@ -106,6 +107,7 @@ public class CommercialHiredData {
             this.maxBuyAmount = 0;
             this.dailySoldAmount = 0;
             this.lastSaleDay = 0;
+            this.lastBuyResetDay = 0;
         }
 
         public StockInfo(String itemId, int currentStock, long lastRestockTime) {
@@ -117,6 +119,7 @@ public class CommercialHiredData {
             this.maxBuyAmount = 0;
             this.dailySoldAmount = 0;
             this.lastSaleDay = 0;
+            this.lastBuyResetDay = 0;
         }
 
         public StockInfo(String itemId, int currentStock, int maxStock, long lastRestockTime, int dailyBoughtAmount, int maxBuyAmount) {
@@ -128,6 +131,7 @@ public class CommercialHiredData {
             this.maxBuyAmount = maxBuyAmount;
             this.dailySoldAmount = 0;
             this.lastSaleDay = 0;
+            this.lastBuyResetDay = 0;
         }
 
         public StockInfo(String itemId, int currentStock, int maxStock, long lastRestockTime, int dailyBoughtAmount, int maxBuyAmount, int dailySoldAmount, long lastSaleDay) {
@@ -139,6 +143,7 @@ public class CommercialHiredData {
             this.maxBuyAmount = maxBuyAmount;
             this.dailySoldAmount = dailySoldAmount;
             this.lastSaleDay = lastSaleDay;
+            this.lastBuyResetDay = 0;
         }
 
         public String getItemId() {
@@ -294,6 +299,14 @@ public class CommercialHiredData {
             int remainingDaily = maxBuyAmount - dailyBoughtAmount;
             return Math.min(remainingSpace, remainingDaily);
         }
+
+        public long getLastBuyResetDay() {
+            return lastBuyResetDay;
+        }
+
+        public void setLastBuyResetDay(long lastBuyResetDay) {
+            this.lastBuyResetDay = lastBuyResetDay;
+        }
     }
 
     public static void saveHiredEmployees(MinecraftServer server, Map<BlockPos, CommercialHireInfo> hiredEmployees) {
@@ -394,6 +407,7 @@ public class CommercialHiredData {
                 stockJson.addProperty("lastRestockTime", stockEntry.getValue().lastRestockTime);
                 stockJson.addProperty("dailyBoughtAmount", stockEntry.getValue().dailyBoughtAmount);
                 stockJson.addProperty("maxBuyAmount", stockEntry.getValue().maxBuyAmount);
+                stockJson.addProperty("lastBuyResetDay", stockEntry.getValue().lastBuyResetDay);
                 items.add(stockEntry.getKey(), stockJson);
             }
 
@@ -449,7 +463,10 @@ public class CommercialHiredData {
                             long lastRestockTime = stockJson.get("lastRestockTime").getAsLong();
                             int dailyBoughtAmount = stockJson.has("dailyBoughtAmount") ? stockJson.get("dailyBoughtAmount").getAsInt() : 0;
                             int maxBuyAmount = stockJson.has("maxBuyAmount") ? stockJson.get("maxBuyAmount").getAsInt() : 0;
-                            posStockData.put(stockEntry.getKey(), new StockInfo(itemId, currentStock, maxStock, lastRestockTime, dailyBoughtAmount, maxBuyAmount));
+                            StockInfo info = new StockInfo(itemId, currentStock, maxStock, lastRestockTime, dailyBoughtAmount, maxBuyAmount);
+                            long lastBuyResetDay = stockJson.has("lastBuyResetDay") ? stockJson.get("lastBuyResetDay").getAsLong() : 0L;
+                            info.setLastBuyResetDay(lastBuyResetDay);
+                            posStockData.put(stockEntry.getKey(), info);
                         }
 
                         stockData.put(pos, posStockData);

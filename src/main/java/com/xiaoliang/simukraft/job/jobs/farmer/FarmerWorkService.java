@@ -592,7 +592,6 @@ public class FarmerWorkService extends AbstractWorkService {
                     }
                 }
                 if (currentAge < maxAge) {
-                    @SuppressWarnings("unchecked")
                     var ageProperty = (net.minecraft.world.level.block.state.properties.IntegerProperty) property;
                     level.setBlockAndUpdate(pos, state.setValue(ageProperty, currentAge + 1));
                 }
