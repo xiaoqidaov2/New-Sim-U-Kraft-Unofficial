@@ -23,7 +23,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 public class StockMarketData extends SavedData {
     private static final String DATA_NAME = "simukraft_stock_market";
-    private static final int MAX_HISTORY_DAYS = 30;
+    private static final int MAX_HISTORY_DAYS = 50;
     private static final double BASE_PRICE = 1.0D;
     private static final double MIN_PRICE = 0.1D;
     private static final double PRICE_STEP = 0.1D;

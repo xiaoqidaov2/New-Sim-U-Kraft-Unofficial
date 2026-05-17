@@ -26,7 +26,11 @@ import java.util.Objects;
  */
 public class BankStockMarketScreen extends AbstractTransitionScreen {
     private static final int ENTER_KEY_CODE = 257;
-    private static final int MAX_VISIBLE_CANDLES = 20;
+    private static final int MAX_VISIBLE_CANDLES = 50;
+    private static final int MIN_SLOT_WIDTH = 6;
+    private static final int MAX_CANDLE_BODY_WIDTH = 6;
+    private static final int MAX_VOLUME_BAR_WIDTH = 4;
+    private static final double DRAG_PIXELS_PER_SCROLL_STEP = 12.0D;
 
     private final BlockPos controlBoxPos;
     @Nullable
@@ -40,6 +44,8 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
     private double currentPrice = 1.0D;
     private int ownedShares;
     private double playerFunds;
+    private int chartScrollOffset;
+    private double chartDragRemainderX;
 
     public BankStockMarketScreen(BlockPos controlBoxPos) {
         super(Component.translatable("gui.bank_stock_market.title"));
@@ -109,12 +115,12 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
         super.render(safeGuiGraphics, mouseX, mouseY, partialTicks);
 
         int centerX = this.width / 2;
-        int chartX = centerX - 165;
-        int chartY = 42;
-        int chartWidth = 330;
-        int candleHeight = 145;
-        int volumeY = chartY + candleHeight + 18;
-        int volumeHeight = 70;
+        int chartX = getChartX();
+        int chartY = getChartY();
+        int chartWidth = getChartWidth();
+        int candleHeight = getCandleChartHeight();
+        int volumeY = getVolumeChartY();
+        int volumeHeight = getVolumeChartHeight();
 
         safeGuiGraphics.drawCenteredString(nn(this.font),
                 nn(Component.translatable("gui.bank_stock_market.title")),
@@ -150,6 +156,8 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
             drawCandlestickChart(safeGuiGraphics, chartX, chartY, chartWidth, candleHeight);
             drawVolumeChart(safeGuiGraphics, chartX, volumeY, chartWidth, volumeHeight);
             drawLatestChangeText(safeGuiGraphics, chartX, volumeY + volumeHeight + 24);
+            renderCandlestickTooltip(safeGuiGraphics, mouseX, mouseY, chartX, chartY, chartWidth, candleHeight);
+            renderVolumeTooltip(safeGuiGraphics, mouseX, mouseY, chartX, volumeY, chartWidth, volumeHeight);
         }
 
         if (!localMessage.isEmpty()) {
@@ -188,7 +196,8 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
         int plotY = y + 18;
         int plotWidth = width - 16;
         int plotHeight = height - 28;
-        int slotWidth = Math.max(8, plotWidth / Math.max(1, visibleHistory.size()));
+        int slotWidth = resolveSlotWidth(plotWidth);
+        int startX = resolveSeriesStartX(plotX, plotWidth, slotWidth, visibleHistory.size());
 
         for (int i = 1; i <= 3; i++) {
             int guideY = plotY + i * plotHeight / 4;
@@ -200,7 +209,7 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
 
         for (int i = 0; i < visibleHistory.size(); i++) {
             StockMarketData.StockCandle candle = visibleHistory.get(i);
-            int candleX = plotX + i * slotWidth + slotWidth / 2;
+            int candleX = startX + i * slotWidth + slotWidth / 2;
             int highY = mapPriceToY(candle.high(), minPrice, maxPrice, plotY, plotHeight);
             int lowY = mapPriceToY(candle.low(), minPrice, maxPrice, plotY, plotHeight);
             int openY = mapPriceToY(candle.open(), minPrice, maxPrice, plotY, plotHeight);
@@ -208,7 +217,7 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
             int color = candle.close() >= candle.open() ? 0xFFFF4D4F : 0xFF00C853;
             int bodyTop = Math.min(openY, closeY);
             int bodyBottom = Math.max(openY, closeY);
-            int bodyWidth = Math.max(3, slotWidth / 2);
+            int bodyWidth = Math.min(MAX_CANDLE_BODY_WIDTH, Math.max(3, slotWidth / 2));
 
             guiGraphics.fill(candleX, highY, candleX + 1, lowY + 1, color);
             guiGraphics.fill(candleX - bodyWidth / 2, bodyTop, candleX + bodyWidth / 2 + 1,
@@ -229,18 +238,214 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
         int plotY = y + 18;
         int plotWidth = width - 16;
         int plotHeight = height - 24;
-        int slotWidth = Math.max(8, plotWidth / Math.max(1, visibleHistory.size()));
+        int slotWidth = resolveSlotWidth(plotWidth);
+        int startX = resolveSeriesStartX(plotX, plotWidth, slotWidth, visibleHistory.size());
 
         for (int i = 0; i < visibleHistory.size(); i++) {
             StockMarketData.StockCandle candle = visibleHistory.get(i);
             int barHeight = (int) Math.round((candle.volume() / (double) maxVolume) * (plotHeight - 2));
-            int barX = plotX + i * slotWidth + 1;
+            int barWidth = Math.min(MAX_VOLUME_BAR_WIDTH, Math.max(2, slotWidth - 4));
+            int barCenterX = startX + i * slotWidth + slotWidth / 2;
+            int barX = barCenterX - barWidth / 2;
             int barY = plotY + plotHeight - barHeight;
             int color = candle.close() >= candle.open() ? 0x99FF4D4F : 0x9900C853;
-            guiGraphics.fill(barX, barY, barX + Math.max(3, slotWidth - 2), plotY + plotHeight, color);
+            guiGraphics.fill(barX, barY, barX + barWidth, plotY + plotHeight, color);
         }
 
         guiGraphics.drawString(nn(this.font), String.valueOf(maxVolume), x + width - 46, y + 6, 0xFFD0D0D0, false);
+    }
+
+    private void renderVolumeTooltip(GuiGraphics guiGraphics, int mouseX, int mouseY, int x, int y, int width, int height) {
+        StockMarketData.StockCandle hoveredCandle = findHoveredVolumeCandle(mouseX, mouseY, x, y, width, height);
+        if (hoveredCandle == null) {
+            return;
+        }
+
+        double changeAmount = roundToCurrency(hoveredCandle.close() - hoveredCandle.open());
+        double baseOpen = Math.max(0.01D, hoveredCandle.open());
+        double changeRate = (changeAmount / baseOpen) * 100.0D;
+        boolean isUp = changeAmount > 0.0D;
+        boolean isDown = changeAmount < 0.0D;
+        String actionKey = isUp
+                ? "gui.bank_stock_market.tooltip.change_up"
+                : isDown ? "gui.bank_stock_market.tooltip.change_down" : "gui.bank_stock_market.tooltip.change_flat";
+        String rateKey = isUp
+                ? "gui.bank_stock_market.tooltip.rate_up"
+                : isDown ? "gui.bank_stock_market.tooltip.rate_down" : "gui.bank_stock_market.tooltip.rate_flat";
+
+        List<Component> tooltip = new ArrayList<>();
+        tooltip.add(Component.translatable("gui.bank_stock_market.tooltip.day", hoveredCandle.day()));
+        tooltip.add(Component.translatable(actionKey, formatCurrency(Math.abs(changeAmount))));
+        tooltip.add(Component.translatable(rateKey, formatPercent(Math.abs(changeRate))));
+        tooltip.add(Component.translatable("gui.bank_stock_market.tooltip.volume", hoveredCandle.volume()));
+        guiGraphics.renderTooltip(nn(this.font), tooltip, java.util.Optional.empty(), mouseX, mouseY);
+    }
+
+    private void renderCandlestickTooltip(GuiGraphics guiGraphics, int mouseX, int mouseY, int x, int y, int width, int height) {
+        StockMarketData.StockCandle hoveredCandle = findHoveredCandlestick(mouseX, mouseY, x, y, width, height);
+        if (hoveredCandle == null) {
+            return;
+        }
+
+        double changeAmount = roundToCurrency(hoveredCandle.close() - hoveredCandle.open());
+        double baseOpen = Math.max(0.01D, hoveredCandle.open());
+        double changeRate = (changeAmount / baseOpen) * 100.0D;
+        boolean isUp = changeAmount > 0.0D;
+        boolean isDown = changeAmount < 0.0D;
+        String actionKey = isUp
+                ? "gui.bank_stock_market.tooltip.change_up"
+                : isDown ? "gui.bank_stock_market.tooltip.change_down" : "gui.bank_stock_market.tooltip.change_flat";
+        String rateKey = isUp
+                ? "gui.bank_stock_market.tooltip.rate_up"
+                : isDown ? "gui.bank_stock_market.tooltip.rate_down" : "gui.bank_stock_market.tooltip.rate_flat";
+
+        List<Component> tooltip = new ArrayList<>();
+        tooltip.add(Component.translatable("gui.bank_stock_market.tooltip.day", hoveredCandle.day()));
+        tooltip.add(Component.translatable("gui.bank_stock_market.tooltip.open", formatCurrency(hoveredCandle.open())));
+        tooltip.add(Component.translatable("gui.bank_stock_market.tooltip.high", formatCurrency(hoveredCandle.high())));
+        tooltip.add(Component.translatable("gui.bank_stock_market.tooltip.low", formatCurrency(hoveredCandle.low())));
+        tooltip.add(Component.translatable("gui.bank_stock_market.tooltip.close", formatCurrency(hoveredCandle.close())));
+        tooltip.add(Component.translatable(actionKey, formatCurrency(Math.abs(changeAmount))));
+        tooltip.add(Component.translatable(rateKey, formatPercent(Math.abs(changeRate))));
+        guiGraphics.renderTooltip(nn(this.font), tooltip, java.util.Optional.empty(), mouseX, mouseY);
+    }
+
+    @Nullable
+    private StockMarketData.StockCandle findHoveredCandlestick(int mouseX, int mouseY, int x, int y, int width, int height) {
+        List<StockMarketData.StockCandle> visibleHistory = getVisibleHistory();
+        if (visibleHistory.isEmpty()) {
+            return null;
+        }
+
+        double maxPrice = visibleHistory.stream().mapToDouble(StockMarketData.StockCandle::high).max().orElse(currentPrice);
+        double minPrice = visibleHistory.stream().mapToDouble(StockMarketData.StockCandle::low).min().orElse(currentPrice);
+        if (Math.abs(maxPrice - minPrice) < 0.01D) {
+            maxPrice += 0.5D;
+            minPrice = Math.max(0.1D, minPrice - 0.5D);
+        }
+
+        int plotX = x + 8;
+        int plotY = y + 18;
+        int plotWidth = width - 16;
+        int plotHeight = height - 28;
+        int slotWidth = resolveSlotWidth(plotWidth);
+        int startX = resolveSeriesStartX(plotX, plotWidth, slotWidth, visibleHistory.size());
+
+        if (mouseX < plotX || mouseX > plotX + plotWidth || mouseY < plotY || mouseY > plotY + plotHeight) {
+            return null;
+        }
+
+        for (int i = 0; i < visibleHistory.size(); i++) {
+            StockMarketData.StockCandle candle = visibleHistory.get(i);
+            int candleX = startX + i * slotWidth + slotWidth / 2;
+            int highY = mapPriceToY(candle.high(), minPrice, maxPrice, plotY, plotHeight);
+            int lowY = mapPriceToY(candle.low(), minPrice, maxPrice, plotY, plotHeight);
+            int openY = mapPriceToY(candle.open(), minPrice, maxPrice, plotY, plotHeight);
+            int closeY = mapPriceToY(candle.close(), minPrice, maxPrice, plotY, plotHeight);
+            int bodyTop = Math.min(openY, closeY);
+            int bodyBottom = Math.max(openY, closeY);
+            int bodyWidth = Math.min(MAX_CANDLE_BODY_WIDTH, Math.max(3, slotWidth / 2));
+            int left = candleX - bodyWidth / 2 - 2;
+            int right = candleX + bodyWidth / 2 + 2;
+            int top = Math.min(highY, bodyTop);
+            int bottom = Math.max(lowY, bodyBottom);
+            if (mouseX >= left && mouseX <= right && mouseY >= top && mouseY <= bottom) {
+                return candle;
+            }
+        }
+        return null;
+    }
+
+    @Nullable
+    private StockMarketData.StockCandle findHoveredVolumeCandle(int mouseX, int mouseY, int x, int y, int width, int height) {
+        List<StockMarketData.StockCandle> visibleHistory = getVisibleHistory();
+        if (visibleHistory.isEmpty()) {
+            return null;
+        }
+
+        long maxVolume = visibleHistory.stream().mapToLong(StockMarketData.StockCandle::volume).max().orElse(1L);
+        int plotX = x + 8;
+        int plotY = y + 18;
+        int plotWidth = width - 16;
+        int plotHeight = height - 24;
+        int slotWidth = resolveSlotWidth(plotWidth);
+        int startX = resolveSeriesStartX(plotX, plotWidth, slotWidth, visibleHistory.size());
+
+        if (mouseX < plotX || mouseX > plotX + plotWidth || mouseY < plotY || mouseY > plotY + plotHeight) {
+            return null;
+        }
+
+        for (int i = 0; i < visibleHistory.size(); i++) {
+            StockMarketData.StockCandle candle = visibleHistory.get(i);
+            int barHeight = (int) Math.round((candle.volume() / (double) maxVolume) * (plotHeight - 2));
+            int barWidth = Math.min(MAX_VOLUME_BAR_WIDTH, Math.max(2, slotWidth - 4));
+            int barCenterX = startX + i * slotWidth + slotWidth / 2;
+            int barX = barCenterX - barWidth / 2;
+            int barY = plotY + plotHeight - barHeight;
+            if (mouseX >= barX && mouseX <= barX + barWidth && mouseY >= barY && mouseY <= plotY + plotHeight) {
+                return candle;
+            }
+        }
+        return null;
+    }
+
+    private int resolveSlotWidth(int plotWidth) {
+        return Math.max(MIN_SLOT_WIDTH, plotWidth / MAX_VISIBLE_CANDLES);
+    }
+
+    private int resolveSeriesStartX(int plotX, int plotWidth, int slotWidth, int itemCount) {
+        int seriesWidth = slotWidth * Math.max(1, itemCount);
+        return plotX + Math.max(0, plotWidth - seriesWidth);
+    }
+
+    private int getChartX() {
+        return this.width / 2 - 165;
+    }
+
+    private int getChartY() {
+        return 42;
+    }
+
+    private int getChartWidth() {
+        return 330;
+    }
+
+    private int getCandleChartHeight() {
+        return 145;
+    }
+
+    private int getVolumeChartY() {
+        return getChartY() + getCandleChartHeight() + 18;
+    }
+
+    private int getVolumeChartHeight() {
+        return 70;
+    }
+
+    private boolean isMouseOverChartArea(double mouseX, double mouseY) {
+        int left = getChartX();
+        int right = left + getChartWidth();
+        int top = getChartY();
+        int bottom = getVolumeChartY() + getVolumeChartHeight();
+        return mouseX >= left && mouseX <= right && mouseY >= top && mouseY <= bottom;
+    }
+
+    private int getMaxChartScrollOffset() {
+        return Math.max(0, history.size() - MAX_VISIBLE_CANDLES);
+    }
+
+    private void clampChartScrollOffset() {
+        chartScrollOffset = Math.max(0, Math.min(chartScrollOffset, getMaxChartScrollOffset()));
+    }
+
+    private boolean scrollChartBy(int delta) {
+        if (delta == 0) {
+            return false;
+        }
+        int previousOffset = chartScrollOffset;
+        chartScrollOffset += delta;
+        clampChartScrollOffset();
+        return previousOffset != chartScrollOffset;
     }
 
     private void drawLatestChangeText(GuiGraphics guiGraphics, int x, int y) {
@@ -257,8 +462,11 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
     }
 
     private List<StockMarketData.StockCandle> getVisibleHistory() {
-        int fromIndex = Math.max(0, history.size() - MAX_VISIBLE_CANDLES);
-        return history.subList(fromIndex, history.size());
+        clampChartScrollOffset();
+        int size = history.size();
+        int toIndex = size - chartScrollOffset;
+        int fromIndex = Math.max(0, toIndex - MAX_VISIBLE_CANDLES);
+        return history.subList(fromIndex, Math.max(fromIndex, toIndex));
     }
 
     public void updateMarketInfo(BlockPos responseControlBoxPos, StockMarketService.StockMarketSnapshot snapshot) {
@@ -272,6 +480,7 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
         this.playerFunds = snapshot.playerFunds();
         this.history.clear();
         this.history.addAll(snapshot.history());
+        clampChartScrollOffset();
         this.marketInfoLoaded = true;
         this.localMessage = "";
     }
@@ -327,6 +536,39 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
     }
 
     @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (isMouseOverChartArea(mouseX, mouseY) && getMaxChartScrollOffset() > 0) {
+            int scrollDelta = delta < 0 ? 1 : -1;
+            if (scrollChartBy(scrollDelta)) {
+                chartDragRemainderX = 0.0D;
+                return true;
+            }
+        }
+        return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (button == 0 && isMouseOverChartArea(mouseX, mouseY) && getMaxChartScrollOffset() > 0) {
+            chartDragRemainderX += dragX;
+            int steps = (int) (chartDragRemainderX / DRAG_PIXELS_PER_SCROLL_STEP);
+            if (steps != 0) {
+                chartDragRemainderX -= steps * DRAG_PIXELS_PER_SCROLL_STEP;
+                if (scrollChartBy(-steps)) {
+                    return true;
+                }
+            }
+        }
+        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        chartDragRemainderX = 0.0D;
+        return super.mouseReleased(mouseX, mouseY, button);
+    }
+
+    @Override
     public void onClose() {
         closeScreen();
     }
@@ -352,5 +594,13 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
 
     private static String formatCurrency(double amount) {
         return String.format(Locale.US, "%.2f", amount);
+    }
+
+    private static String formatPercent(double amount) {
+        return String.format(Locale.US, "%.2f%%", amount);
+    }
+
+    private static double roundToCurrency(double amount) {
+        return Math.round(amount * 100.0D) / 100.0D;
     }
 }
