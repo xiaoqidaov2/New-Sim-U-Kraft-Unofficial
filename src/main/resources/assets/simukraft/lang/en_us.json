@@ -1499,6 +1499,8 @@
   "gui.configurable_list.cancel": "Cancel",
   "gui.control_panel.building.commercial_default": "Commercial (Default)",
   "gui.residential_control_box.title": "Residential Control Box",
+  "gui.bank_control_box.title": "Bank Control Box",
+  "gui.bank_control_box.panel_title": "Bank Control Panel",
   "gui.hire_industrial.title": "Hire Industrial Worker",
   "gui.employee_info.job.warehouse_manager": "Warehouse Manager",
   "gui.employee_info.workplace.warehouse": "Warehouse",

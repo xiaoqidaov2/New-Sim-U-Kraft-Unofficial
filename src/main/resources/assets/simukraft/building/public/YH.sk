@@ -1,7 +1,7 @@
-name:银行 (开发中)
-size:0 x 0 x 0
-amount:49.86元
+name:银行
+size:15 x 6 x 10
+amount:64.23元
 author:XiaoLiang
-description:建筑开发中...
+description:该银行可以贷款，买理财产品。
 tags:price_medium,material_medium,stage_mid
 job_type:banker

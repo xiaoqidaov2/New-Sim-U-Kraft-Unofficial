@@ -1569,6 +1569,8 @@
   "gui.configurable_list.cancel": "取消",
   "gui.control_panel.building.commercial_default": "商业建筑（默认）",
   "gui.residential_control_box.title": "住宅控制箱",
+  "gui.bank_control_box.title": "银行控制箱",
+  "gui.bank_control_box.panel_title": "银行控制面板",
   "gui.residential_control_box.show_building_bounds": "建筑界限: %s",
   "gui.residential_control_box.home_teleport_above": "回家传送到控制盒上方: %s",
   "gui.switch.on": "开",
