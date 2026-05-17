@@ -7,7 +7,6 @@ import net.minecraft.server.level.ServerPlayer;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Locale;
-
 /**
  * 统一处理城市贷款额度、利息和还款逻辑，避免把财务规则散落到 GUI 和数据包中。
  */
@@ -42,6 +41,7 @@ public final class CityLoanService {
         );
     }
 
+    @SuppressWarnings("null")
     public static boolean borrow(ServerLevel level, ServerPlayer player, CityData cityData, CityData.CityInfo cityInfo, double amount) {
         double normalizedAmount = roundToCurrency(amount);
         if (normalizedAmount <= 0.0D) {
@@ -75,6 +75,7 @@ public final class CityLoanService {
         return true;
     }
 
+    @SuppressWarnings("null")
     public static boolean repay(ServerLevel level, ServerPlayer player, CityData cityData, CityData.CityInfo cityInfo, double requestedAmount) {
         double normalizedAmount = roundToCurrency(requestedAmount);
         if (normalizedAmount <= 0.0D) {
@@ -110,7 +111,7 @@ public final class CityLoanService {
         ));
         return true;
     }
-
+@SuppressWarnings("null")
     public static boolean repayAllWithCurrentFunds(ServerLevel level, ServerPlayer player, CityData cityData, CityData.CityInfo cityInfo) {
         double repaymentAmount = roundToCurrency(Math.min(cityInfo.getFunds(), cityInfo.getOutstandingLoanDebt()));
         if (repaymentAmount <= 0.0D) {

@@ -527,7 +527,7 @@ public class FarmerWorkService extends AbstractWorkService {
                                   com.xiaoliang.simukraft.farmland.CropDefinition cropDefinition,
                                   BlockPos chestPos) {
         var stemState = level.getBlockState(stemPos);
-        if (!matchesSelectedCrop(stemState, cropDefinition) || !isStandardCropMature(stemState)) {
+        if (!matchesSelectedCrop(stemState, cropDefinition) || !isStemCropReadyForHarvest(stemState, cropDefinition)) {
             return;
         }
 
@@ -566,9 +566,25 @@ public class FarmerWorkService extends AbstractWorkService {
         return null;
     }
 
+    private Block resolveAttachedStemBlock(Block cropBlock) {
+        if (cropBlock == net.minecraft.world.level.block.Blocks.MELON_STEM) {
+            return net.minecraft.world.level.block.Blocks.ATTACHED_MELON_STEM;
+        }
+        if (cropBlock == net.minecraft.world.level.block.Blocks.PUMPKIN_STEM) {
+            return net.minecraft.world.level.block.Blocks.ATTACHED_PUMPKIN_STEM;
+        }
+        return null;
+    }
+
     private boolean matchesSelectedCrop(net.minecraft.world.level.block.state.BlockState state,
                                         com.xiaoliang.simukraft.farmland.CropDefinition cropDefinition) {
-        return state.is(cropDefinition.cropBlock());
+        Block cropBlock = cropDefinition.cropBlock();
+        if (state.is(cropBlock)) {
+            return true;
+        }
+
+        Block attachedStemBlock = resolveAttachedStemBlock(cropBlock);
+        return attachedStemBlock != null && state.is(attachedStemBlock);
     }
 
     private boolean isStandardCropMature(net.minecraft.world.level.block.state.BlockState state) {
@@ -580,6 +596,19 @@ public class FarmerWorkService extends AbstractWorkService {
             return isAgePropertyAtMax(state);
         }
         return false;
+    }
+
+    /**
+     * 茎类作物在普通茎满龄或已经变为附着茎时都允许采收果实。
+     */
+    private boolean isStemCropReadyForHarvest(net.minecraft.world.level.block.state.BlockState state,
+                                              com.xiaoliang.simukraft.farmland.CropDefinition cropDefinition) {
+        if (state.getBlock() instanceof net.minecraft.world.level.block.StemBlock) {
+            return isAgePropertyAtMax(state);
+        }
+
+        Block attachedStemBlock = resolveAttachedStemBlock(cropDefinition.cropBlock());
+        return attachedStemBlock != null && state.is(attachedStemBlock);
     }
 
     private void incrementAgeProperty(ServerLevel level, BlockPos pos, net.minecraft.world.level.block.state.BlockState state) {

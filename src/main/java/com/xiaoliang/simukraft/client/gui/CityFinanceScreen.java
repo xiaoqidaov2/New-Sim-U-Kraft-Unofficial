@@ -39,6 +39,7 @@ public class CityFinanceScreen extends AbstractTransitionScreen {
         playOpenSound();
     }
 
+    @SuppressWarnings("null")
     @Override
     protected void init() {
         super.init();
@@ -128,8 +129,8 @@ public class CityFinanceScreen extends AbstractTransitionScreen {
             safeGuiGraphics.drawString(font, nn(Component.translatable(localMessage)), centerX - 145, centerY + 96, 0xFF7777);
         }
 
-        this.borrowAmountField.render(safeGuiGraphics, mouseX, mouseY, partialTicks);
-        this.repayAmountField.render(safeGuiGraphics, mouseX, mouseY, partialTicks);
+        requireBorrowAmountField().render(safeGuiGraphics, mouseX, mouseY, partialTicks);
+        requireRepayAmountField().render(safeGuiGraphics, mouseX, mouseY, partialTicks);
     }
 
     @Override
