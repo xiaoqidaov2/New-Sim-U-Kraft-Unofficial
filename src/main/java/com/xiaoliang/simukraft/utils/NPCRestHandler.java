@@ -14,6 +14,7 @@ import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
+import net.minecraftforge.registries.ForgeRegistries;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.apache.logging.log4j.LogManager;
@@ -36,9 +37,10 @@ public class NPCRestHandler {
     private static final int MORNING_END_TIME = 0; // 早上结束时间（约6:00）
     private static final int MORNING_PREPARE_TIME = 23000; // 早上准备出发时间（约5:00）
     private static final int MAX_GOING_TO_WORK_TIME = 6000; // 最长去工作时间（游戏刻5分钟）
-    private static final int REST_START_SPREAD_TICKS = 200; // 将下班入口摊平到约10秒
-    private static final int MAX_REST_STARTS_PER_UPDATE = 8;
+    private static final int REST_START_SPREAD_TICKS = 600; // 将下班入口摊平到约30秒
+    private static final int MAX_REST_STARTS_PER_UPDATE = 2;
     private static final int MAX_REST_STOPS_PER_UPDATE = 8;
+    private static final int MAX_HOME_PATH_STARTS_PER_UPDATE = 1;
     private static final int BED_SEARCH_HORIZONTAL_RADIUS = 8;
     private static final int BED_SEARCH_VERTICAL_RADIUS = 4;
     private static final long BED_REPATH_INTERVAL_TICKS = 40L;
@@ -76,8 +78,10 @@ public class NPCRestHandler {
     private static final int REST_STAGE_WAKING_UP = 4;
     private static final int REST_STAGE_WAITING_FOR_BED = 6;
 
-    // 存储正在去工作的NPC数据
     private static final Map<UUID, GoingToWorkData> goingToWorkNPCs = new ConcurrentHashMap<>();
+    private static final Map<UUID, Long> pendingHomePathStartTicks = new ConcurrentHashMap<>();
+    private static final Map<String, Optional<BlockPos>> homeTeleportNbtPosCache = new ConcurrentHashMap<>();
+    private static final Map<String, Optional<BlockPos>> residentialControlBoxNbtPosCache = new ConcurrentHashMap<>();
 
     /**
      * NPC休息数据类
@@ -475,7 +479,7 @@ public class NPCRestHandler {
         }
 
         // 开始寻路回家
-        startPathfindingToHome(npc, homePos);
+        queuePathfindingToHome(npcUuid, level);
     }
 
     /**
@@ -1020,11 +1024,17 @@ public class NPCRestHandler {
 
         int startedRestCount = 0;
         int stoppedRestCount = 0;
+        int homePathStartCount = 0;
 
         for (CustomEntity npc : npcs) {
             if (npc == null || !npc.isAlive()) continue;
 
             UUID npcUuid = npc.getUUID();
+            if (pendingHomePathStartTicks.containsKey(npcUuid) && homePathStartCount < MAX_HOME_PATH_STARTS_PER_UPDATE) {
+                if (startQueuedPathfindingToHome(npc, level)) {
+                    homePathStartCount++;
+                }
+            }
             if (NPCFamilyManager.isNpcBusyWithFamily(npcUuid)) {
                 continue;
             }
@@ -1060,6 +1070,7 @@ public class NPCRestHandler {
                         LOGGER.info("[NPCRestHandler] NPC {} 正在去工作，但到休息时间了，优先回家休息", npc.getFullName());
                     }
                     goingToWorkNPCs.remove(npcUuid);
+                    pendingHomePathStartTicks.remove(npcUuid);
                     enqueueMainThreadLevelTask(level, () -> npc.getNavigation().stop(), "StopNavigation-" + npcUuid);
                 }
 
@@ -1123,6 +1134,8 @@ public class NPCRestHandler {
 
         PerformanceMonitor.recordValue("rest.startsQueued", startedRestCount);
         PerformanceMonitor.recordValue("rest.stopsQueued", stoppedRestCount);
+        PerformanceMonitor.recordValue("rest.homePathStarts", homePathStartCount);
+        PerformanceMonitor.recordValue("rest.homePathPending", pendingHomePathStartTicks.size());
         PerformanceMonitor.recordValue("rest.active", restingNPCs.size());
         PerformanceMonitor.recordValue("rest.goingToWork", goingToWorkNPCs.size());
     }
@@ -1283,12 +1296,16 @@ public class NPCRestHandler {
     }
 
     /**
-     * 住宅控制盒可切换“回家传送上方/下方”。
-     * 为了避免把NPC直接送进方块里，目标点不可站立时会回退到另一侧。
+     * 优先使用sk中的NBT传送点；未配置、解析失败或落点不安全时回退到控制盒附近。
      */
     private static BlockPos resolveHomeTeleportPos(CustomEntity npc, ServerLevel level, BlockPos homePos) {
         if (npc == null || level == null || level.getServer() == null) {
             return homePos.above();
+        }
+
+        BlockPos markedTeleportPos = resolveMarkedHomeTeleportPos(level, homePos);
+        if (markedTeleportPos != null && canNpcStandAt(level, markedTeleportPos)) {
+            return markedTeleportPos;
         }
 
         boolean teleportToAbove = com.xiaoliang.simukraft.building.ControlBoxDataManager
@@ -1306,9 +1323,105 @@ public class NPCRestHandler {
         return homePos.above();
     }
 
+    private static BlockPos resolveMarkedHomeTeleportPos(ServerLevel level, BlockPos homePos) {
+        com.xiaoliang.simukraft.building.PlacedBuildingManager.PlacedBuildingData placedBuilding =
+                com.xiaoliang.simukraft.building.PlacedBuildingManager.getBuildingByControlBox(homePos);
+        if (placedBuilding == null || placedBuilding.buildingName == null || placedBuilding.buildingName.isBlank()) {
+            return null;
+        }
+
+        String buildingFileName = normalizeBuildingFileName(placedBuilding.buildingName);
+        BlockPos teleportNbtPos = getCachedHomeTeleportNbtPos(buildingFileName);
+        if (teleportNbtPos == null) {
+            return null;
+        }
+
+        BlockPos cachedRelativePos = findPlacedRelativePosByOriginalNbtPos(placedBuilding, teleportNbtPos);
+        if (cachedRelativePos != null) {
+            return homePos.offset(cachedRelativePos);
+        }
+
+        BlockPos controlBoxInNBT = getCachedResidentialControlBoxNbtPos(buildingFileName);
+        if (controlBoxInNBT == null) {
+            controlBoxInNBT = BlockPos.ZERO;
+        }
+
+        return homePos.offset(teleportNbtPos.subtract(controlBoxInNBT));
+    }
+
+    private static BlockPos getCachedHomeTeleportNbtPos(String buildingFileName) {
+        return homeTeleportNbtPosCache
+                .computeIfAbsent(buildingFileName, key -> Optional.ofNullable(
+                        com.xiaoliang.simukraft.building.ControlBoxDataManager.getHomeTeleportNbtPosFromSkFile(key, "residential")
+                ))
+                .orElse(null);
+    }
+
+    private static BlockPos getCachedResidentialControlBoxNbtPos(String buildingFileName) {
+        return residentialControlBoxNbtPosCache
+                .computeIfAbsent(buildingFileName, key -> Optional.ofNullable(findControlBoxInResidentialNBT(key)))
+                .orElse(null);
+    }
+
+    private static BlockPos findPlacedRelativePosByOriginalNbtPos(
+            com.xiaoliang.simukraft.building.PlacedBuildingManager.PlacedBuildingData placedBuilding,
+            BlockPos originalNbtPos) {
+        for (com.xiaoliang.simukraft.building.PlacedBuildingManager.BlockEntry entry : placedBuilding.blocks) {
+            if (originalNbtPos.equals(entry.originalNbtPos)) {
+                return entry.relativePos;
+            }
+        }
+        return null;
+    }
+
+    private static String normalizeBuildingFileName(String buildingFileName) {
+        if (buildingFileName.endsWith(".sk")) {
+            return buildingFileName.substring(0, buildingFileName.length() - 3);
+        }
+        if (buildingFileName.endsWith(".nbt")) {
+            return buildingFileName.substring(0, buildingFileName.length() - 4);
+        }
+        return buildingFileName;
+    }
+
+    private static BlockPos findControlBoxInResidentialNBT(String buildingFileName) {
+        try {
+            java.util.List<SchematicNBTLoader.SchematicBlock> blocks = loadResidentialSchematicBlocks(buildingFileName);
+            if (blocks == null || blocks.isEmpty()) {
+                return null;
+            }
+
+            for (SchematicNBTLoader.SchematicBlock block : blocks) {
+                String blockId = ForgeRegistries.BLOCKS.getKey(block.blockState().getBlock()).toString();
+                if (blockId.contains("control_box")) {
+                    return block.pos();
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.warn("[NPCRestHandler] 解析住宅NBT控制盒位置失败: {}, {}", buildingFileName, e.getMessage());
+        }
+        return null;
+    }
+
+    private static java.util.List<SchematicNBTLoader.SchematicBlock> loadResidentialSchematicBlocks(String buildingFileName) {
+        String nbtFilePath = "simukraftbuilding/residential/" + buildingFileName + ".nbt";
+        java.io.File nbtFile = new java.io.File(nbtFilePath);
+        if (nbtFile.exists()) {
+            return SchematicNBTLoader.loadSchematicBlocks(nbtFilePath);
+        }
+
+        String resourcePath = "assets/simukraft/building/residential/" + buildingFileName + ".nbt";
+        java.io.InputStream is = SchematicNBTLoader.class.getClassLoader().getResourceAsStream(resourcePath);
+        if (is == null) {
+            return null;
+        }
+        return SchematicNBTLoader.loadSchematicBlocksFromStream(is);
+    }
+
     private static void markArrivedHome(CustomEntity npc, RestData restData) {
         restData.hasArrivedHome = true;
         restData.restStage = REST_STAGE_AT_HOME;
+        pendingHomePathStartTicks.remove(npc.getUUID());
         npcPathfindingStatus.put(npc.getUUID(), false);
         npc.stopAllMovement();
         npc.setStatusLabel("gui.npc.status.at_home");
@@ -2338,6 +2451,25 @@ public class NPCRestHandler {
      * 开始寻路回家
      * menglannnn: 完全使用新的自定义寻路系统，不再使用原版寻路
      */
+    private static void queuePathfindingToHome(UUID npcUuid, ServerLevel level) {
+        if (npcUuid == null || level == null) return;
+        pendingHomePathStartTicks.putIfAbsent(npcUuid, level.getGameTime());
+        npcPathfindingStatus.put(npcUuid, false);
+    }
+
+    private static boolean startQueuedPathfindingToHome(CustomEntity npc, ServerLevel level) {
+        if (npc == null || level == null) return false;
+        UUID npcUuid = npc.getUUID();
+        RestData restData = restingNPCs.get(npcUuid);
+        if (restData == null || restData.hasArrivedHome || restData.homePos == null) {
+            pendingHomePathStartTicks.remove(npcUuid);
+            return false;
+        }
+        pendingHomePathStartTicks.remove(npcUuid);
+        startPathfindingToHome(npc, restData.homePos);
+        return true;
+    }
+
     private static void startPathfindingToHome(CustomEntity npc, BlockPos homePos) {
         if (npc == null || homePos == null) return;
 
@@ -2466,6 +2598,7 @@ public class NPCRestHandler {
         npcSubStates.clear();
         npcHomePositions.clear();
         npcPathfindingStatus.clear();
+        pendingHomePathStartTicks.clear();
         npcPreviousWorkStatus.clear();
         npcPreviousJob.clear();
         // 不再使用npcPreviousConstructionTask，建造任务统一从JSON恢复

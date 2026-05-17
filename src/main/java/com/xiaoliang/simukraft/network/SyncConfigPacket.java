@@ -102,6 +102,7 @@ public class SyncConfigPacket {
             case "enableBlacklistProtection" -> ServerConfig.ENABLE_BLACKLIST_PROTECTION.set(boolValue);
             case "logSkippedBlocks" -> ServerConfig.LOG_BLACKLIST_SKIPPED_BLOCKS.set(boolValue);
             case "enableDebugLog" -> ServerConfig.ENABLE_DEBUG_LOG.set(boolValue);
+            case "forceLoadNpcChunks" -> ServerConfig.FORCE_LOAD_NPC_CHUNKS.set(boolValue);
 
             // NPC等级配置
             case "npcMaxLevel" -> ServerConfig.NPC_MAX_LEVEL.set(intValue);

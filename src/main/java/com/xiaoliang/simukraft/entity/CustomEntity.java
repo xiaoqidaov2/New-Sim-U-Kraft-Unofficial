@@ -142,6 +142,7 @@ public class CustomEntity extends PathfinderMob {
     private static final int VISIT_STATUS_RADIUS = 4;
     private long nextAmbientVoiceGameTime = 0L;
     private long nextNightVoiceGameTime = 0L;
+    private int tickScheduleOffset = -1;
 
 
     public CustomEntity(EntityType<? extends PathfinderMob> type, Level level) {
@@ -220,6 +221,16 @@ public class CustomEntity extends PathfinderMob {
         this.goalSelector.addGoal(4, new IdleNearbyStrollGoal(this));
         this.goalSelector.addGoal(5, new RandomLookAroundGoal(this));
         this.goalSelector.addGoal(6, new HoldItemGoal(this));
+    }
+
+    private boolean shouldRunScheduledTask(int intervalTicks) {
+        if (intervalTicks <= 1) {
+            return true;
+        }
+        if (tickScheduleOffset < 0) {
+            tickScheduleOffset = Math.floorMod(this.getUUID().hashCode(), intervalTicks);
+        }
+        return Math.floorMod(this.tickCount + tickScheduleOffset, intervalTicks) == 0;
     }
 
     /**
@@ -755,6 +766,7 @@ public class CustomEntity extends PathfinderMob {
 
     @Override
     public void remove(RemovalReason reason) {
+        com.xiaoliang.simukraft.utils.NpcChunkLoadManager.onNpcRemoved(this, reason);
         super.remove(reason);
     }
 
@@ -804,6 +816,7 @@ public class CustomEntity extends PathfinderMob {
         }
 
         if (!this.level().isClientSide) {
+            com.xiaoliang.simukraft.utils.NpcChunkLoadManager.updateNpcLocation(this);
             String currentJob = getJob();
             boolean aliveAndActive = !this.isDeadOrDying() && !isDying;
             // 计算是否有活跃任务（用于同步到客户端）
@@ -856,7 +869,7 @@ public class CustomEntity extends PathfinderMob {
                 dataRecorded = true;
             }
 
-            if (dataRecorded && this.tickCount % 40 == 0 && this.level() instanceof ServerLevel serverLevel) {
+            if (dataRecorded && shouldRunScheduledTask(40) && this.level() instanceof ServerLevel serverLevel) {
                 NPCDataManager.updateNPCLastKnownLocation(
                         serverLevel.getServer(),
                         this.getUUID(),
@@ -869,7 +882,7 @@ public class CustomEntity extends PathfinderMob {
             // 修复：死亡NPC不应该再分配住宅
             if (aliveAndActive && nameInitialized && fullName != null && !fullName.isEmpty()
                     && !isChildForm()
-                    && this.tickCount % ASSIGNMENT_INTERVAL == 0
+                    && shouldRunScheduledTask((int) ASSIGNMENT_INTERVAL)
             ) {
                 assignResidenceToNPC();
 
@@ -881,21 +894,21 @@ public class CustomEntity extends PathfinderMob {
                 if (getHunger() < 20) {
                     setHunger(20);
                 }
-            } else if (aliveAndActive && this.tickCount % 1200 == 0) {
+            } else if (aliveAndActive && shouldRunScheduledTask(1200)) {
                 if (getHunger() > 0) {
                     setHunger(getHunger() - 1);
                 }
             }
 
-            if (aliveAndActive && this.tickCount % 20 == 0) {
+            if (aliveAndActive && shouldRunScheduledTask(20)) {
                 tryPickupDroppedFood();
             }
 
-            if (aliveAndActive && this.tickCount % 40 == 0) {
+            if (aliveAndActive && shouldRunScheduledTask(40)) {
                 refreshWorkNeedDetail();
             }
 
-            if (aliveAndActive && this.tickCount % 20 == 0 && this.level() instanceof ServerLevel serverLevel) {
+            if (aliveAndActive && shouldRunScheduledTask(20) && this.level() instanceof ServerLevel serverLevel) {
                 checkChildGrowth(serverLevel.getServer());
             }
 
@@ -912,7 +925,7 @@ public class CustomEntity extends PathfinderMob {
                 statusLabelExpireKey = null;
             }
 
-            if (aliveAndActive && this.tickCount % 20 == 0) {
+            if (aliveAndActive && shouldRunScheduledTask(20)) {
                 String current = this.entityData.get(DATA_STATUS_LABEL);
                 if (current == null) current = "";
                 boolean canOverride = canUseDynamicStatusLabel(current);
@@ -972,7 +985,7 @@ public class CustomEntity extends PathfinderMob {
         }
 
         // 处理门交互 - NPC可以自动开关门
-        if (!this.level().isClientSide && !this.isSleeping() && this.tickCount % 5 == 0) {
+        if (!this.level().isClientSide && !this.isSleeping() && shouldRunScheduledTask(5)) {
             handleDoorInteraction();
         }
         
@@ -981,7 +994,7 @@ public class CustomEntity extends PathfinderMob {
             npcPathNavigator.tick();
         }
 
-        if (!this.level().isClientSide && this.tickCount % 10 == 0) {
+        if (!this.level().isClientSide && shouldRunScheduledTask(40)) {
             syncPathDebugToNearbyPlayers();
         }
 
@@ -1155,7 +1168,7 @@ public class CustomEntity extends PathfinderMob {
         }
 
         // 寿命检查 - 每20秒检查一次（400 ticks）
-        if (!this.level().isClientSide && this.tickCount % 400 == 0) {
+        if (!this.level().isClientSide && shouldRunScheduledTask(400)) {
             checkLifespanAndDie();
         }
     }
@@ -1254,7 +1267,7 @@ public class CustomEntity extends PathfinderMob {
         this.entityData.set(DATA_IS_HOMELESS, homeless);
 
         // 可以在这里添加流浪状态的特殊行为（比如显示特殊粒子效果等）
-        if (homeless && this.tickCount % 200 == 0) { // log homeless status every 10 seconds
+        if (homeless && shouldRunScheduledTask(200)) { // log homeless status every 10 seconds
             Simukraft.LOGGER.debug("[CustomEntity] NPC {} is currently homeless", fullName);
         }
     }
@@ -1855,6 +1868,7 @@ public class CustomEntity extends PathfinderMob {
         if (constructionTask != null) {
             com.xiaoliang.simukraft.building.ConstructionTask completedTask = constructionTask;
             String buildingName = completedTask.getBuildingName();
+            String buildingFileName = completedTask.getInternalBuildingName();
             String category = completedTask.getCategory();
             BlockPos buildBoxPos = completedTask.getBuildBoxPos();
 
@@ -1877,7 +1891,7 @@ public class CustomEntity extends PathfinderMob {
                     // 注册建筑结构（使用实际放置的方块列表，包含旋转信息）
                     com.xiaoliang.simukraft.building.PlacedBuildingManager.registerPlacedBuildingFromTask(
                         controlBoxPos,
-                        buildingName,
+                        buildingFileName,
                         category,
                         serverLevel.dimension().location().toString(),
                         placedBlocks

@@ -13,8 +13,10 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * NPC路径导航器（menglannnn: 管理NPC的寻路和移动）
@@ -27,6 +29,9 @@ public class NPCPathNavigator {
     private final NPCMoveController moveController;
     
     private static final ExecutorService pathfindingExecutor = Executors.newFixedThreadPool(2);
+    private static final int MAX_PATH_RECALCULATIONS_PER_TICK = 2;
+    private static final ConcurrentHashMap<Long, AtomicInteger> PATH_RECALCULATION_BUDGETS = new ConcurrentHashMap<>();
+    private static volatile long lastBudgetCleanupTick = Long.MIN_VALUE;
     
     private static final int PATH_RECALCULATE_INTERVAL = 20;
     private static final double PATH_RECALCULATE_DISTANCE = 2.0;
@@ -44,6 +49,7 @@ public class NPCPathNavigator {
     private int liveObstacleCheckCooldown;
     private int targetProgressStallTicks;
     private double lastDistanceToTarget;
+    private final int scheduleOffset;
     private final Set<BlockPos> openedFenceGates;
     
     private PathCompleteCallback onPathComplete;
@@ -71,6 +77,7 @@ public class NPCPathNavigator {
         this.liveObstacleCheckCooldown = 0;
         this.targetProgressStallTicks = 0;
         this.lastDistanceToTarget = Double.MAX_VALUE;
+        this.scheduleOffset = Math.floorMod(npc.getUUID().hashCode(), PATH_RECALCULATE_INTERVAL);
         this.openedFenceGates = new LinkedHashSet<>();
         this.moveController.setFenceGateTracker(this::trackOpenedFenceGate);
     }
@@ -132,6 +139,7 @@ public class NPCPathNavigator {
         }
         
         moveController.tick();
+        cleanupPathRecalculationBudgets();
         
         if (moveController.isInStepUpTraversal()) {
             blockedRepathTicks = 0;
@@ -155,11 +163,11 @@ public class NPCPathNavigator {
         }
 
         updateProgressTracking();
-        if (shouldRecalculateForLiveObstacle()) {
+        if (isScheduledPathCheckTick() && shouldRecalculateForLiveObstacle()) {
             recalculatePath(moveController.isMovementBlockedState() ? 6 : 3);
         }
         
-        if (shouldRecalculatePath()) {
+        if (isScheduledPathCheckTick() && shouldRecalculatePath()) {
             if (moveController.isMovementBlockedState()) {
                 blockedRepathTicks++;
             } else {
@@ -215,7 +223,7 @@ public class NPCPathNavigator {
     }
     
     private void recalculatePath(int alternativeSearchRange) {
-        if (pathRecalculateCooldown > 0) return;
+        if (pathRecalculateCooldown > 0 || !tryAcquirePathRecalculationBudget()) return;
         
         pathRecalculateCooldown = PATH_RECALCULATE_INTERVAL;
         
@@ -246,7 +254,7 @@ public class NPCPathNavigator {
     }
 
     private void recalculatePathWithLocalBypass() {
-        if (pathRecalculateCooldown > 0 || targetPos == null) {
+        if (pathRecalculateCooldown > 0 || targetPos == null || !tryAcquirePathRecalculationBudget()) {
             return;
         }
 
@@ -283,6 +291,34 @@ public class NPCPathNavigator {
             resetPathProgressState();
             return;
         }
+    }
+
+    private boolean isScheduledPathCheckTick() {
+        return Math.floorMod(npc.tickCount + scheduleOffset, LIVE_OBSTACLE_RECHECK_INTERVAL) == 0;
+    }
+
+    private boolean tryAcquirePathRecalculationBudget() {
+        long gameTime = npc.level().getGameTime();
+        AtomicInteger budget = PATH_RECALCULATION_BUDGETS.computeIfAbsent(gameTime, tick -> new AtomicInteger(MAX_PATH_RECALCULATIONS_PER_TICK));
+        while (true) {
+            int remaining = budget.get();
+            if (remaining <= 0) {
+                return false;
+            }
+            if (budget.compareAndSet(remaining, remaining - 1)) {
+                return true;
+            }
+        }
+    }
+
+    private void cleanupPathRecalculationBudgets() {
+        long gameTime = npc.level().getGameTime();
+        long lastCleanup = lastBudgetCleanupTick;
+        if (lastCleanup != Long.MIN_VALUE && gameTime - lastCleanup < 100L) {
+            return;
+        }
+        lastBudgetCleanupTick = gameTime;
+        PATH_RECALCULATION_BUDGETS.keySet().removeIf(tick -> tick < gameTime - 20L);
     }
 
     private List<BlockPos> buildLocalBypassTargets(BlockPos currentPos, BlockPos finalTarget) {

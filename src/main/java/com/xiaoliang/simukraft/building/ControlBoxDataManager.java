@@ -130,55 +130,91 @@ public class ControlBoxDataManager {
      * @return 建筑尺寸字符串（如 "10x10x10"），读取失败返回null
      */
     public static String getBuildingSizeFromSkFile(String buildingFileName, String category) {
-        if (buildingFileName == null || buildingFileName.isEmpty()) {
+        String size = readBuildingSkField(buildingFileName, category, "size:");
+        if (size != null) {
+            LOGGER.debug("[ControlBoxDataManager] 从sk文件读取建筑尺寸: {} -> {}", buildingFileName, size);
+        }
+        return size;
+    }
+
+    /**
+     * 从建筑sk文件读取住宅回家传送点的NBT坐标。
+     * 字段为空或不存在时返回null，让旧建筑继续使用控制盒附近传送逻辑。
+     */
+    public static BlockPos getHomeTeleportNbtPosFromSkFile(String buildingFileName, String category) {
+        String value = readBuildingSkField(buildingFileName, category, "home_teleport:");
+        if (value == null || value.isBlank()) {
+            value = readBuildingSkField(buildingFileName, category, "teleport:");
+        }
+        if (value == null || value.isBlank()) {
             return null;
         }
 
-        // 首先尝试从 simukraftbuilding 文件夹读取（用户导入的文件）
+        try {
+            String[] parts = value.replace("，", ",").split(",");
+            if (parts.length != 3) {
+                LOGGER.warn("[ControlBoxDataManager] sk传送点格式错误: {} -> {}", buildingFileName, value);
+                return null;
+            }
+            return new BlockPos(
+                    Integer.parseInt(parts[0].trim()),
+                    Integer.parseInt(parts[1].trim()),
+                    Integer.parseInt(parts[2].trim())
+            );
+        } catch (NumberFormatException e) {
+            LOGGER.warn("[ControlBoxDataManager] sk传送点解析失败: {} -> {}", buildingFileName, value);
+            return null;
+        }
+    }
+
+    private static String readBuildingSkField(String buildingFileName, String category, String fieldPrefix) {
+        if (buildingFileName == null || buildingFileName.isEmpty() || fieldPrefix == null || fieldPrefix.isEmpty()) {
+            return null;
+        }
+
         try {
             String userFilePath = String.format("simukraftbuilding/%s/%s.sk", category, buildingFileName.toLowerCase());
             File userFile = new File(userFilePath);
-
             if (userFile.exists()) {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(userFile), Charset.forName("UTF-8")))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        line = line.trim();
-                        if (line.startsWith("size:")) {
-                            String size = line.substring(5).trim();
-                            LOGGER.debug("[ControlBoxDataManager] 从用户sk文件读取建筑尺寸: {} -> {}", buildingFileName, size);
-                            return size;
-                        }
-                    }
+                String value = readFieldFromSkFile(userFile, fieldPrefix);
+                if (value != null) {
+                    return value;
                 }
             }
         } catch (Exception e) {
-            LOGGER.debug("[ControlBoxDataManager] 从用户sk文件读取建筑尺寸失败: {}, {}", buildingFileName, e.getMessage());
+            LOGGER.debug("[ControlBoxDataManager] 从用户sk文件读取字段失败: {}, {}, {}", buildingFileName, fieldPrefix, e.getMessage());
         }
 
-        // 如果用户文件不存在或读取失败，尝试从 JAR 资源读取
         try {
             String resourcePath = String.format("assets/simukraft/building/%s/%s.sk", category, buildingFileName.toLowerCase());
             InputStream is = ControlBoxDataManager.class.getClassLoader().getResourceAsStream(resourcePath);
             if (is == null) {
                 return null;
             }
-
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    line = line.trim();
-                    if (line.startsWith("size:")) {
-                        String size = line.substring(5).trim();
-                        LOGGER.debug("[ControlBoxDataManager] 从资源sk文件读取建筑尺寸: {} -> {}", buildingFileName, size);
-                        return size;
-                    }
-                }
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(is, Charset.forName("UTF-8")))) {
+                return readFieldFromReader(reader, fieldPrefix);
             }
         } catch (Exception e) {
-            LOGGER.debug("[ControlBoxDataManager] 从资源sk文件读取建筑尺寸失败: {}, {}", buildingFileName, e.getMessage());
+            LOGGER.debug("[ControlBoxDataManager] 从资源sk文件读取字段失败: {}, {}, {}", buildingFileName, fieldPrefix, e.getMessage());
         }
 
+        return null;
+    }
+
+    private static String readFieldFromSkFile(File file, String fieldPrefix) throws IOException {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(file), Charset.forName("UTF-8")))) {
+            return readFieldFromReader(reader, fieldPrefix);
+        }
+    }
+
+    private static String readFieldFromReader(BufferedReader reader, String fieldPrefix) throws IOException {
+        String line;
+        while ((line = reader.readLine()) != null) {
+            line = line.trim();
+            if (line.startsWith(fieldPrefix)) {
+                return line.substring(fieldPrefix.length()).trim();
+            }
+        }
         return null;
     }
 
@@ -305,12 +341,11 @@ public class ControlBoxDataManager {
      * @param cityId 城市ID（可为null）
      */
     public static void writeResidentialControlBox(MinecraftServer server, BlockPos pos, String buildingFileName, UUID residentUuid, UUID cityId) {
-        // 从sk文件读取建筑中文名称
         String buildingDisplayName = getBuildingNameFromSkFile(buildingFileName, "residential");
-        // 从sk文件读取租金并除以2
         double originalRent = getRentFromSkFile(buildingFileName, "residential");
         double rent = originalRent / 2.0;
-        writeResidentialControlBoxWithRent(server, pos, "residential_control_box", buildingDisplayName, RESIDENCE_DIR, residentUuid, cityId, rent, true);
+        writeResidentialControlBoxWithRent(server, pos, "residential_control_box", buildingDisplayName, buildingFileName,
+                RESIDENCE_DIR, residentUuid, cityId, rent, true);
     }
     
     /**
@@ -357,8 +392,8 @@ public class ControlBoxDataManager {
      * 写入住宅控制盒数据（包含租金）
      */
     private static void writeResidentialControlBoxWithRent(MinecraftServer server, BlockPos pos, String type,
-                                       String buildingName, String subDir, UUID residentUuid, UUID cityId, double rent,
-                                       boolean homeTeleportToAbove) {
+                                       String buildingName, String buildingFileName, String subDir, UUID residentUuid,
+                                       UUID cityId, double rent, boolean homeTeleportToAbove) {
         try {
             Path worldPath = server.getWorldPath(WORLD_ROOT);
             Path controlBoxDir = worldPath.resolve("simukraft").resolve(subDir);
@@ -374,7 +409,9 @@ public class ControlBoxDataManager {
                 writer.write("type: " + type + "\n");
                 writer.write("world: " + worldPath.getFileName().toString() + "\n");
                 writer.write("building_name: " + buildingName + "\n");
-                // 写入租金（除以2后的值）
+                if (buildingFileName != null && !buildingFileName.isEmpty()) {
+                    writer.write("building_file_name: " + buildingFileName + "\n");
+                }
                 writer.write(String.format(Locale.US, "rent:%.2f元\n", rent));
                 if (residentUuid != null) {
                     writer.write("resident_uuid: " + residentUuid.toString() + "\n");

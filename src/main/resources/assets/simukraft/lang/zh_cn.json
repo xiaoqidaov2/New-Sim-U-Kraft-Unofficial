@@ -722,6 +722,8 @@
   "gui.server_config.log_skipped_blocks.tooltip": "§7在日志中记录被跳过的黑名单方块",
   "gui.server_config.enable_debug_log": "§e启用调试日志",
   "gui.server_config.enable_debug_log.tooltip": "§7输出更多详细信息到日志\n§c可能会产生大量日志",
+  "gui.server_config.force_load_npc_chunks": "§e强制加载NPC区块",
+  "gui.server_config.force_load_npc_chunks.tooltip": "§7保持NPC所在区块加载，避免远离玩家后工作或寻路停滞\n§c可能增加服务器性能开销",
   "gui.server_config.farmer_enable_crop_growth_boost": "§a启用作物加速生长",
   "gui.server_config.farmer_enable_crop_growth_boost.tooltip": "§7农民是否启用作物加速生长\n§7关闭后作物将以正常速度生长",
 

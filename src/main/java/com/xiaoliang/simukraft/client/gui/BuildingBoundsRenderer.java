@@ -8,6 +8,7 @@ import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.xiaoliang.simukraft.Simukraft;
 import com.xiaoliang.simukraft.building.PlacedBuildingManager;
+import com.xiaoliang.simukraft.client.ClientCityChunkData;
 import com.xiaoliang.simukraft.client.preview.BuildingPreviewManager;
 import com.xiaoliang.simukraft.client.preview.SchematicBlockData;
 import net.minecraft.client.Minecraft;
@@ -23,8 +24,10 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.joml.Matrix4f;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -46,6 +49,10 @@ public class BuildingBoundsRenderer {
     private static final int COLOR_INTRUSION_AIR = 0x60FFFF00;   // 半透明黄色（侵入空气）
     private static final int COLOR_INTRUSION_BLOCK = 0x60FF0000; // 半透明红色（侵入方块）
     private static final int COLOR_INTRUSION_SAME = 0x60FF8000;  // 半透明橙色（同种类方块）
+    private static final int COLOR_CITY_BORDER = 0x553C66FF;
+    private static final int CITY_BORDER_MIN_HEIGHT = -64;
+    private static final int CITY_BORDER_MAX_HEIGHT = 320;
+    private static final double CITY_BORDER_RENDER_DISTANCE = 192.0;
 
     // 预览侵入检测开关（仅放置者可见）
     private static UUID previewPlayerId = null;
@@ -113,8 +120,109 @@ public class BuildingBoundsRenderer {
         // 渲染预览侵入检测（仅放置者可见）
         if (BuildingPreviewManager.isPreviewActive() && previewPlayerId != null
                 && mc.player.getUUID().equals(previewPlayerId)) {
+            renderCityBoundaryWall(poseStack, cameraPos, mc);
             renderPreviewIntrusions(poseStack, cameraPos, mc);
         }
+    }
+
+    private static void renderCityBoundaryWall(PoseStack poseStack, Vec3 cameraPos, Minecraft mc) {
+        ClientCityChunkData cityData = ClientCityChunkData.getInstance();
+        Set<Long> cityChunks = cityData.getCurrentCityChunks();
+        if (cityChunks.isEmpty()) return;
+
+        Set<Long> renderedEdges = new HashSet<>();
+        double maxDistanceSqr = CITY_BORDER_RENDER_DISTANCE * CITY_BORDER_RENDER_DISTANCE;
+
+        RenderSystem.enableDepthTest();
+        RenderSystem.disableCull();
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.setShader(GameRenderer::getPositionColorShader);
+        RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
+
+        Tesselator tesselator = Tesselator.getInstance();
+        BufferBuilder buffer = tesselator.getBuilder();
+        buffer.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
+
+        float red = ((COLOR_CITY_BORDER >> 16) & 0xFF) / 255.0f;
+        float green = ((COLOR_CITY_BORDER >> 8) & 0xFF) / 255.0f;
+        float blue = (COLOR_CITY_BORDER & 0xFF) / 255.0f;
+        float alpha = ((COLOR_CITY_BORDER >> 24) & 0xFF) / 255.0f;
+        Matrix4f matrix = poseStack.last().pose();
+
+        for (long chunkLong : cityChunks) {
+            int chunkX = (int) chunkLong;
+            int chunkZ = (int) (chunkLong >> 32);
+            if (!isChunkNearCamera(chunkX, chunkZ, cameraPos, maxDistanceSqr)) {
+                continue;
+            }
+
+            addBoundaryFaceIfNeeded(buffer, matrix, renderedEdges, cityChunks, chunkX, chunkZ, 0, -1, red, green, blue, alpha, cameraPos);
+            addBoundaryFaceIfNeeded(buffer, matrix, renderedEdges, cityChunks, chunkX, chunkZ, 0, 1, red, green, blue, alpha, cameraPos);
+            addBoundaryFaceIfNeeded(buffer, matrix, renderedEdges, cityChunks, chunkX, chunkZ, -1, 0, red, green, blue, alpha, cameraPos);
+            addBoundaryFaceIfNeeded(buffer, matrix, renderedEdges, cityChunks, chunkX, chunkZ, 1, 0, red, green, blue, alpha, cameraPos);
+        }
+
+        tesselator.end();
+        RenderSystem.enableCull();
+        RenderSystem.disableBlend();
+    }
+
+    private static boolean isChunkNearCamera(int chunkX, int chunkZ, Vec3 cameraPos, double maxDistanceSqr) {
+        double centerX = chunkX * 16.0 + 8.0;
+        double centerZ = chunkZ * 16.0 + 8.0;
+        double dx = centerX - cameraPos.x;
+        double dz = centerZ - cameraPos.z;
+        return dx * dx + dz * dz <= maxDistanceSqr;
+    }
+
+    private static void addBoundaryFaceIfNeeded(BufferBuilder buffer, Matrix4f matrix, Set<Long> renderedEdges,
+                                                Set<Long> cityChunks, int chunkX, int chunkZ, int offsetX, int offsetZ,
+                                                float red, float green, float blue, float alpha, Vec3 cameraPos) {
+        long neighbor = net.minecraft.world.level.ChunkPos.asLong(chunkX + offsetX, chunkZ + offsetZ);
+        if (cityChunks.contains(neighbor)) {
+            return;
+        }
+
+        long edgeKey = makeBoundaryEdgeKey(chunkX, chunkZ, offsetX, offsetZ);
+        if (!renderedEdges.add(edgeKey)) {
+            return;
+        }
+
+        double minY = CITY_BORDER_MIN_HEIGHT - cameraPos.y;
+        double maxY = CITY_BORDER_MAX_HEIGHT - cameraPos.y;
+        double minX = chunkX * 16.0 - cameraPos.x;
+        double maxX = minX + 16.0;
+        double minZ = chunkZ * 16.0 - cameraPos.z;
+        double maxZ = minZ + 16.0;
+
+        if (offsetZ < 0) {
+            drawQuad(buffer, matrix, minX, minY, minZ, maxX, minY, minZ, maxX, maxY, minZ, minX, maxY, minZ, red, green, blue, alpha);
+        } else if (offsetZ > 0) {
+            drawQuad(buffer, matrix, maxX, minY, maxZ, minX, minY, maxZ, minX, maxY, maxZ, maxX, maxY, maxZ, red, green, blue, alpha);
+        } else if (offsetX < 0) {
+            drawQuad(buffer, matrix, minX, minY, maxZ, minX, minY, minZ, minX, maxY, minZ, minX, maxY, maxZ, red, green, blue, alpha);
+        } else if (offsetX > 0) {
+            drawQuad(buffer, matrix, maxX, minY, minZ, maxX, minY, maxZ, maxX, maxY, maxZ, maxX, maxY, minZ, red, green, blue, alpha);
+        }
+    }
+
+    private static long makeBoundaryEdgeKey(int chunkX, int chunkZ, int offsetX, int offsetZ) {
+        int edgeX = offsetX < 0 ? chunkX * 2 : offsetX > 0 ? chunkX * 2 + 2 : chunkX * 2 + 1;
+        int edgeZ = offsetZ < 0 ? chunkZ * 2 : offsetZ > 0 ? chunkZ * 2 + 2 : chunkZ * 2 + 1;
+        return (((long) edgeX) << 32) ^ (edgeZ & 0xFFFFFFFFL);
+    }
+
+    private static void drawQuad(BufferBuilder buffer, Matrix4f matrix,
+                                 double x1, double y1, double z1,
+                                 double x2, double y2, double z2,
+                                 double x3, double y3, double z3,
+                                 double x4, double y4, double z4,
+                                 float red, float green, float blue, float alpha) {
+        buffer.vertex(matrix, (float)x1, (float)y1, (float)z1).color(red, green, blue, alpha).endVertex();
+        buffer.vertex(matrix, (float)x2, (float)y2, (float)z2).color(red, green, blue, alpha).endVertex();
+        buffer.vertex(matrix, (float)x3, (float)y3, (float)z3).color(red, green, blue, alpha).endVertex();
+        buffer.vertex(matrix, (float)x4, (float)y4, (float)z4).color(red, green, blue, alpha).endVertex();
     }
 
     /**

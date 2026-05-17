@@ -33,6 +33,7 @@ public final class JobRuntimeService {
 
     private static final long STATE_SAVE_INTERVAL_TICKS = 6000L;
     private static final long ASSIGNMENT_CACHE_TTL_TICKS = 40L;
+    private static final int MAX_ASSIGNMENTS_PER_TICK = 4;
 
     private final EmploymentAssignmentProvider assignmentProvider;
     private final JobRuntimeStateStore stateStore = new JobRuntimeStateStore();
@@ -43,6 +44,7 @@ public final class JobRuntimeService {
     private long lastStateSaveTick = Long.MIN_VALUE;
     private volatile List<EmploymentAssignment> cachedAssignments = List.of();
     private volatile long cachedAssignmentsTick = Long.MIN_VALUE;
+    private int assignmentTickCursor;
 
     private JobRuntimeService(EmploymentAssignmentProvider assignmentProvider) {
         this.assignmentProvider = assignmentProvider;
@@ -74,10 +76,8 @@ public final class JobRuntimeService {
             return;
         }
         MinecraftServer server = level.getServer();
-        Collection<EmploymentAssignment> assignments = loadAssignmentsCached(server, level.getGameTime());
-        for (EmploymentAssignment assignment : assignments) {
-            tickAssignment(server, level, assignment);
-        }
+        List<EmploymentAssignment> assignments = loadAssignmentsCached(server, level.getGameTime());
+        tickAssignmentsBatch(server, level, assignments);
 
         // 周期性把状态机持久化到磁盘，避免崩溃丢失全部 JobRuntimeState（默认 5 分钟一次）。
         long currentTick = level.getGameTime();
@@ -101,15 +101,37 @@ public final class JobRuntimeService {
         cachedAssignmentsTick = Long.MIN_VALUE;
     }
 
-    private Collection<EmploymentAssignment> loadAssignmentsCached(MinecraftServer server, long currentTick) {
+    private List<EmploymentAssignment> loadAssignmentsCached(MinecraftServer server, long currentTick) {
         long lastTick = cachedAssignmentsTick;
         if (lastTick != Long.MIN_VALUE && currentTick - lastTick < ASSIGNMENT_CACHE_TTL_TICKS) {
             return cachedAssignments;
         }
-        Collection<EmploymentAssignment> fresh = assignmentProvider.loadAssignments(server);
-        cachedAssignments = fresh == null ? List.of() : List.copyOf(fresh);
+        List<EmploymentAssignment> previousAssignments = cachedAssignments;
+        Collection<EmploymentAssignment> loadedAssignments = assignmentProvider.loadAssignments(server);
+        List<EmploymentAssignment> fresh = loadedAssignments == null ? List.of() : List.copyOf(loadedAssignments);
+        cachedAssignments = fresh;
         cachedAssignmentsTick = currentTick;
+        if (fresh.size() != previousAssignments.size() && assignmentTickCursor >= fresh.size()) {
+            assignmentTickCursor = 0;
+        }
         return cachedAssignments;
+    }
+
+    private void tickAssignmentsBatch(MinecraftServer server, ServerLevel level, List<EmploymentAssignment> assignments) {
+        if (assignments == null || assignments.isEmpty()) {
+            assignmentTickCursor = 0;
+            return;
+        }
+        int assignmentCount = assignments.size();
+        if (assignmentTickCursor < 0 || assignmentTickCursor >= assignmentCount) {
+            assignmentTickCursor = 0;
+        }
+        int workBudget = Math.min(MAX_ASSIGNMENTS_PER_TICK, assignmentCount);
+        for (int i = 0; i < workBudget; i++) {
+            EmploymentAssignment assignment = assignments.get(assignmentTickCursor);
+            assignmentTickCursor = (assignmentTickCursor + 1) % assignmentCount;
+            tickAssignment(server, level, assignment);
+        }
     }
 
     private void tickAssignment(MinecraftServer server, ServerLevel level, EmploymentAssignment assignment) {

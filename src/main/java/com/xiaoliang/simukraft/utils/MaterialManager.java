@@ -7,6 +7,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraftforge.registries.ForgeRegistries;
 
@@ -30,6 +31,10 @@ public class MaterialManager {
         }
 
         Block block = state.getBlock();
+        if (isAirBlock(block)) {
+            return false;
+        }
+
         String blockId = getBlockId(block);
 
         // 专家模式：所有方块都需要材料（除了跳过列表中的）
@@ -62,6 +67,10 @@ public class MaterialManager {
      */
     public static List<String> getRequiredMaterials(BlockState state) {
         Block block = state.getBlock();
+        if (isAirBlock(block)) {
+            return Collections.emptyList();
+        }
+
         String blockId = getBlockId(block);
 
         // 专家模式：返回方块本身
@@ -86,6 +95,10 @@ public class MaterialManager {
      */
     public static Set<String> getAcceptedItemIds(BlockState state) {
         LinkedHashSet<String> acceptedItemIds = new LinkedHashSet<>();
+        if (isAirBlock(state.getBlock())) {
+            return acceptedItemIds;
+        }
+
         ResourceLocation blockKey = ForgeRegistries.BLOCKS.getKey(state.getBlock());
         if (blockKey == null) {
             return acceptedItemIds;
@@ -142,6 +155,8 @@ public class MaterialManager {
         String itemId = getItemId(item);
 
         Block block = state.getBlock();
+        if (isAirBlock(block)) return false;
+
         String blockId = getBlockId(block);
 
         // 专家模式：需要精确匹配（但处理方块变体如墙上的火把）
@@ -197,6 +212,10 @@ public class MaterialManager {
         }
 
         return false;
+    }
+
+    private static boolean isAirBlock(Block block) {
+        return block == Blocks.AIR || block == Blocks.CAVE_AIR || block == Blocks.VOID_AIR;
     }
 
     private static void addAcceptedMaterialId(Set<String> acceptedItemIds, String materialId) {
@@ -277,6 +296,10 @@ public class MaterialManager {
      */
     public static String getMaterialRequirementMessage(BlockState state) {
         Block block = state.getBlock();
+        if (isAirBlock(block)) {
+            return "";
+        }
+
         String blockId = ForgeRegistries.BLOCKS.getKey(block).toString();
 
         if (ServerConfig.isExpertModeEnabled()) {
@@ -342,6 +365,10 @@ public class MaterialManager {
      */
     public static Component getMaterialRequirementComponent(BlockState state) {
         Block block = state.getBlock();
+        if (isAirBlock(block)) {
+            return Component.empty();
+        }
+
         String blockId = ForgeRegistries.BLOCKS.getKey(block).toString();
 
         if (ServerConfig.isExpertModeEnabled()) {

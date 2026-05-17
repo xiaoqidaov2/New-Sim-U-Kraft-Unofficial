@@ -166,7 +166,7 @@ public class ConstructionTask {
                 startPos.getZ() + rotatedPos.getZ()
             );
 
-            blocks.add(new BlockInfo(finalPos, rotatedState));
+            blocks.add(new BlockInfo(finalPos, rotatedState, pos));
         }
 
         // 按层排序，每层优先级：普通方块 > 需要支撑/重力方块 > 液体相关方块
@@ -1059,6 +1059,9 @@ public class ConstructionTask {
     private record LayerRange(int y, int startIndex, int endIndex) {
     }
 
-    public record BlockInfo(@Nonnull BlockPos pos, @Nonnull BlockState state) {
+    public record BlockInfo(@Nonnull BlockPos pos, @Nonnull BlockState state, @Nullable BlockPos originalNbtPos) {
+        public BlockInfo(@Nonnull BlockPos pos, @Nonnull BlockState state) {
+            this(pos, state, null);
+        }
     }
 }

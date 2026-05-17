@@ -69,6 +69,7 @@ public class ServerConfig {
     public static final ForgeConfigSpec.ConfigValue<Boolean> ENABLE_BLACKLIST_PROTECTION;
     public static final ForgeConfigSpec.ConfigValue<Boolean> LOG_BLACKLIST_SKIPPED_BLOCKS;
     public static final ForgeConfigSpec.ConfigValue<Boolean> ENABLE_DEBUG_LOG;
+    public static final ForgeConfigSpec.ConfigValue<Boolean> FORCE_LOAD_NPC_CHUNKS;
     // 创造模式 - 不需要材料和金钱
     public static final ForgeConfigSpec.ConfigValue<Boolean> ENABLE_CREATIVE_MODE;
     // 专家模式 - 已移到通用配置
@@ -98,6 +99,12 @@ public class ServerConfig {
         ENABLE_DEBUG_LOG = builder
                 .comment("是否启用调试日志（会输出更多详细信息）")
                 .define("enableDebugLog", false);
+
+        FORCE_LOAD_NPC_CHUNKS = builder
+                .comment("是否强制加载NPC所在区块",
+                        "开启后NPC每秒会保持自身所在区块加载，避免远离玩家后工作或寻路停滞",
+                        "可能增加服务器性能开销")
+                .define("forceLoadNpcChunks", false);
 
         ENABLE_CREATIVE_MODE = builder
                 .comment("是否启用创造模式",
@@ -446,6 +453,10 @@ public class ServerConfig {
 
     public static boolean isDebugLogEnabled() {
         return getCached("enableDebugLog", ENABLE_DEBUG_LOG);
+    }
+
+    public static boolean shouldForceLoadNpcChunks() {
+        return getCached("forceLoadNpcChunks", FORCE_LOAD_NPC_CHUNKS);
     }
 
     public static boolean isOpacClaimsEnabled() {

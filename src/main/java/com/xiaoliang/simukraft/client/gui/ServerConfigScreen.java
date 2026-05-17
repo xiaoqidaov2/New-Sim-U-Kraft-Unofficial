@@ -409,6 +409,12 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
                     value -> configValues.put("enableDebugLog", new BooleanConfigValue(value)));
             startY += ITEM_HEIGHT;
 
+            addBooleanOption(parent, width, startY, "forceLoadNpcChunks",
+                    "强制加载NPC区块", "保持NPC所在区块加载，可能增加性能开销",
+                    ServerConfig.shouldForceLoadNpcChunks(),
+                    value -> configValues.put("forceLoadNpcChunks", new BooleanConfigValue(value)));
+            startY += ITEM_HEIGHT;
+
             addBooleanOption(parent, width, startY, "farmerEnableCropGrowthBoost",
                     "作物加速生长", "农民是否启用作物加速生长",
                     ServerConfig.isFarmerCropGrowthBoostEnabled(),
@@ -894,6 +900,7 @@ public class ServerConfigScreen extends ModularUIGuiContainer {
                         case "enableBlacklistProtection" -> ServerConfig.ENABLE_BLACKLIST_PROTECTION.set(boolValue);
                         case "logSkippedBlocks" -> ServerConfig.LOG_BLACKLIST_SKIPPED_BLOCKS.set(boolValue);
                         case "enableDebugLog" -> ServerConfig.ENABLE_DEBUG_LOG.set(boolValue);
+                        case "forceLoadNpcChunks" -> ServerConfig.FORCE_LOAD_NPC_CHUNKS.set(boolValue);
                         case "farmerEnableCropGrowthBoost" -> ServerConfig.FARMER_ENABLE_CROP_GROWTH_BOOST.set(boolValue);
                         case "plannerDropItemsOnRemove" -> ServerConfig.PLANNER_DROP_ITEMS_ON_REMOVE.set(boolValue);
                         case "plannerStoreItemsInChest" -> ServerConfig.PLANNER_STORE_ITEMS_IN_CHEST.set(boolValue);

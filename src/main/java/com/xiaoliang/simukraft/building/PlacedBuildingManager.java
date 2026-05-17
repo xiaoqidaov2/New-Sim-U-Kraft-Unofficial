@@ -77,11 +77,17 @@ public class PlacedBuildingManager {
         public final BlockPos relativePos;      // 相对控制盒的位置
         public final String blockId;            // 方块ID
         public final CompoundTag blockState;    // 方块状态NBT
+        public final BlockPos originalNbtPos;   // 原始NBT结构坐标
 
         public BlockEntry(BlockPos relativePos, String blockId, CompoundTag blockState) {
+            this(relativePos, blockId, blockState, null);
+        }
+
+        public BlockEntry(BlockPos relativePos, String blockId, CompoundTag blockState, BlockPos originalNbtPos) {
             this.relativePos = relativePos;
             this.blockId = blockId;
             this.blockState = blockState != null ? blockState.copy() : null;
+            this.originalNbtPos = originalNbtPos;
         }
     }
 
@@ -160,7 +166,7 @@ public class PlacedBuildingManager {
                     stateTag.putString(prop.getName(), sb.blockState().getValue(prop).toString());
                 });
 
-                blockEntries.add(new BlockEntry(relPos, blockId, stateTag));
+                blockEntries.add(new BlockEntry(relPos, blockId, stateTag, sb.pos()));
 
                 // 更新边界
                 minX = Math.min(minX, relPos.getX());
@@ -237,7 +243,7 @@ public class PlacedBuildingManager {
                     stateTag.putString(prop.getName(), blockInfo.state().getValue(prop).toString());
                 });
 
-                blockEntries.add(new BlockEntry(relPos, blockId, stateTag));
+                blockEntries.add(new BlockEntry(relPos, blockId, stateTag, blockInfo.originalNbtPos()));
 
                 // 更新边界
                 minX = Math.min(minX, relPos.getX());
@@ -507,6 +513,11 @@ public class PlacedBuildingManager {
                     if (entry.blockState != null) {
                         blockTag.put("blockState", entry.blockState);
                     }
+                    if (entry.originalNbtPos != null) {
+                        blockTag.putInt("nbtX", entry.originalNbtPos.getX());
+                        blockTag.putInt("nbtY", entry.originalNbtPos.getY());
+                        blockTag.putInt("nbtZ", entry.originalNbtPos.getZ());
+                    }
                     blocksList.add(blockTag);
                 }
                 buildingTag.put("blocks", blocksList);
@@ -588,7 +599,10 @@ public class PlacedBuildingManager {
                         String blockId = blockTag.getString("blockId");
                         CompoundTag stateTag = blockTag.contains("blockState") ?
                             blockTag.getCompound("blockState") : null;
-                        blockEntries.add(new BlockEntry(relPos, blockId, stateTag));
+                        BlockPos originalNbtPos = blockTag.contains("nbtX") && blockTag.contains("nbtY") && blockTag.contains("nbtZ")
+                                ? new BlockPos(blockTag.getInt("nbtX"), blockTag.getInt("nbtY"), blockTag.getInt("nbtZ"))
+                                : null;
+                        blockEntries.add(new BlockEntry(relPos, blockId, stateTag, originalNbtPos));
                     }
 
                     // 创建建筑数据（使用特殊构造函数绕过final限制）
