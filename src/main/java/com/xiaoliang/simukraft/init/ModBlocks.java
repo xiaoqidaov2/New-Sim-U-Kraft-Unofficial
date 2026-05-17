@@ -1,6 +1,7 @@
 package com.xiaoliang.simukraft.init;
 
 import com.xiaoliang.simukraft.block.*;
+import com.xiaoliang.simukraft.block.BankControlBoxBlock;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
@@ -104,6 +105,11 @@ public class ModBlocks {
     // 牛奶液体方块
     public static final RegistryObject<net.minecraft.world.level.block.LiquidBlock> MILK_BLOCK = BLOCKS.register("milk_fluid",
             () -> new com.xiaoliang.simukraft.block.MilkLiquidBlock(ModFluids.SOURCE_MILK, net.minecraft.world.level.block.state.BlockBehaviour.Properties.copy(net.minecraft.world.level.block.Blocks.WATER).noLootTable().randomTicks()));
+
+    // NSUK-银行控制箱
+    public static final RegistryObject<Block> BANK_CONTROL_BOX = BLOCKS.register("bank_control_box", BankControlBoxBlock::new);
+    public static final RegistryObject<Item> BANK_CONTROL_BOX_ITEM = ModItems.ITEMS.register("bank_control_box",
+            () -> new BlockItem(nn(BANK_CONTROL_BOX.get()), new Item.Properties()));
 
     private static <T> T nn(T value) {
         return Objects.requireNonNull(value);

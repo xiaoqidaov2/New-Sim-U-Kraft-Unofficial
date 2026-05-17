@@ -35,6 +35,7 @@ public class ModCreativeModeTabs {
                         output.accept(nn(ModBlocks.COMMERCIAL_CONTROL_BOX.get()));
                         output.accept(nn(ModBlocks.INDUSTRIAL_CONTROL_BOX.get()));
                         output.accept(nn(ModBlocks.OTHER_CONTROL_BOX.get()));
+                        output.accept(nn(ModBlocks.BANK_CONTROL_BOX.get()));
                         output.accept(nn(ModBlocks.LOGISTICS_SERVER_BOX.get()));
                         output.accept(nn(ModBlocks.LOGISTICS_CLIENT_BOX.get()));
                         output.accept(nn(ModBlocks.WHITE_LIGHT_BLOCK.get()));
