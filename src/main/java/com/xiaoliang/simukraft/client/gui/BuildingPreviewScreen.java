@@ -137,33 +137,13 @@ public class BuildingPreviewScreen extends Screen {
 
         y += 12;
 
-        if (BuildingPreviewManager.isRangeOnlyPreview()) {
-            guiGraphics.drawCenteredString(
-                this.font,
-                Component.translatable("gui.building_preview.range_only_mode"),
-                centerX,
-                y,
-                0xFFAA00
-            );
-
-            y += 12;
-
-            guiGraphics.drawCenteredString(
-                this.font,
-                Component.translatable("gui.building_preview.estimated_volume", BuildingPreviewManager.getEstimatedVolume()),
-                centerX,
-                y,
-                0x00FFFF
-            );
-        } else {
-            guiGraphics.drawCenteredString(
-                this.font,
-                Component.translatable("gui.building_preview.block_count", BuildingPreviewManager.getBlockCount()),
-                centerX,
-                y,
-                0x00FFFF
-            );
-        }
+        guiGraphics.drawCenteredString(
+            this.font,
+            Component.translatable("gui.building_preview.block_count", BuildingPreviewManager.getBlockCount()),
+            centerX,
+            y,
+            0x00FFFF
+        );
     }
 
     @Override

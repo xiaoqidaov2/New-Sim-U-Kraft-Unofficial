@@ -7,7 +7,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
@@ -22,19 +21,15 @@ import java.util.Map;
 
 @SuppressWarnings("null")
 public class BuildingPreviewManager {
-    private static final int RANGE_ONLY_PREVIEW_VOLUME_THRESHOLD = 32768;
-    private static final int RANGE_ONLY_PREVIEW_EDGE_THRESHOLD = 128;
     private static final List<SchematicBlockData> schematicBlocks = new ArrayList<>();
     private static final List<SchematicBlockData> surfaceBlocks = new ArrayList<>();
     private static BlockPos previewOrigin = BlockPos.ZERO;
     private static int rotation = 0;
     private static boolean isPreviewActive = false;
-    private static boolean rangeOnlyPreview = false;
     private static String currentBuildingName = "";
     private static String currentCategory = "";
     private static String currentFileName = "";
     private static int previewRevision = 0;
-    private static int estimatedVolume = 0;
     private static PreviewDimensions previewDimensions = null;
 
     private static PreviewMesh cachedMesh = null;
@@ -51,21 +46,13 @@ public class BuildingPreviewManager {
         rotation = 0;
         isPreviewActive = true;
         previewDimensions = parsePreviewDimensions(size);
-        estimatedVolume = previewDimensions != null ? previewDimensions.volume() : 0;
-        rangeOnlyPreview = shouldUseRangeOnlyPreview(previewDimensions);
-
-        if (rangeOnlyPreview) {
-            activateRangeOnlyPreview();
-        } else {
-            loadBlocks();
-        }
+        loadBlocks();
         Simukraft.LOGGER.info(Component.translatable("message.preview.building.start", buildingName, origin).getString());
     }
 
     public static void loadBlocks() {
         schematicBlocks.clear();
         surfaceBlocks.clear();
-        rangeOnlyPreview = false;
 
         String filePath = "simukraftbuilding/" + currentCategory + "/" + currentFileName + ".nbt";
         List<SchematicNBTLoader.SchematicBlock> blocks = SchematicNBTLoader.loadSchematicBlocks(filePath);
@@ -87,14 +74,6 @@ public class BuildingPreviewManager {
         previewRevision++;
         Simukraft.LOGGER.info(Component.translatable("message.preview.building.loaded", schematicBlocks.size()).getString());
         rebuildMesh();
-    }
-
-    private static void activateRangeOnlyPreview() {
-        schematicBlocks.clear();
-        surfaceBlocks.clear();
-        closeMesh();
-        previewRevision++;
-        Simukraft.LOGGER.info(Component.translatable("message.preview.building.range_only", currentBuildingName, estimatedVolume).getString());
     }
 
     private static void rebuildMesh() {
@@ -127,11 +106,7 @@ public class BuildingPreviewManager {
         if (!isOriginAllowed(newOrigin)) {
             return;
         }
-        if (rangeOnlyPreview) {
-            previewRevision++;
-        } else {
-            updateBlockPositions(offset);
-        }
+        updateBlockPositions(offset);
         previewOrigin = newOrigin;
         Simukraft.LOGGER.info(Component.translatable("message.preview.building.moved", previewOrigin).getString());
     }
@@ -144,11 +119,7 @@ public class BuildingPreviewManager {
         if (!isOriginAllowed(newOrigin)) {
             return;
         }
-        if (rangeOnlyPreview) {
-            previewRevision++;
-        } else {
-            updateBlockPositions(offsetPos);
-        }
+        updateBlockPositions(offsetPos);
         previewOrigin = newOrigin;
         Simukraft.LOGGER.info(Component.translatable("message.preview.building.moved_vertical", previewOrigin).getString());
     }
@@ -194,11 +165,7 @@ public class BuildingPreviewManager {
         if (!isOriginAllowed(newOrigin)) {
             return;
         }
-        if (rangeOnlyPreview) {
-            previewRevision++;
-        } else {
-            updateBlockPositions(offset);
-        }
+        updateBlockPositions(offset);
         previewOrigin = newOrigin;
         Simukraft.LOGGER.info(Component.translatable("message.preview.building.moved_camera", previewOrigin, yaw).getString());
     }
@@ -237,28 +204,6 @@ public class BuildingPreviewManager {
             return false;
         }
 
-        if (rangeOnlyPreview) {
-            AABB previewBounds = getPreviewBounds();
-            if (previewBounds == null) {
-                return true;
-            }
-
-            int minChunkX = SectionPosUtil.blockToChunkCoord((int) Math.floor(previewBounds.minX));
-            int maxChunkX = SectionPosUtil.blockToChunkCoord((int) Math.ceil(previewBounds.maxX) - 1);
-            int minChunkZ = SectionPosUtil.blockToChunkCoord((int) Math.floor(previewBounds.minZ));
-            int maxChunkZ = SectionPosUtil.blockToChunkCoord((int) Math.ceil(previewBounds.maxZ) - 1);
-
-            for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
-                for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
-                    java.util.UUID owner = data.getChunkOwner(ChunkPos.asLong(chunkX, chunkZ));
-                    if (!playerCityId.equals(owner)) {
-                        return false;
-                    }
-                }
-            }
-            return true;
-        }
-
         for (SchematicBlockData block : schematicBlocks) {
             BlockPos pos = block.pos();
             java.util.UUID owner = data.getChunkOwner(new net.minecraft.world.level.ChunkPos(pos).toLong());
@@ -273,11 +218,7 @@ public class BuildingPreviewManager {
         if (!isPreviewActive) return;
 
         rotation = (rotation + 90) % 360;
-        if (rangeOnlyPreview) {
-            previewRevision++;
-        } else {
-            loadBlocks();
-        }
+        loadBlocks();
         Simukraft.LOGGER.info(Component.translatable("message.preview.building.rotated", rotation).getString());
     }
 
@@ -428,9 +369,7 @@ public class BuildingPreviewManager {
         schematicBlocks.clear();
         surfaceBlocks.clear();
         isPreviewActive = false;
-        rangeOnlyPreview = false;
         rotation = 0;
-        estimatedVolume = 0;
         previewDimensions = null;
         previewRevision++;
         closeMesh();
@@ -489,10 +428,6 @@ public class BuildingPreviewManager {
         return schematicBlocks.size();
     }
 
-    public static int getEstimatedVolume() {
-        return estimatedVolume;
-    }
-
     public static int getPreviewRevision() {
         return previewRevision;
     }
@@ -503,10 +438,6 @@ public class BuildingPreviewManager {
 
     public static BlockPos getMeshBuildOrigin() {
         return meshBuildOrigin;
-    }
-
-    public static boolean isRangeOnlyPreview() {
-        return rangeOnlyPreview;
     }
 
     public static AABB getPreviewBounds() {
@@ -555,14 +486,6 @@ public class BuildingPreviewManager {
         }
     }
 
-    private static boolean shouldUseRangeOnlyPreview(PreviewDimensions dimensions) {
-        if (dimensions == null) {
-            return false;
-        }
-        int maxEdge = Math.max(dimensions.width(), Math.max(dimensions.height(), dimensions.depth()));
-        return dimensions.volume() >= RANGE_ONLY_PREVIEW_VOLUME_THRESHOLD || maxEdge >= RANGE_ONLY_PREVIEW_EDGE_THRESHOLD;
-    }
-
     private static PreviewDimensions parsePreviewDimensions(String size) {
         if (size == null || size.isBlank()) {
             return null;
@@ -598,15 +521,6 @@ public class BuildingPreviewManager {
                 return new PreviewDimensions(depth, height, width);
             }
             return this;
-        }
-    }
-
-    /**
-     * 避免直接依赖服务端区块工具类，按 16 格换算预览占用区块。
-     */
-    private static final class SectionPosUtil {
-        private static int blockToChunkCoord(int blockCoord) {
-            return blockCoord >> 4;
         }
     }
 }

@@ -19,7 +19,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
@@ -268,12 +267,9 @@ public class BuildingDataManager {
     }
 
     private static List<String> listCategoryResourceFiles(String category) {
-        List<String> fileNames = loadCategoryManifest(category);
-        if (!fileNames.isEmpty()) {
-            return fileNames;
-        }
-
-        List<String> jarFileNames = new CopyOnWriteArrayList<>();
+        // 资源清单只作为加速和兜底，最终结果要与 JAR/源码目录实际文件合并，
+        // 避免新增建筑忘记登记到 _files.txt 时发布包漏复制。
+        java.util.Set<String> mergedFileNames = new java.util.LinkedHashSet<>(loadCategoryManifest(category));
         String resourceDir = BUILDING_ROOT_PATH + "/" + category;
 
         try {
@@ -288,7 +284,7 @@ public class BuildingDataManager {
                         }
                         String relative = name.substring(resourceDir.length() + 1);
                         if (!relative.contains("/")) {
-                            jarFileNames.add(relative);
+                            mergedFileNames.add(relative);
                         }
                     });
                 }
@@ -297,11 +293,6 @@ public class BuildingDataManager {
             LOGGER.error("[BuildingDataManager] 获取资源目录 '{}' 失败: {}", resourceDir, e.getMessage());
         }
 
-        if (!jarFileNames.isEmpty()) {
-            return jarFileNames;
-        }
-
-        List<String> fallbackFileNames = new ArrayList<>();
         try {
             Path workingDir = Paths.get("").toAbsolutePath();
             Path projectRoot = resolveProjectRoot(workingDir);
@@ -310,14 +301,14 @@ public class BuildingDataManager {
                 try (Stream<Path> pathStream = Files.list(fallbackDir)) {
                     pathStream.filter(Files::isRegularFile)
                             .map(path -> path.getFileName().toString())
-                            .forEach(fallbackFileNames::add);
+                            .forEach(mergedFileNames::add);
                 }
             }
         } catch (Exception e) {
             LOGGER.error("[BuildingDataManager] 文件系统后备枚举资源目录 '{}' 失败: {}", resourceDir, e.getMessage());
         }
 
-        return fallbackFileNames;
+        return new ArrayList<>(mergedFileNames);
     }
 
     private static List<String> loadCategoryManifest(String category) {

@@ -51,8 +51,6 @@ public class BuildingBoundsRenderer {
     private static final int COLOR_INTRUSION_AIR = 0x60FFFF00;   // 半透明黄色（侵入空气）
     private static final int COLOR_INTRUSION_BLOCK = 0x60FF0000; // 半透明红色（侵入方块）
     private static final int COLOR_INTRUSION_SAME = 0x60FF8000;  // 半透明橙色（同种类方块）
-    private static final int COLOR_PREVIEW_RANGE = 0xFF00FFFF;
-    private static final int COLOR_PREVIEW_RANGE_CONFLICT = 0xFFFF5555;
     private static final int COLOR_CITY_BORDER = 0x553C66FF;
     private static final int CITY_BORDER_MIN_HEIGHT = -64;
     private static final int CITY_BORDER_MAX_HEIGHT = 320;
@@ -265,11 +263,6 @@ public class BuildingBoundsRenderer {
      * 仅放置预览图的玩家可见，同时显示被侵入建筑的白色界限框
      */
     private static void renderPreviewIntrusions(PoseStack poseStack, Vec3 cameraPos, Minecraft mc) {
-        if (BuildingPreviewManager.isRangeOnlyPreview()) {
-            renderRangeOnlyPreviewBounds(poseStack, cameraPos, mc);
-            return;
-        }
-
         String currentWorldId = mc.level.dimension().location().toString();
         if (cachedIntrusionPreviewRevision != BuildingPreviewManager.getPreviewRevision()
                 || !currentWorldId.equals(cachedIntrusionWorldId)) {
@@ -284,38 +277,6 @@ public class BuildingBoundsRenderer {
         for (PlacedBuildingManager.PlacedBuildingData building : cachedIntrudedBuildings) {
             renderBuildingBoundsForIntrusion(poseStack, cameraPos, building);
         }
-    }
-
-    /**
-     * 超大型建筑仅渲染整体范围框，避免客户端为预览加载全部 NBT 方块。
-     */
-    private static void renderRangeOnlyPreviewBounds(PoseStack poseStack, Vec3 cameraPos, Minecraft mc) {
-        AABB previewBounds = BuildingPreviewManager.getPreviewBounds();
-        if (previewBounds == null) {
-            return;
-        }
-
-        boolean intersectsExistingBuilding = false;
-        String currentWorldId = mc.level.dimension().location().toString();
-        for (PlacedBuildingManager.PlacedBuildingData building : PlacedBuildingManager.getAllBuildings()) {
-            if (!building.worldId.equals(currentWorldId)) {
-                continue;
-            }
-
-            if (!previewBounds.intersects(toWorldBounds(building))) {
-                continue;
-            }
-
-            intersectsExistingBuilding = true;
-            renderBuildingBoundsForIntrusion(poseStack, cameraPos, building);
-        }
-
-        renderBoxOutline(
-                poseStack,
-                cameraPos,
-                previewBounds,
-                intersectsExistingBuilding ? COLOR_PREVIEW_RANGE_CONFLICT : COLOR_PREVIEW_RANGE
-        );
     }
 
     private static void rebuildIntrusionCache(Minecraft mc, String currentWorldId) {

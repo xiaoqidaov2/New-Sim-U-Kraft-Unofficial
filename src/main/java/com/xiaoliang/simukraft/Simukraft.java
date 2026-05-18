@@ -6,6 +6,7 @@ import com.xiaoliang.simukraft.client.ClientHUDOverlay;
 import com.xiaoliang.simukraft.client.ClientSimukraftData;
 import com.xiaoliang.simukraft.client.ModModelLayers;
 import com.xiaoliang.simukraft.client.config.ModMenuIntegration;
+import com.xiaoliang.simukraft.client.memory.ClientMemoryCleanerService;
 import com.xiaoliang.simukraft.config.ClientConfigSpec;
 import com.xiaoliang.simukraft.config.ServerConfig;
 import com.xiaoliang.simukraft.client.model.CustomEntityModel;
@@ -224,6 +225,7 @@ public class Simukraft {
             com.xiaoliang.simukraft.building.CommercialBuildingManager.init(null);
             com.xiaoliang.simukraft.building.IndustrialBuildingManager.init(null);
             LOGGER.info("[Simukraft] 客户端已初始化建筑配置管理器");
+            ClientMemoryCleanerService.onClientLoggedIn();
         }
 
         /**
@@ -240,6 +242,7 @@ public class Simukraft {
             ClientSimukraftData.resetAllClientState();
             ClientToastHUDOverlay.clearAllToasts();
             hasLoadedData = false;
+            ClientMemoryCleanerService.onClientLoggedOut();
         }
 
         private static com.xiaoliang.simukraft.client.gui.ConfigButtonHandler configButtonHandler;
@@ -265,6 +268,7 @@ public class Simukraft {
             }
 
             Minecraft mc = Minecraft.getInstance();
+            ClientMemoryCleanerService.onClientTick(mc);
 
             if (mc.player != null && mc.level != null) {
                 long window = mc.getWindow().getWindow();
