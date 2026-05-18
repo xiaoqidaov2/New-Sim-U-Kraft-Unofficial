@@ -160,6 +160,12 @@ public class NetworkManager {
                 CityLoanActionPacket::handle);
 
         INSTANCE.registerMessage(id++,
+                CityInvestmentActionPacket.class,
+                CityInvestmentActionPacket::encode,
+                CityInvestmentActionPacket::decode,
+                CityInvestmentActionPacket::handle);
+
+        INSTANCE.registerMessage(id++,
                 GetBankFinanceInfoPacket.class,
                 GetBankFinanceInfoPacket::encode,
                 GetBankFinanceInfoPacket::decode,

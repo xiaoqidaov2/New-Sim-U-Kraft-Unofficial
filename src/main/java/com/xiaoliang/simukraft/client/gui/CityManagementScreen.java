@@ -52,6 +52,7 @@ public class CityManagementScreen extends ModularUIGuiContainer {
     }
 
     private static ModularUI createModularUI(BlockPos cityCorePos) {
+        GuiScaleManager.applyFixedScale(2);
         int screenWidth = Minecraft.getInstance().getWindow().getGuiScaledWidth();
         int screenHeight = Minecraft.getInstance().getWindow().getGuiScaledHeight();
         Player player = nn(Minecraft.getInstance().player);
@@ -95,6 +96,11 @@ public class CityManagementScreen extends ModularUIGuiContainer {
                 true,
                 clickData -> openCityOfficials(cityCorePos)));
 
+        rootGroup.addWidget(createButton(leftX, startY + 5 * (BUTTON_HEIGHT + BUTTON_SPACING), BUTTON_WIDTH, BUTTON_HEIGHT,
+                "gui.city_management.finance",
+                true,
+                clickData -> openCityFinance(cityCorePos)));
+
         rootGroup.addWidget(createButton(leftX, screenHeight - 30, BACK_BUTTON_WIDTH, BACK_BUTTON_HEIGHT,
                 "gui.city_management.back",
                 true,
@@ -116,6 +122,18 @@ public class CityManagementScreen extends ModularUIGuiContainer {
     public void removed() {
         releaseMapConsumers();
         super.removed();
+    }
+
+    @Override
+    public void init() {
+        GuiScaleManager.applyFixedScale(2);
+        super.init();
+    }
+
+    @Override
+    public void resize(@Nonnull Minecraft minecraft, int width, int height) {
+        GuiScaleManager.applyFixedScale(2);
+        super.resize(minecraft, width, height);
     }
 
     @Override
@@ -177,6 +195,10 @@ public class CityManagementScreen extends ModularUIGuiContainer {
         Minecraft.getInstance().setScreen(new CityOfficialScreen(cityCorePos));
     }
 
+    private static void openCityFinance(BlockPos cityCorePos) {
+        Minecraft.getInstance().setScreen(new CityFinanceScreen(cityCorePos));
+    }
+
     @Override
     public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTicks) {
         guiGraphics.fillGradient(0, 0, this.width, this.height, 0xC8000000, 0xC8000000);
@@ -189,6 +211,7 @@ public class CityManagementScreen extends ModularUIGuiContainer {
     }
 
     private static void closeScreen() {
+        GuiScaleManager.forceRestore();
         Minecraft.getInstance().setScreen(null);
     }
 

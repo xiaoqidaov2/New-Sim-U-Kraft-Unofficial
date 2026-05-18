@@ -16,12 +16,14 @@ public class CityEditScreen extends AbstractTransitionScreen {
 
     public CityEditScreen(BlockPos cityCorePos) {
         super(Component.translatable("gui.city_edit.title"));
+        GuiScaleManager.applyFixedScale(2);
         this.cityCorePos = cityCorePos;
         playOpenSound();
     }
 
     @Override
     protected void init() {
+        GuiScaleManager.applyFixedScale(2);
         super.init();
         
         int centerX = this.width / 2;
@@ -92,6 +94,12 @@ public class CityEditScreen extends AbstractTransitionScreen {
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    @Override
+    public void resize(@Nonnull Minecraft minecraft, int width, int height) {
+        GuiScaleManager.applyFixedScale(2);
+        super.resize(minecraft, width, height);
     }
 
     private static void playOpenSound() {

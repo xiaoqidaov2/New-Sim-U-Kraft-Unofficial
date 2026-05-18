@@ -12,26 +12,34 @@ import net.minecraftforge.network.NetworkEvent;
 import java.util.function.Supplier;
 
 @SuppressWarnings("null")
-public class GetCityFinanceInfoPacket {
+public class CityInvestmentActionPacket {
     private final BlockPos cityCorePos;
+    private final String productId;
+    private final double amount;
 
-    public GetCityFinanceInfoPacket(BlockPos cityCorePos) {
+    public CityInvestmentActionPacket(BlockPos cityCorePos, String productId, double amount) {
         this.cityCorePos = cityCorePos;
+        this.productId = productId;
+        this.amount = amount;
     }
 
-    public GetCityFinanceInfoPacket(FriendlyByteBuf buf) {
+    public CityInvestmentActionPacket(FriendlyByteBuf buf) {
         this.cityCorePos = buf.readBlockPos();
+        this.productId = buf.readUtf(64);
+        this.amount = buf.readDouble();
     }
 
     public void encode(FriendlyByteBuf buf) {
         buf.writeBlockPos(cityCorePos);
+        buf.writeUtf(productId, 64);
+        buf.writeDouble(amount);
     }
 
-    public static GetCityFinanceInfoPacket decode(FriendlyByteBuf buf) {
-        return new GetCityFinanceInfoPacket(buf);
+    public static CityInvestmentActionPacket decode(FriendlyByteBuf buf) {
+        return new CityInvestmentActionPacket(buf);
     }
 
-    public static void handle(GetCityFinanceInfoPacket message, Supplier<NetworkEvent.Context> context) {
+    public static void handle(CityInvestmentActionPacket message, Supplier<NetworkEvent.Context> context) {
         context.get().enqueueWork(() -> {
             ServerPlayer player = context.get().getSender();
             if (player == null) {
@@ -52,6 +60,7 @@ public class GetCityFinanceInfoPacket {
                 return;
             }
 
+            CityInvestmentService.purchaseProduct(level, player, cityData, cityInfo, message.productId, message.amount);
             NetworkManager.sendToPlayer(new CityFinanceInfoResponsePacket(
                     message.cityCorePos,
                     CityInvestmentService.createFinanceSnapshot(level, cityInfo)

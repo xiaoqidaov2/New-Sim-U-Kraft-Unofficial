@@ -48,6 +48,7 @@ public class CityData extends SavedData {
         private double funds;
         private int cityLevel = 0; // 城市等级，初始为0级（拓荒者）
         private double outstandingLoanDebt; // 当前未偿还贷款本息
+        private final List<InvestmentPosition> investmentPositions = new ArrayList<>();
         
         // 官员列表：存储官员的玩家名称
         private final List<String> officials = new ArrayList<>();
@@ -181,6 +182,40 @@ public class CityData extends SavedData {
             this.outstandingLoanDebt = outstandingLoanDebt;
         }
 
+        public List<InvestmentPosition> getInvestmentPositions() {
+            return new ArrayList<>(investmentPositions);
+        }
+
+        public void addInvestmentPosition(InvestmentPosition position) {
+            if (position != null) {
+                investmentPositions.add(position);
+            }
+        }
+
+        public boolean removeInvestmentPosition(UUID positionId) {
+            return investmentPositions.removeIf(position -> position.positionId().equals(positionId));
+        }
+
+        public record InvestmentPosition(UUID positionId, String productId, double principal, int startDay) {
+            public CompoundTag serialize() {
+                CompoundTag tag = new CompoundTag();
+                tag.putUUID("positionId", Objects.requireNonNull(positionId));
+                tag.putString("productId", Objects.requireNonNull(productId));
+                tag.putDouble("principal", principal);
+                tag.putInt("startDay", startDay);
+                return tag;
+            }
+
+            public static InvestmentPosition deserialize(CompoundTag tag) {
+                return new InvestmentPosition(
+                        tag.getUUID("positionId"),
+                        tag.getString("productId"),
+                        tag.getDouble("principal"),
+                        tag.getInt("startDay")
+                );
+            }
+        }
+
         public CompoundTag serialize() {
             CompoundTag tag = new CompoundTag();
             tag.putUUID("cityId", Objects.requireNonNull(cityId));
@@ -208,6 +243,12 @@ public class CityData extends SavedData {
                 officialsTag.add(officialTag);
             }
             tag.put("officials_v2", officialsTag);
+
+            ListTag investmentsTag = new ListTag();
+            for (InvestmentPosition position : investmentPositions) {
+                investmentsTag.add(position.serialize());
+            }
+            tag.put("investments", investmentsTag);
             
             return tag;
         }
@@ -257,6 +298,13 @@ public class CityData extends SavedData {
                 // 由于无法从UUID获取玩家名，旧官员数据将被忽略
                 // 玩家需要重新被添加为官员
                 System.out.println("[CityData] 检测到旧版官员数据格式，已忽略。官员需要重新添加。");
+            }
+
+            if (tag.contains("investments", Tag.TAG_LIST)) {
+                ListTag investmentsTag = tag.getList("investments", Tag.TAG_COMPOUND);
+                for (Tag investmentTag : investmentsTag) {
+                    info.addInvestmentPosition(InvestmentPosition.deserialize((CompoundTag) investmentTag));
+                }
             }
             
             return info;

@@ -1,6 +1,7 @@
 package com.xiaoliang.simukraft.network;
 
 import com.xiaoliang.simukraft.world.CityData;
+import com.xiaoliang.simukraft.world.CityInvestmentService;
 import com.xiaoliang.simukraft.world.CityLoanService;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
@@ -68,7 +69,7 @@ public class CityLoanActionPacket {
 
             NetworkManager.sendToPlayer(new CityFinanceInfoResponsePacket(
                     message.cityCorePos,
-                    CityLoanService.createSnapshot(cityInfo)
+                    CityInvestmentService.createFinanceSnapshot(level, cityInfo)
             ), player);
         });
         context.get().setPacketHandled(true);

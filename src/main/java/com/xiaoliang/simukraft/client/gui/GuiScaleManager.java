@@ -36,6 +36,16 @@ public class GuiScaleManager {
     }
 
     /**
+     * 应用固定缩放，保存原始值
+     */
+    public static boolean applyFixedScale(int scale) {
+        if (originalScale < 0) {
+            originalScale = readOriginalScale();
+        }
+        return setScaleIfNeeded(scale);
+    }
+
+    /**
      * 优先使用 3x 缩放；若界面在当前分辨率下放不下，则自动降为 2x/1x。
      */
     public static boolean applyBestFitScale(int contentWidth, int contentHeight) {

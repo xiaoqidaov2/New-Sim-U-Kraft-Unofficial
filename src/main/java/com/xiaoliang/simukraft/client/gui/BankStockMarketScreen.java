@@ -6,6 +6,7 @@ import com.xiaoliang.simukraft.network.NetworkManager;
 import com.xiaoliang.simukraft.network.StockTradeActionPacket;
 import com.xiaoliang.simukraft.world.StockMarketData;
 import com.xiaoliang.simukraft.world.StockMarketService;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -59,6 +60,7 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
 
     public BankStockMarketScreen(BlockPos controlBoxPos) {
         super(Component.translatable("gui.bank_stock_market.title"));
+        GuiScaleManager.applyFixedScale(2);
         this.controlBoxPos = controlBoxPos;
         playOpenSound();
     }
@@ -70,6 +72,7 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
 
     @Override
     protected void init() {
+        GuiScaleManager.applyFixedScale(2);
         super.init();
         int centerX = this.width / 2;
         int bottomY = this.height - 30;
@@ -636,7 +639,14 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
     }
 
     private void closeScreen() {
+        GuiScaleManager.forceRestore();
         nn(this.minecraft).setScreen(new BankControlBoxScreen(controlBoxPos));
+    }
+
+    @Override
+    public void resize(@Nonnull Minecraft minecraft, int width, int height) {
+        GuiScaleManager.applyFixedScale(2);
+        super.resize(minecraft, width, height);
     }
 
     @Nonnull
