@@ -25,6 +25,8 @@ import net.minecraftforge.fml.common.Mod;
 import org.joml.Matrix4f;
 
 import java.util.HashSet;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -49,6 +51,8 @@ public class BuildingBoundsRenderer {
     private static final int COLOR_INTRUSION_AIR = 0x60FFFF00;   // 半透明黄色（侵入空气）
     private static final int COLOR_INTRUSION_BLOCK = 0x60FF0000; // 半透明红色（侵入方块）
     private static final int COLOR_INTRUSION_SAME = 0x60FF8000;  // 半透明橙色（同种类方块）
+    private static final int COLOR_PREVIEW_RANGE = 0xFF00FFFF;
+    private static final int COLOR_PREVIEW_RANGE_CONFLICT = 0xFFFF5555;
     private static final int COLOR_CITY_BORDER = 0x553C66FF;
     private static final int CITY_BORDER_MIN_HEIGHT = -64;
     private static final int CITY_BORDER_MAX_HEIGHT = 320;
@@ -56,6 +60,10 @@ public class BuildingBoundsRenderer {
 
     // 预览侵入检测开关（仅放置者可见）
     private static UUID previewPlayerId = null;
+    private static int cachedIntrusionPreviewRevision = Integer.MIN_VALUE;
+    private static String cachedIntrusionWorldId = "";
+    private static List<IntrusionHighlight> cachedIntrusionHighlights = Collections.emptyList();
+    private static Set<PlacedBuildingManager.PlacedBuildingData> cachedIntrudedBuildings = Collections.emptySet();
 
     /**
      * 设置建筑界限显示状态
@@ -86,6 +94,7 @@ public class BuildingBoundsRenderer {
      */
     public static void setPreviewPlayerId(UUID playerId) {
         previewPlayerId = playerId;
+        invalidateIntrusionCache();
     }
 
     /**
@@ -256,56 +265,128 @@ public class BuildingBoundsRenderer {
      * 仅放置预览图的玩家可见，同时显示被侵入建筑的白色界限框
      */
     private static void renderPreviewIntrusions(PoseStack poseStack, Vec3 cameraPos, Minecraft mc) {
-        List<SchematicBlockData> previewBlocks = BuildingPreviewManager.getActiveBlocks();
-        if (previewBlocks.isEmpty()) return;
-
-        // 获取所有已放置的建筑
-        var allBuildings = PlacedBuildingManager.getAllBuildings();
-        if (allBuildings.isEmpty()) return;
+        if (BuildingPreviewManager.isRangeOnlyPreview()) {
+            renderRangeOnlyPreviewBounds(poseStack, cameraPos, mc);
+            return;
+        }
 
         String currentWorldId = mc.level.dimension().location().toString();
+        if (cachedIntrusionPreviewRevision != BuildingPreviewManager.getPreviewRevision()
+                || !currentWorldId.equals(cachedIntrusionWorldId)) {
+            rebuildIntrusionCache(mc, currentWorldId);
+        }
 
-        // 记录被侵入的建筑，用于后续渲染界限框（menglannnn: 避免重复渲染同一建筑的界限）
-        java.util.Set<PlacedBuildingManager.PlacedBuildingData> intrudedBuildings = new java.util.HashSet<>();
+        if (!cachedIntrusionHighlights.isEmpty()) {
+            renderIntrusiveBlocks(poseStack, cameraPos, cachedIntrusionHighlights);
+        }
 
+        // 渲染所有被侵入建筑的白色界限框（menglannnn: 让玩家清楚看到被侵入的建筑范围）
+        for (PlacedBuildingManager.PlacedBuildingData building : cachedIntrudedBuildings) {
+            renderBuildingBoundsForIntrusion(poseStack, cameraPos, building);
+        }
+    }
+
+    /**
+     * 超大型建筑仅渲染整体范围框，避免客户端为预览加载全部 NBT 方块。
+     */
+    private static void renderRangeOnlyPreviewBounds(PoseStack poseStack, Vec3 cameraPos, Minecraft mc) {
+        AABB previewBounds = BuildingPreviewManager.getPreviewBounds();
+        if (previewBounds == null) {
+            return;
+        }
+
+        boolean intersectsExistingBuilding = false;
+        String currentWorldId = mc.level.dimension().location().toString();
+        for (PlacedBuildingManager.PlacedBuildingData building : PlacedBuildingManager.getAllBuildings()) {
+            if (!building.worldId.equals(currentWorldId)) {
+                continue;
+            }
+
+            if (!previewBounds.intersects(toWorldBounds(building))) {
+                continue;
+            }
+
+            intersectsExistingBuilding = true;
+            renderBuildingBoundsForIntrusion(poseStack, cameraPos, building);
+        }
+
+        renderBoxOutline(
+                poseStack,
+                cameraPos,
+                previewBounds,
+                intersectsExistingBuilding ? COLOR_PREVIEW_RANGE_CONFLICT : COLOR_PREVIEW_RANGE
+        );
+    }
+
+    private static void rebuildIntrusionCache(Minecraft mc, String currentWorldId) {
+        List<SchematicBlockData> previewBlocks = BuildingPreviewManager.getSurfaceBlocks();
+        if (previewBlocks.isEmpty()) {
+            cachedIntrusionHighlights = Collections.emptyList();
+            cachedIntrudedBuildings = Collections.emptySet();
+            cachedIntrusionPreviewRevision = BuildingPreviewManager.getPreviewRevision();
+            cachedIntrusionWorldId = currentWorldId;
+            return;
+        }
+
+        var allBuildings = PlacedBuildingManager.getAllBuildings();
+        if (allBuildings.isEmpty()) {
+            cachedIntrusionHighlights = Collections.emptyList();
+            cachedIntrudedBuildings = Collections.emptySet();
+            cachedIntrusionPreviewRevision = BuildingPreviewManager.getPreviewRevision();
+            cachedIntrusionWorldId = currentWorldId;
+            return;
+        }
+
+        AABB previewBounds = computePreviewBounds(previewBlocks);
+        List<PlacedBuildingManager.PlacedBuildingData> candidateBuildings = new ArrayList<>();
+        for (PlacedBuildingManager.PlacedBuildingData building : allBuildings) {
+            if (!building.worldId.equals(currentWorldId)) {
+                continue;
+            }
+            if (previewBounds.intersects(toWorldBounds(building))) {
+                candidateBuildings.add(building);
+            }
+        }
+
+        if (candidateBuildings.isEmpty()) {
+            cachedIntrusionHighlights = Collections.emptyList();
+            cachedIntrudedBuildings = Collections.emptySet();
+            cachedIntrusionPreviewRevision = BuildingPreviewManager.getPreviewRevision();
+            cachedIntrusionWorldId = currentWorldId;
+            return;
+        }
+
+        List<IntrusionHighlight> highlights = new ArrayList<>();
+        Set<PlacedBuildingManager.PlacedBuildingData> intrudedBuildings = new HashSet<>();
         for (SchematicBlockData previewBlock : previewBlocks) {
             BlockPos pos = previewBlock.pos();
             BlockState previewState = previewBlock.blockState();
 
-            for (PlacedBuildingManager.PlacedBuildingData building : allBuildings) {
-                // 只检测同一世界的建筑
-                if (!building.worldId.equals(currentWorldId)) continue;
-
-                // 检查预览方块是否在该建筑界限内
-                if (isPosInBuildingBounds(pos, building)) {
-                    BlockState worldState = mc.level.getBlockState(pos);
-                    int color;
-
-                    if (worldState.isAir()) {
-                        // 侵入部分是空气 -> 半透明黄色
-                        color = COLOR_INTRUSION_AIR;
-                    } else if (worldState.getBlock() == previewState.getBlock()) {
-                        // 侵入部分是同种类方块 -> 半透明橙色
-                        color = COLOR_INTRUSION_SAME;
-                    } else {
-                        // 侵入部分是其他方块 -> 半透明红色
-                        color = COLOR_INTRUSION_BLOCK;
-                    }
-
-                    // 渲染该位置的半透明方块面
-                    renderIntrusiveBlock(poseStack, cameraPos, pos, color);
-
-                    // 记录被侵入的建筑
-                    intrudedBuildings.add(building);
-                    break; // 找到一个侵入即可，不需要检查其他建筑
+            for (PlacedBuildingManager.PlacedBuildingData building : candidateBuildings) {
+                if (!isPosInBuildingBounds(pos, building)) {
+                    continue;
                 }
+
+                BlockState worldState = mc.level.getBlockState(pos);
+                int color;
+                if (worldState.isAir()) {
+                    color = COLOR_INTRUSION_AIR;
+                } else if (worldState.getBlock() == previewState.getBlock()) {
+                    color = COLOR_INTRUSION_SAME;
+                } else {
+                    color = COLOR_INTRUSION_BLOCK;
+                }
+
+                highlights.add(new IntrusionHighlight(pos, color));
+                intrudedBuildings.add(building);
+                break;
             }
         }
 
-        // 渲染所有被侵入建筑的白色界限框（menglannnn: 让玩家清楚看到被侵入的建筑范围）
-        for (PlacedBuildingManager.PlacedBuildingData building : intrudedBuildings) {
-            renderBuildingBoundsForIntrusion(poseStack, cameraPos, building);
-        }
+        cachedIntrusionHighlights = highlights;
+        cachedIntrudedBuildings = intrudedBuildings;
+        cachedIntrusionPreviewRevision = BuildingPreviewManager.getPreviewRevision();
+        cachedIntrusionWorldId = currentWorldId;
     }
 
     /**
@@ -340,7 +421,7 @@ public class BuildingBoundsRenderer {
     /**
      * 渲染侵入方块的高亮面（menglannnn: 半透明彩色面覆盖在方块上）
      */
-    private static void renderIntrusiveBlock(PoseStack poseStack, Vec3 cameraPos, BlockPos pos, int color) {
+    private static void renderIntrusiveBlocks(PoseStack poseStack, Vec3 cameraPos, List<IntrusionHighlight> highlights) {
         RenderSystem.enableDepthTest();
         RenderSystem.disableCull();
         RenderSystem.enableBlend();
@@ -352,7 +433,18 @@ public class BuildingBoundsRenderer {
         Tesselator tesselator = Tesselator.getInstance();
         BufferBuilder buffer = tesselator.getBuilder();
         buffer.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
+        Matrix4f matrix = poseStack.last().pose();
+        for (IntrusionHighlight highlight : highlights) {
+            appendIntrusiveBlock(buffer, matrix, cameraPos, highlight.pos(), highlight.color());
+        }
 
+        tesselator.end();
+
+        RenderSystem.enableCull();
+        RenderSystem.disableBlend();
+    }
+
+    private static void appendIntrusiveBlock(BufferBuilder buffer, Matrix4f matrix, Vec3 cameraPos, BlockPos pos, int color) {
         float red = ((color >> 16) & 0xFF) / 255.0f;
         float green = ((color >> 8) & 0xFF) / 255.0f;
         float blue = (color & 0xFF) / 255.0f;
@@ -365,49 +457,73 @@ public class BuildingBoundsRenderer {
         double maxY = minY + 1.0;
         double maxZ = minZ + 1.0;
 
-        Matrix4f matrix = poseStack.last().pose();
-
-        // 六个面
-        // 底面 (Y-)
         buffer.vertex(matrix, (float)minX, (float)minY, (float)minZ).color(red, green, blue, alpha).endVertex();
         buffer.vertex(matrix, (float)maxX, (float)minY, (float)minZ).color(red, green, blue, alpha).endVertex();
         buffer.vertex(matrix, (float)maxX, (float)minY, (float)maxZ).color(red, green, blue, alpha).endVertex();
         buffer.vertex(matrix, (float)minX, (float)minY, (float)maxZ).color(red, green, blue, alpha).endVertex();
 
-        // 顶面 (Y+)
         buffer.vertex(matrix, (float)minX, (float)maxY, (float)minZ).color(red, green, blue, alpha).endVertex();
         buffer.vertex(matrix, (float)minX, (float)maxY, (float)maxZ).color(red, green, blue, alpha).endVertex();
         buffer.vertex(matrix, (float)maxX, (float)maxY, (float)maxZ).color(red, green, blue, alpha).endVertex();
         buffer.vertex(matrix, (float)maxX, (float)maxY, (float)minZ).color(red, green, blue, alpha).endVertex();
 
-        // 前面 (Z-)
         buffer.vertex(matrix, (float)minX, (float)minY, (float)minZ).color(red, green, blue, alpha).endVertex();
         buffer.vertex(matrix, (float)minX, (float)maxY, (float)minZ).color(red, green, blue, alpha).endVertex();
         buffer.vertex(matrix, (float)maxX, (float)maxY, (float)minZ).color(red, green, blue, alpha).endVertex();
         buffer.vertex(matrix, (float)maxX, (float)minY, (float)minZ).color(red, green, blue, alpha).endVertex();
 
-        // 后面 (Z+)
         buffer.vertex(matrix, (float)minX, (float)minY, (float)maxZ).color(red, green, blue, alpha).endVertex();
         buffer.vertex(matrix, (float)maxX, (float)minY, (float)maxZ).color(red, green, blue, alpha).endVertex();
         buffer.vertex(matrix, (float)maxX, (float)maxY, (float)maxZ).color(red, green, blue, alpha).endVertex();
         buffer.vertex(matrix, (float)minX, (float)maxY, (float)maxZ).color(red, green, blue, alpha).endVertex();
 
-        // 左面 (X-)
         buffer.vertex(matrix, (float)minX, (float)minY, (float)minZ).color(red, green, blue, alpha).endVertex();
         buffer.vertex(matrix, (float)minX, (float)minY, (float)maxZ).color(red, green, blue, alpha).endVertex();
         buffer.vertex(matrix, (float)minX, (float)maxY, (float)maxZ).color(red, green, blue, alpha).endVertex();
         buffer.vertex(matrix, (float)minX, (float)maxY, (float)minZ).color(red, green, blue, alpha).endVertex();
 
-        // 右面 (X+)
         buffer.vertex(matrix, (float)maxX, (float)minY, (float)minZ).color(red, green, blue, alpha).endVertex();
         buffer.vertex(matrix, (float)maxX, (float)maxY, (float)minZ).color(red, green, blue, alpha).endVertex();
         buffer.vertex(matrix, (float)maxX, (float)maxY, (float)maxZ).color(red, green, blue, alpha).endVertex();
         buffer.vertex(matrix, (float)maxX, (float)minY, (float)maxZ).color(red, green, blue, alpha).endVertex();
+    }
 
-        tesselator.end();
+    private static AABB computePreviewBounds(List<SchematicBlockData> previewBlocks) {
+        BlockPos firstPos = previewBlocks.get(0).pos();
+        int minX = firstPos.getX();
+        int minY = firstPos.getY();
+        int minZ = firstPos.getZ();
+        int maxX = minX;
+        int maxY = minY;
+        int maxZ = minZ;
 
-        RenderSystem.enableCull();
-        RenderSystem.disableBlend();
+        for (SchematicBlockData block : previewBlocks) {
+            BlockPos pos = block.pos();
+            minX = Math.min(minX, pos.getX());
+            minY = Math.min(minY, pos.getY());
+            minZ = Math.min(minZ, pos.getZ());
+            maxX = Math.max(maxX, pos.getX());
+            maxY = Math.max(maxY, pos.getY());
+            maxZ = Math.max(maxZ, pos.getZ());
+        }
+
+        return new AABB(minX, minY, minZ, maxX + 1, maxY + 1, maxZ + 1);
+    }
+
+    private static AABB toWorldBounds(PlacedBuildingManager.PlacedBuildingData building) {
+        BlockPos minPos = building.minPos.offset(building.controlBoxPos);
+        BlockPos maxPos = building.maxPos.offset(building.controlBoxPos);
+        return new AABB(
+                minPos.getX(), minPos.getY(), minPos.getZ(),
+                maxPos.getX() + 1, maxPos.getY() + 1, maxPos.getZ() + 1
+        );
+    }
+
+    private static void invalidateIntrusionCache() {
+        cachedIntrusionPreviewRevision = Integer.MIN_VALUE;
+        cachedIntrusionWorldId = "";
+        cachedIntrusionHighlights = Collections.emptyList();
+        cachedIntrudedBuildings = Collections.emptySet();
     }
 
     /**
@@ -479,5 +595,8 @@ public class BuildingBoundsRenderer {
                                   float r, float g, float b, float a) {
         buffer.vertex(matrix, (float)x1, (float)y1, (float)z1).color(r, g, b, a).endVertex();
         buffer.vertex(matrix, (float)x2, (float)y2, (float)z2).color(r, g, b, a).endVertex();
+    }
+
+    private record IntrusionHighlight(BlockPos pos, int color) {
     }
 }

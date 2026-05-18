@@ -23,8 +23,10 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -45,6 +47,7 @@ public class CityChunkMapScreen extends Screen {
 
     private static final double MIN_ZOOM = 0.25;
     private static final double MAX_ZOOM = 16.0;
+    private static final double CHUNK_COST = 10.0;
 
     private double zoom = 1.0;
 
@@ -64,7 +67,15 @@ public class CityChunkMapScreen extends Screen {
     private boolean showConfirmWindow = false;
     @Nullable
     private ChunkPos confirmChunkPos = null;
+    @Nonnull
+    private final List<ChunkPos> confirmChunkSelection = new ArrayList<>();
     private double confirmCost = 0.0;
+
+    private boolean areaSelecting = false;
+    private int selectionStartChunkX = Integer.MIN_VALUE;
+    private int selectionStartChunkZ = Integer.MIN_VALUE;
+    private int selectionEndChunkX = Integer.MIN_VALUE;
+    private int selectionEndChunkZ = Integer.MIN_VALUE;
 
     private static final int CONFIRM_WINDOW_WIDTH = 320;
     private static final int CONFIRM_WINDOW_HEIGHT = 180;
@@ -120,6 +131,7 @@ public class CityChunkMapScreen extends Screen {
     private void onBuyChunkResult(boolean success, long chunkPosLong, double cost, String errorMessage) {
         showConfirmWindow = false;
         confirmChunkPos = null;
+        confirmChunkSelection.clear();
         confirmCost = 0.0;
     }
 
@@ -154,6 +166,7 @@ public class CityChunkMapScreen extends Screen {
         renderPlayerMarker(guiGraphics);
 
         updateHover(mouseX, mouseY);
+        renderAreaSelection(guiGraphics);
         renderHoverHighlight(guiGraphics);
 
         renderHud(guiGraphics, mouseX, mouseY);
@@ -441,6 +454,22 @@ public class CityChunkMapScreen extends Screen {
                 ty += lineH;
             }
         }
+        
+        if (areaSelecting) {
+            ChunkSelectionBounds selectionBounds = getCurrentSelectionBounds();
+            if (selectionBounds != null) {
+                String selectionText = safeString(Component.translatable(
+                        "gui.city_map.selection_status",
+                        selectionBounds.minChunkX(),
+                        selectionBounds.minChunkZ(),
+                        selectionBounds.maxChunkX(),
+                        selectionBounds.maxChunkZ()
+                ).getString());
+                int selectionWidth = nn(font).width(selectionText);
+                guiGraphics.fill(width - selectionWidth - 8, 16, width, 30, 0x80000000);
+                guiGraphics.drawString(nn(font), selectionText, width - selectionWidth - 4, 19, 0x55FFFF);
+            }
+        }
 
         String hint = "[ESC] " + Component.translatable("gui.simukraft.close_map").getString()
                 + "  " + Component.translatable("gui.confirm_buy_chunk.hint").getString();
@@ -467,16 +496,34 @@ public class CityChunkMapScreen extends Screen {
         int infoY = windowY + 32;
         int lineHeight = 14;
 
-        ChunkPos chunkPos = nn(confirmChunkPos);
-        String chunkCoords = safeString(Component.translatable("gui.city_map.chunk_coordinate", chunkPos.x, chunkPos.z).getString());
-        guiGraphics.drawString(nn(font), chunkCoords, windowX + 15, infoY, 0xFFFF00);
+        if (confirmChunkSelection.size() > 1) {
+            ChunkSelectionBounds bounds = nn(getConfirmSelectionBounds());
+            String selectionCount = safeString(Component.translatable(
+                    "gui.confirm_buy_chunk.selection_count",
+                    confirmChunkSelection.size()
+            ).getString());
+            guiGraphics.drawString(nn(font), selectionCount, windowX + 15, infoY, 0xFFFF00);
 
-        int blockStartX = chunkPos.x * 16;
-        int blockEndX = blockStartX + 15;
-        int blockStartZ = chunkPos.z * 16;
-        int blockEndZ = blockStartZ + 15;
-        String blockRange = safeString(Component.translatable("gui.city_map.block_range", blockStartX, blockEndX, blockStartZ, blockEndZ).getString());
-        guiGraphics.drawString(nn(font), blockRange, windowX + 15, infoY + lineHeight, 0xAAAAAA);
+            String selectionRange = safeString(Component.translatable(
+                    "gui.confirm_buy_chunk.selection_range",
+                    bounds.minChunkX(),
+                    bounds.minChunkZ(),
+                    bounds.maxChunkX(),
+                    bounds.maxChunkZ()
+            ).getString());
+            guiGraphics.drawString(nn(font), selectionRange, windowX + 15, infoY + lineHeight, 0xAAAAAA);
+        } else {
+            ChunkPos chunkPos = nn(confirmChunkPos);
+            String chunkCoords = safeString(Component.translatable("gui.city_map.chunk_coordinate", chunkPos.x, chunkPos.z).getString());
+            guiGraphics.drawString(nn(font), chunkCoords, windowX + 15, infoY, 0xFFFF00);
+
+            int blockStartX = chunkPos.x * 16;
+            int blockEndX = blockStartX + 15;
+            int blockStartZ = chunkPos.z * 16;
+            int blockEndZ = blockStartZ + 15;
+            String blockRange = safeString(Component.translatable("gui.city_map.block_range", blockStartX, blockEndX, blockStartZ, blockEndZ).getString());
+            guiGraphics.drawString(nn(font), blockRange, windowX + 15, infoY + lineHeight, 0xAAAAAA);
+        }
 
         guiGraphics.fill(windowX + 10, infoY + lineHeight * 2 + 5, windowX + CONFIRM_WINDOW_WIDTH - 10, infoY + lineHeight * 2 + 6, 0xFF444444);
 
@@ -539,21 +586,10 @@ public class CityChunkMapScreen extends Screen {
         if (showConfirmWindow) {
             if (button == 0) {
                 if (isClickOnConfirmButton(mouseX, mouseY)) {
-                    UUID currentCityId = cityData.getCityId();
-                    if (currentCityId != null && confirmChunkPos != null) {
-                        BuyChunkPacket packet = new BuyChunkPacket(currentCityId, confirmChunkPos);
-                        NetworkManager.INSTANCE.sendToServer(packet);
-                        Minecraft.getInstance().getSoundManager()
-                                .play(nn(SimpleSoundInstance.forUI(nn(SoundEvents.UI_BUTTON_CLICK), 1.0F)));
-                    }
-                    showConfirmWindow = false;
-                    confirmChunkPos = null;
-                    confirmCost = 0.0;
+                    submitPendingChunkPurchases();
                     return true;
                 } else if (isClickOnCancelButton(mouseX, mouseY)) {
-                    showConfirmWindow = false;
-                    confirmChunkPos = null;
-                    confirmCost = 0.0;
+                    clearConfirmSelection();
                     Minecraft.getInstance().getSoundManager()
                             .play(nn(SimpleSoundInstance.forUI(nn(SoundEvents.UI_BUTTON_CLICK), 1.0F)));
                     return true;
@@ -567,6 +603,16 @@ public class CityChunkMapScreen extends Screen {
             lastDragX = mouseX;
             lastDragY = mouseY;
             return true;
+        } else if (button == 2) {
+            ChunkPos chunkPos = getChunkPosAt(mouseX, mouseY);
+            if (chunkPos != null && cityData.getCityId() != null) {
+                areaSelecting = true;
+                selectionStartChunkX = chunkPos.x;
+                selectionStartChunkZ = chunkPos.z;
+                selectionEndChunkX = chunkPos.x;
+                selectionEndChunkZ = chunkPos.z;
+                return true;
+            }
         } else if (button == 1) {
             if (hoveredChunkX != Integer.MIN_VALUE) {
                 long chunkLong = ChunkPos.asLong(hoveredChunkX, hoveredChunkZ);
@@ -574,9 +620,7 @@ public class CityChunkMapScreen extends Screen {
                 if (isAvailable) {
                     UUID currentCityId = cityData.getCityId();
                     if (currentCityId != null) {
-                        confirmChunkPos = new ChunkPos(hoveredChunkX, hoveredChunkZ);
-                        confirmCost = 10.0;
-                        showConfirmWindow = true;
+                        openConfirmWindow(List.of(new ChunkPos(hoveredChunkX, hoveredChunkZ)));
                         return true;
                     }
                 }
@@ -589,6 +633,15 @@ public class CityChunkMapScreen extends Screen {
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         if (button == 0) {
             dragging = false;
+            return true;
+        } else if (button == 2 && areaSelecting) {
+            List<ChunkPos> selectedChunks = collectPurchasableChunksFromSelection();
+            resetAreaSelection();
+            if (!selectedChunks.isEmpty()) {
+                openConfirmWindow(selectedChunks);
+            } else {
+                notifySelectionEmpty();
+            }
             return true;
         }
         return super.mouseReleased(mouseX, mouseY, button);
@@ -603,6 +656,13 @@ public class CityChunkMapScreen extends Screen {
             viewCenterZ -= dy / zoom;
             lastDragX = mouseX;
             lastDragY = mouseY;
+            return true;
+        } else if (button == 2 && areaSelecting) {
+            ChunkPos chunkPos = getChunkPosAt(mouseX, mouseY);
+            if (chunkPos != null) {
+                selectionEndChunkX = chunkPos.x;
+                selectionEndChunkZ = chunkPos.z;
+            }
             return true;
         }
         return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
@@ -653,5 +713,182 @@ public class CityChunkMapScreen extends Screen {
      */
     public static void open() {
         Minecraft.getInstance().setScreen(new CityChunkMapScreen());
+    }
+
+    @Nullable
+    private ChunkPos getChunkPosAt(double mouseX, double mouseY) {
+        if (mouseX < 0 || mouseX > width || mouseY < 0 || mouseY > height) {
+            return null;
+        }
+
+        double halfW = width / 2.0;
+        double halfH = height / 2.0;
+        double worldX = viewCenterX + (mouseX - halfW) / zoom;
+        double worldZ = viewCenterZ + (mouseY - halfH) / zoom;
+        return new ChunkPos((int) Math.floor(worldX / 16.0), (int) Math.floor(worldZ / 16.0));
+    }
+
+    private void renderAreaSelection(GuiGraphics guiGraphics) {
+        ChunkSelectionBounds bounds = getCurrentSelectionBounds();
+        if (bounds == null) {
+            return;
+        }
+
+        double halfW = width / 2.0;
+        double halfH = height / 2.0;
+        double chunkPixels = 16.0 * zoom;
+
+        for (int chunkX = bounds.minChunkX(); chunkX <= bounds.maxChunkX(); chunkX++) {
+            for (int chunkZ = bounds.minChunkZ(); chunkZ <= bounds.maxChunkZ(); chunkZ++) {
+                int sx = (int) (halfW + (chunkX * 16.0 - viewCenterX) * zoom);
+                int sy = (int) (halfH + (chunkZ * 16.0 - viewCenterZ) * zoom);
+                int sw = (int) chunkPixels;
+                int sh = (int) chunkPixels;
+
+                long chunkLong = ChunkPos.asLong(chunkX, chunkZ);
+                int color = cityData.isChunkOwned(chunkLong) ? 0x35FF5555 : 0x3522CCFF;
+                guiGraphics.fill(sx, sy, sx + sw, sy + sh, color);
+            }
+        }
+    }
+
+    @Nullable
+    private ChunkSelectionBounds getCurrentSelectionBounds() {
+        if (!areaSelecting || selectionStartChunkX == Integer.MIN_VALUE || selectionEndChunkX == Integer.MIN_VALUE) {
+            return null;
+        }
+        return new ChunkSelectionBounds(
+                Math.min(selectionStartChunkX, selectionEndChunkX),
+                Math.max(selectionStartChunkX, selectionEndChunkX),
+                Math.min(selectionStartChunkZ, selectionEndChunkZ),
+                Math.max(selectionStartChunkZ, selectionEndChunkZ)
+        );
+    }
+
+    @Nullable
+    private ChunkSelectionBounds getConfirmSelectionBounds() {
+        if (confirmChunkSelection.isEmpty()) {
+            return null;
+        }
+
+        int minChunkX = Integer.MAX_VALUE;
+        int maxChunkX = Integer.MIN_VALUE;
+        int minChunkZ = Integer.MAX_VALUE;
+        int maxChunkZ = Integer.MIN_VALUE;
+        for (ChunkPos chunkPos : confirmChunkSelection) {
+            minChunkX = Math.min(minChunkX, chunkPos.x);
+            maxChunkX = Math.max(maxChunkX, chunkPos.x);
+            minChunkZ = Math.min(minChunkZ, chunkPos.z);
+            maxChunkZ = Math.max(maxChunkZ, chunkPos.z);
+        }
+        return new ChunkSelectionBounds(minChunkX, maxChunkX, minChunkZ, maxChunkZ);
+    }
+
+    private List<ChunkPos> collectPurchasableChunksFromSelection() {
+        ChunkSelectionBounds bounds = getCurrentSelectionBounds();
+        UUID currentCityId = cityData.getCityId();
+        if (bounds == null || currentCityId == null) {
+            return List.of();
+        }
+
+        List<ChunkPos> availableChunks = new ArrayList<>();
+        for (int chunkX = bounds.minChunkX(); chunkX <= bounds.maxChunkX(); chunkX++) {
+            for (int chunkZ = bounds.minChunkZ(); chunkZ <= bounds.maxChunkZ(); chunkZ++) {
+                long chunkLong = ChunkPos.asLong(chunkX, chunkZ);
+                if (!cityData.isChunkOwned(chunkLong)) {
+                    availableChunks.add(new ChunkPos(chunkX, chunkZ));
+                }
+            }
+        }
+
+        if (availableChunks.isEmpty()) {
+            return List.of();
+        }
+
+        Set<Long> simulatedOwnedChunks = new HashSet<>(cityData.getCurrentCityChunks());
+        List<ChunkPos> orderedChunks = new ArrayList<>(availableChunks.size());
+        List<ChunkPos> pendingChunks = new ArrayList<>(availableChunks);
+
+        boolean progress;
+        do {
+            progress = false;
+            for (int index = 0; index < pendingChunks.size(); index++) {
+                ChunkPos chunkPos = pendingChunks.get(index);
+                if (!isAdjacentToOwned(simulatedOwnedChunks, chunkPos)) {
+                    continue;
+                }
+
+                pendingChunks.remove(index--);
+                orderedChunks.add(chunkPos);
+                simulatedOwnedChunks.add(chunkPos.toLong());
+                progress = true;
+            }
+        } while (progress);
+
+        return orderedChunks;
+    }
+
+    private boolean isAdjacentToOwned(Set<Long> ownedChunks, ChunkPos chunkPos) {
+        if (ownedChunks.isEmpty()) {
+            return true;
+        }
+
+        return ownedChunks.contains(ChunkPos.asLong(chunkPos.x, chunkPos.z - 1))
+                || ownedChunks.contains(ChunkPos.asLong(chunkPos.x, chunkPos.z + 1))
+                || ownedChunks.contains(ChunkPos.asLong(chunkPos.x - 1, chunkPos.z))
+                || ownedChunks.contains(ChunkPos.asLong(chunkPos.x + 1, chunkPos.z));
+    }
+
+    private void resetAreaSelection() {
+        areaSelecting = false;
+        selectionStartChunkX = Integer.MIN_VALUE;
+        selectionStartChunkZ = Integer.MIN_VALUE;
+        selectionEndChunkX = Integer.MIN_VALUE;
+        selectionEndChunkZ = Integer.MIN_VALUE;
+    }
+
+    private void openConfirmWindow(List<ChunkPos> chunkSelection) {
+        if (chunkSelection.isEmpty()) {
+            return;
+        }
+
+        confirmChunkSelection.clear();
+        confirmChunkSelection.addAll(chunkSelection);
+        confirmChunkPos = chunkSelection.get(0);
+        confirmCost = chunkSelection.size() * CHUNK_COST;
+        showConfirmWindow = true;
+    }
+
+    private void clearConfirmSelection() {
+        showConfirmWindow = false;
+        confirmChunkPos = null;
+        confirmChunkSelection.clear();
+        confirmCost = 0.0;
+    }
+
+    private void submitPendingChunkPurchases() {
+        UUID currentCityId = cityData.getCityId();
+        if (currentCityId == null || confirmChunkSelection.isEmpty()) {
+            clearConfirmSelection();
+            return;
+        }
+
+        for (ChunkPos chunkPos : confirmChunkSelection) {
+            NetworkManager.INSTANCE.sendToServer(new BuyChunkPacket(currentCityId, chunkPos));
+        }
+
+        Minecraft.getInstance().getSoundManager()
+                .play(nn(SimpleSoundInstance.forUI(nn(SoundEvents.UI_BUTTON_CLICK), 1.0F)));
+        clearConfirmSelection();
+    }
+
+    private void notifySelectionEmpty() {
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player != null) {
+            player.displayClientMessage(nn(Component.translatable("message.simukraft.buy_chunk.error.selection_empty")), true);
+        }
+    }
+
+    private record ChunkSelectionBounds(int minChunkX, int maxChunkX, int minChunkZ, int maxChunkZ) {
     }
 }

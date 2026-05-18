@@ -16,10 +16,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundSource;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraftforge.network.NetworkEvent;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -210,10 +208,8 @@ public class StartConstructionPacket {
 
                     prepareBuilderForConstruction(builder, buildBoxPos);
 
-                    // 解析建筑蓝图，找出所有控制盒位置并注册
-                    List<BlockPos> controlBoxPositions = parseControlBoxesFromBlueprint(
-                        buildingName, category, previewOrigin, facing
-                    );
+                    // 复用任务的蓝图投影结果，避免超大建筑在启动阶段重复解析整份 NBT。
+                    List<BlockPos> controlBoxPositions = task.getControlBoxPositions();
                     if (!controlBoxPositions.isEmpty()) {
                         UUID builderCityId = builder.getCityId();
                         
@@ -265,121 +261,6 @@ public class StartConstructionPacket {
             }
         });
         ctx.get().setPacketHandled(true);
-    }
-
-    /**
-     * 解析建筑蓝图，找出所有控制盒位置
-     * @param buildingName 建筑名称
-     * @param category 建筑类别
-     * @param previewOrigin 预览原点位置
-     * @param facing 朝向
-     * @return 控制盒位置列表
-     */
-    private List<BlockPos> parseControlBoxesFromBlueprint(String buildingName, String category,
-                                                           BlockPos previewOrigin, Direction facing) {
-        List<BlockPos> controlBoxPositions = new ArrayList<>();
-
-        try {
-            // 加载建筑蓝图
-            String filePath = "simukraftbuilding/" + category + "/" + buildingName + ".nbt";
-            List<com.xiaoliang.simukraft.client.preview.SchematicNBTLoader.SchematicBlock> blocks =
-                com.xiaoliang.simukraft.client.preview.SchematicNBTLoader.loadSchematicBlocks(filePath);
-
-            for (com.xiaoliang.simukraft.client.preview.SchematicNBTLoader.SchematicBlock block : blocks) {
-                BlockState state = block.blockState();
-
-                // 检查是否是控制盒方块
-                if (isControlBoxBlock(state)) {
-                    BlockPos relativePos = block.pos();
-                    // 根据朝向旋转坐标
-                    BlockPos rotatedPos = rotatePosition(relativePos, facing);
-                    // 计算最终位置
-                    BlockPos finalPos = new BlockPos(
-                        previewOrigin.getX() + rotatedPos.getX(),
-                        previewOrigin.getY() + rotatedPos.getY(),
-                        previewOrigin.getZ() + rotatedPos.getZ()
-                    );
-                    controlBoxPositions.add(finalPos);
-                    Simukraft.LOGGER.info("[StartConstructionPacket] Found control box position: {}", finalPos);
-                }
-            }
-        } catch (Exception e) {
-            Simukraft.LOGGER.error("[StartConstructionPacket] Failed to parse blueprint: {}", e.getMessage());
-        }
-
-        return controlBoxPositions;
-    }
-
-    /**
-     * 检查方块是否是控制盒
-     */
-    private boolean isControlBoxBlock(BlockState state) {
-        String blockId = net.minecraftforge.registries.ForgeRegistries.BLOCKS.getKey(state.getBlock()).toString();
-        return blockId.contains("control_box") ||
-               blockId.contains("_control_box") ||
-               blockId.equals("simukraft:unit1_control_box") ||
-               blockId.equals("simukraft:wooden_matchbox_control_box") ||
-               blockId.equals("simukraft:two_story_residence_control_box") ||
-               blockId.equals("simukraft:two_bedroom_control_box") ||
-               blockId.equals("simukraft:stone_cottage_control_box") ||
-               blockId.equals("simukraft:cobblestone_cottage_control_box") ||
-               blockId.equals("simukraft:kms_apartment_control_box") ||
-               blockId.equals("simukraft:kms_medium_house_control_box") ||
-               blockId.equals("simukraft:noble_city_apartment_control_box") ||
-               blockId.equals("simukraft:dexin_hotel_control_box") ||
-               blockId.equals("simukraft:medieval_cottage_control_box") ||
-               blockId.equals("simukraft:tuff_residence_control_box") ||
-               blockId.equals("simukraft:big_house_b_control_box") ||
-               blockId.equals("simukraft:red_brick_round_house_control_box") ||
-               blockId.equals("simukraft:huge_stone_brick_villa_control_box") ||
-               blockId.equals("simukraft:giant_tree_house_control_box") ||
-               blockId.equals("simukraft:double_layer_wooden_house_control_box") ||
-               blockId.equals("simukraft:red_eave_wooden_house_control_box") ||
-               blockId.equals("simukraft:wooden_double_layer_villa_control_box") ||
-               blockId.equals("simukraft:mushroom_house_control_box") ||
-               blockId.equals("simukraft:stone_built_cottage_control_box") ||
-               blockId.equals("simukraft:residential_control_box") ||
-               blockId.equals("simukraft:commercial_control_box") ||
-               blockId.equals("simukraft:industrial_control_box") ||
-               blockId.equals("simukraft:other_control_box");
-    }
-
-    /**
-     * 根据朝向旋转坐标
-     */
-    private BlockPos rotatePosition(BlockPos pos, Direction facing) {
-        int x = pos.getX();
-        int y = pos.getY();
-        int z = pos.getZ();
-
-        switch (facing) {
-            case NORTH:
-                // 默认朝向，不旋转
-                break;
-            case EAST:
-                // 顺时针90度
-                int newX1 = -z;
-                int newZ1 = x;
-                x = newX1;
-                z = newZ1;
-                break;
-            case SOUTH:
-                // 180度
-                x = -x;
-                z = -z;
-                break;
-            case WEST:
-                // 逆时针90度
-                int newX2 = z;
-                int newZ2 = -x;
-                x = newX2;
-                z = newZ2;
-                break;
-            default:
-                break;
-        }
-
-        return new BlockPos(x, y, z);
     }
 
     private void prepareBuilderForConstruction(CustomEntity builder, BlockPos buildBoxPos) {

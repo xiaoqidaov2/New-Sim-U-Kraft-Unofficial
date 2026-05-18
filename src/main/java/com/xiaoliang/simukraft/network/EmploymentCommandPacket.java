@@ -21,6 +21,7 @@ import com.xiaoliang.simukraft.world.LogisticsHiredData;
 import com.xiaoliang.simukraft.utils.NPCDataManager;
 import com.xiaoliang.simukraft.utils.NPCEntityLocator;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
@@ -516,9 +517,10 @@ public class EmploymentCommandPacket {
             spawnBuildBoxHireSuccessParticles(serverLevel, npc.blockPosition(), assignment.workplacePos());
         }
 
-        if (targetPos != null) {
-            Simukraft.LOGGER.debug("[EmploymentCommandPacket] schedule hire arrival teleport to {}", targetPos);
-            npc.scheduleHireArrivalTeleport(targetPos);
+        BlockPos arrivalTargetPos = resolveHireArrivalTarget(server, assignment, npcJob, targetPos);
+        if (arrivalTargetPos != null) {
+            Simukraft.LOGGER.debug("[EmploymentCommandPacket] schedule hire arrival teleport to {}", arrivalTargetPos);
+            npc.scheduleHireArrivalTeleport(arrivalTargetPos);
         } else {
             Simukraft.LOGGER.debug("[EmploymentCommandPacket] targetPos is null, skip hire arrival teleport");
         }
@@ -657,6 +659,73 @@ public class EmploymentCommandPacket {
                 0.45D,
                 0.02D
         );
+    }
+
+    private BlockPos resolveHireArrivalTarget(MinecraftServer server,
+                                              com.xiaoliang.simukraft.employment.domain.EmploymentAssignment assignment,
+                                              String resolvedJobType,
+                                              BlockPos workplacePos) {
+        if (server == null || assignment == null || workplacePos == null) {
+            return workplacePos;
+        }
+        if (assignment.workBlockType() != WorkBlockType.COMMERCIAL_CONTROL_BOX || !isBankerJob(resolvedJobType)) {
+            return workplacePos;
+        }
+
+        ServerLevel level = findAssignmentLevel(server, assignment.dimensionId());
+        return level != null ? findSafeStandFloorNear(workplacePos, level) : workplacePos;
+    }
+
+    private ServerLevel findAssignmentLevel(MinecraftServer server, String dimensionId) {
+        if (server == null || dimensionId == null || dimensionId.isBlank()) {
+            return null;
+        }
+        for (ServerLevel level : server.getAllLevels()) {
+            if (dimensionId.equals(level.dimension().location().toString())) {
+                return level;
+            }
+        }
+        return null;
+    }
+
+    private BlockPos findSafeStandFloorNear(BlockPos controlBoxPos, ServerLevel level) {
+        if (controlBoxPos == null || level == null) {
+            return controlBoxPos;
+        }
+
+        BlockPos[] candidates = new BlockPos[]{
+                controlBoxPos.north(),
+                controlBoxPos.south(),
+                controlBoxPos.west(),
+                controlBoxPos.east(),
+                controlBoxPos.north().west(),
+                controlBoxPos.north().east(),
+                controlBoxPos.south().west(),
+                controlBoxPos.south().east(),
+                controlBoxPos.north(2),
+                controlBoxPos.south(2),
+                controlBoxPos.west(2),
+                controlBoxPos.east(2)
+        };
+        for (BlockPos candidate : candidates) {
+            if (isStandableFloor(level, candidate)) {
+                return candidate;
+            }
+        }
+        return controlBoxPos;
+    }
+
+    private boolean isStandableFloor(ServerLevel level, BlockPos floorPos) {
+        if (level == null || floorPos == null) {
+            return false;
+        }
+        return level.getBlockState(floorPos).isFaceSturdy(level, floorPos, Direction.UP)
+                && level.isEmptyBlock(floorPos.above())
+                && level.isEmptyBlock(floorPos.above(2));
+    }
+
+    private boolean isBankerJob(String jobType) {
+        return "banker".equals(jobType);
     }
 
     private CustomEntity tryRestoreNpcEntityForHire(MinecraftServer server,

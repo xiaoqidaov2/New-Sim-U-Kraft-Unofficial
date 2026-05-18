@@ -10,6 +10,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.state.BlockState;
@@ -35,19 +36,39 @@ import java.util.*;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
-@SuppressWarnings("null")
 public class ConstructionTask {
     private static final long MATERIAL_SLEEP_TICKS = 60L;
+    private static final int PREPARATION_PARSE_BATCH_SIZE = 192;
+    private static final int PREPARATION_FINALIZE_BATCH_SIZE = 384;
+    private static final int BLOCK_PRIORITY_BUCKETS = 6;
+    @Nonnull
     private static final Property<Direction> FACING_PROPERTY = requireProperty(BlockStateProperties.FACING);
+    @Nonnull
     private static final Property<Direction> HORIZONTAL_FACING_PROPERTY = requireProperty(BlockStateProperties.HORIZONTAL_FACING);
+    @Nonnull
     private static final Property<Direction> HOPPER_FACING_PROPERTY = requireProperty(BlockStateProperties.FACING_HOPPER);
+    @Nonnull
     private static final Property<Integer> ROTATION_16_PROPERTY = requireProperty(BlockStateProperties.ROTATION_16);
+    @Nonnull
     private static final Property<Direction.Axis> AXIS_PROPERTY = requireProperty(BlockStateProperties.AXIS);
+    @Nonnull
     private static final Property<Direction.Axis> HORIZONTAL_AXIS_PROPERTY = requireProperty(BlockStateProperties.HORIZONTAL_AXIS);
+    @Nonnull
     private static final Property<?> STAIRS_SHAPE_PROPERTY = requireProperty(BlockStateProperties.STAIRS_SHAPE);
+    @Nonnull
     private static final Property<BedPart> BED_PART_PROPERTY = requireProperty(BedBlock.PART);
+    @Nonnull
     private static final Property<Direction> BED_FACING_PROPERTY = requireProperty(BedBlock.FACING);
+    @Nonnull
     private static final Property<DoubleBlockHalf> DOOR_HALF_PROPERTY = requireProperty(DoorBlock.HALF);
+    @Nonnull
+    private static final SchematicNBTLoader.SchematicBlock RELEASED_SOURCE_BLOCK =
+            new SchematicNBTLoader.SchematicBlock(BlockPos.ZERO, Blocks.AIR.defaultBlockState());
+
+    @Nonnull
+    private static <T> T nn(@Nullable T value) {
+        return Objects.requireNonNull(value);
+    }
 
     @Nullable
     private CustomEntity builder;
@@ -67,20 +88,36 @@ public class ConstructionTask {
     private int currentBlockIndex = 0;
     private boolean isCompleted = false;
     @Nonnull
-    private final List<BlockInfo> blocksToPlace;
+    private List<SchematicNBTLoader.SchematicBlock> sourceBlocks = nn(new ArrayList<>());
     @Nonnull
-    private final Map<BlockPos, Integer> blockIndexLookup;
+    private final List<BlockInfo> blocksToPlace = new ArrayList<>();
     @Nonnull
-    private final List<BlockPos> controlBoxPositions;
+    private final Map<BlockPos, Integer> blockIndexLookup = new HashMap<>();
     @Nonnull
-    private final List<LayerRange> layerRanges;
+    private final List<BlockPos> controlBoxPositions = new ArrayList<>();
+    @Nonnull
+    private final Map<String, Integer> requiredMaterialCounts = new LinkedHashMap<>();
+    @Nonnull
+    private final List<LayerRange> layerRanges = new ArrayList<>();
     private int currentLayerRangeIndex = 0;
     @Nullable
     private ServerLevel runtimeLevel = null;
     @Nonnull
-    private final Set<ChunkPos> requiredWorkflowChunks;
+    private final Set<ChunkPos> requiredWorkflowChunks = new LinkedHashSet<>();
     @Nonnull
     private final Set<ChunkPos> workflowForcedChunks = new LinkedHashSet<>();
+    @Nonnull
+    private final NavigableMap<Integer, LayerBuckets> pendingLayerBuckets = new TreeMap<>();
+    @Nonnull
+    private List<Integer> pendingLayerOrder = nn(List.of());
+    private int pendingSourceIndex = 0;
+    private int pendingLayerOrderIndex = 0;
+    private int pendingPriorityIndex = 0;
+    private int pendingPriorityBlockIndex = 0;
+    private int pendingLayerStartIndex = -1;
+    private int totalBlueprintBlocks = 0;
+    private boolean preparationComplete = false;
+    private boolean persistedForcedChunksReconciled = false;
     // 修复：添加区块加载等待计数器，解决退出重进后箱子找不到的问题
     private int chunkLoadWaitTicks = 0;
     private boolean hasNotifiedChunkLoading = false;
@@ -100,12 +137,8 @@ public class ConstructionTask {
         this.facing = Objects.requireNonNull(facing);
         this.displayName = Objects.requireNonNull(displayName);
         this.cost = cost;
-        this.blocksToPlace = List.copyOf(Objects.requireNonNull(loadAndParseBlocks()));
-        this.blockIndexLookup = Map.copyOf(buildBlockIndexLookup(this.blocksToPlace));
-        this.controlBoxPositions = collectControlBoxPositions(this.blocksToPlace);
-        this.layerRanges = List.copyOf(buildLayerRanges(this.blocksToPlace));
         this.materialCache = new BuilderMaterialCache(this.buildBoxPos);
-        this.requiredWorkflowChunks = collectRequiredWorkflowChunks();
+        initializeBlueprintSource();
 
         if (builder.level() instanceof ServerLevel serverLevel) {
             ensureWorkflowChunksForced(serverLevel);
@@ -129,12 +162,8 @@ public class ConstructionTask {
         this.facing = tempFacing != null ? tempFacing : Direction.NORTH;
         this.displayName = Objects.requireNonNull(displayName);
         this.cost = cost;
-        this.blocksToPlace = List.copyOf(Objects.requireNonNull(loadAndParseBlocks()));
-        this.blockIndexLookup = Map.copyOf(buildBlockIndexLookup(this.blocksToPlace));
-        this.controlBoxPositions = collectControlBoxPositions(this.blocksToPlace);
-        this.layerRanges = List.copyOf(buildLayerRanges(this.blocksToPlace));
         this.materialCache = new BuilderMaterialCache(this.buildBoxPos);
-        this.requiredWorkflowChunks = collectRequiredWorkflowChunks();
+        initializeBlueprintSource();
 
         if (level != null) {
             ensureWorkflowChunksForced(level);
@@ -142,120 +171,218 @@ public class ConstructionTask {
 
     }
 
-    @Nonnull
-    private List<BlockInfo> loadAndParseBlocks() {
-        List<BlockInfo> blocks = new ArrayList<>();
-
-        // 使用新的NBT加载方式
+    private void initializeBlueprintSource() {
         String filePath = "simukraftbuilding/" + category + "/" + buildingName + ".nbt";
-        List<SchematicNBTLoader.SchematicBlock> schematicBlocks = SchematicNBTLoader.loadSchematicBlocks(filePath);
-
-        for (SchematicNBTLoader.SchematicBlock schematicBlock : schematicBlocks) {
-            BlockPos pos = Objects.requireNonNull(schematicBlock.pos());
-            BlockState state = Objects.requireNonNull(schematicBlock.blockState());
-
-            // 根据朝向旋转坐标
-            BlockPos rotatedPos = rotatePosition(pos);
-            // 根据朝向旋转方块状态
-            BlockState rotatedState = Objects.requireNonNull(rotateBlockState(state));
-
-            // 计算最终位置
-            BlockPos finalPos = new BlockPos(
-                startPos.getX() + rotatedPos.getX(),
-                startPos.getY() + rotatedPos.getY(),
-                startPos.getZ() + rotatedPos.getZ()
-            );
-
-            blocks.add(new BlockInfo(finalPos, rotatedState, pos));
+        List<SchematicNBTLoader.SchematicBlock> loadedBlocks = SchematicNBTLoader.loadSchematicBlocks(filePath);
+        this.sourceBlocks = loadedBlocks != null ? new ArrayList<>(loadedBlocks) : new ArrayList<>();
+        this.totalBlueprintBlocks = this.sourceBlocks.size();
+        addStaticWorkflowChunks();
+        precomputeBlueprintMetadata();
+        if (this.sourceBlocks.isEmpty()) {
+            this.preparationComplete = true;
         }
-
-        // 按层排序，每层优先级：普通方块 > 需要支撑/重力方块 > 液体相关方块
-        blocks.sort(new LayeredBlockComparator());
-
-        return blocks;
     }
 
     /**
-     * 层建造比较器
-     * 按Y坐标分层，每层内按优先级排序：完整方块 > 不完整方块 > 需要支撑的方块 > 重力方块 > 液体相关方块
+     * 预计算施工启动阶段必须使用的轻量元数据，避免为超大建筑再额外构造整份投影缓存。
      */
-    private static class LayeredBlockComparator implements Comparator<BlockInfo> {
-        @Override
-        public int compare(BlockInfo a, BlockInfo b) {
-            // 首先按Y坐标排序（从低到高，先建底层）
-            int yCompare = Integer.compare(a.pos().getY(), b.pos().getY());
-            if (yCompare != 0) {
-                return yCompare;
-            }
+    private void precomputeBlueprintMetadata() {
+        for (SchematicNBTLoader.SchematicBlock sourceBlock : sourceBlocks) {
+            BlockPos originalPos = Objects.requireNonNull(sourceBlock.pos());
+            BlockState sourceState = Objects.requireNonNull(sourceBlock.blockState());
+            BlockPos rotatedPos = rotatePosition(originalPos);
+            int finalX = startPos.getX() + rotatedPos.getX();
+            int finalY = startPos.getY() + rotatedPos.getY();
+            int finalZ = startPos.getZ() + rotatedPos.getZ();
 
-            // 同一层内按优先级排序
-            int priorityA = getBlockPriority(a.state());
-            int priorityB = getBlockPriority(b.state());
-            return Integer.compare(priorityA, priorityB);
+            requiredWorkflowChunks.add(new ChunkPos(finalX >> 4, finalZ >> 4));
+            collectMaterialRequirement(requiredMaterialCounts, sourceState);
+
+            if (isControlBoxBlock(sourceState)) {
+                controlBoxPositions.add(new BlockPos(finalX, finalY, finalZ));
+            }
+        }
+    }
+
+    private void addStaticWorkflowChunks() {
+        addRequiredWorkflowChunk(startPos);
+        addRequiredWorkflowChunk(buildBoxPos);
+        for (Direction direction : Direction.values()) {
+            addRequiredWorkflowChunk(nn(buildBoxPos.relative(nn(direction))));
+        }
+    }
+
+    private void addRequiredWorkflowChunk(@Nonnull BlockPos pos) {
+        addRequiredWorkflowChunk(new ChunkPos(pos));
+    }
+
+    private void addRequiredWorkflowChunk(@Nonnull ChunkPos chunkPos) {
+        requiredWorkflowChunks.add(chunkPos);
+    }
+
+    /**
+     * 获取方块优先级
+     * 0 = 完整方块（最先建造）
+     * 1 = 不完整方块（台阶、楼梯等）
+     * 2 = 需要支撑的方块（门、活板门、按钮、拉杆、火把、灯笼等）
+     * 3 = 重力方块（最后建造）
+     * 4 = 液体相关方块（统一最后放置）
+     * 5 = 空气方块（拆除任务放到层尾）
+     */
+    private static int getBlockPriority(BlockState state) {
+        Block block = state.getBlock();
+
+        if (state.isAir()) {
+            return 5;
         }
 
-        /**
-         * 获取方块优先级
-         * 0 = 完整方块（最先建造）
-         * 1 = 不完整方块（台阶、楼梯等）
-         * 2 = 需要支撑的方块（门、活板门、按钮、拉杆、火把、灯笼等）
-         * 3 = 重力方块（沙子、沙砾等，最后建造）
-         * 4 = 液体相关方块（统一最后放置，避免流体更新影响前序建造）
-         * 5 = 空气方块（拆除任务放到层尾，避免层切换时先扫大量空气）
-         */
-        private int getBlockPriority(BlockState state) {
-            Block block = state.getBlock();
-
-            if (state.isAir()) {
-                return 5;
-            }
-
-            if (!state.getFluidState().isEmpty()) {
-                return 4;
-            }
-
-            // 重力方块优先级最低（最后建造）
-            if (block instanceof FallingBlock) {
-                return 3;
-            }
-
-            // 需要支撑的方块
-            if (requiresSupport(block)) {
-                return 2;
-            }
-
-            // 不完整方块
-            if (isIncompleteBlock(block)) {
-                return 1;
-            }
-
-            // 完整方块优先级最高（最先建造）
-            return 0;
+        if (!state.getFluidState().isEmpty()) {
+            return 4;
         }
 
-        /**
-         * 检查方块是否需要支撑（会掉落或需要依附在其他方块上）
-         */
-        private boolean requiresSupport(Block block) {
-            return block instanceof DoorBlock ||
-                   block instanceof TrapDoorBlock ||
-                   block instanceof ButtonBlock ||
-                   block instanceof LeverBlock ||
-                   block instanceof TorchBlock ||
-                   block instanceof LanternBlock ||
-                   block instanceof ChainBlock ||
-                   block instanceof IronBarsBlock;
+        if (block instanceof FallingBlock) {
+            return 3;
         }
 
-        /**
-         * 检查方块是否为不完整方块
-         */
-        private boolean isIncompleteBlock(Block block) {
-            return block instanceof SlabBlock ||
-                   block instanceof StairBlock ||
-                   block instanceof FenceBlock ||
-                   block instanceof WallBlock;
+        if (requiresSupport(block)) {
+            return 2;
         }
+
+        if (isIncompleteBlock(block)) {
+            return 1;
+        }
+
+        return 0;
+    }
+
+    private static boolean requiresSupport(Block block) {
+        return block instanceof DoorBlock ||
+               block instanceof TrapDoorBlock ||
+               block instanceof ButtonBlock ||
+               block instanceof LeverBlock ||
+               block instanceof TorchBlock ||
+               block instanceof LanternBlock ||
+               block instanceof ChainBlock ||
+               block instanceof IronBarsBlock;
+    }
+
+    private static boolean isIncompleteBlock(Block block) {
+        return block instanceof SlabBlock ||
+               block instanceof StairBlock ||
+               block instanceof FenceBlock ||
+               block instanceof WallBlock;
+    }
+
+    public void tickPreparation() {
+        if (preparationComplete) {
+            return;
+        }
+
+        processPendingSourceBlocks(PREPARATION_PARSE_BATCH_SIZE);
+        if (pendingSourceIndex >= sourceBlocks.size()) {
+            finalizePreparedBlocks(PREPARATION_FINALIZE_BATCH_SIZE);
+        }
+    }
+
+    public boolean isPreparing() {
+        return !preparationComplete;
+    }
+
+    private void processPendingSourceBlocks(int budget) {
+        int processed = 0;
+        while (pendingSourceIndex < sourceBlocks.size() && processed < budget) {
+            int sourceIndex = pendingSourceIndex++;
+            SchematicNBTLoader.SchematicBlock schematicBlock = sourceBlocks.get(sourceIndex);
+            BlockPos originalPos = Objects.requireNonNull(schematicBlock.pos());
+            BlockState originalState = Objects.requireNonNull(schematicBlock.blockState());
+            releaseProcessedSourceBlock(sourceIndex);
+
+            BlockPos rotatedPos = rotatePosition(originalPos);
+            BlockState rotatedState = Objects.requireNonNull(rotateBlockState(originalState));
+            BlockPos finalPos = new BlockPos(
+                    startPos.getX() + rotatedPos.getX(),
+                    startPos.getY() + rotatedPos.getY(),
+                    startPos.getZ() + rotatedPos.getZ()
+            );
+
+            BlockInfo blockInfo = new BlockInfo(finalPos, rotatedState, originalPos);
+            pendingLayerBuckets
+                    .computeIfAbsent(finalPos.getY(), ignored -> new LayerBuckets())
+                    .add(getBlockPriority(rotatedState), blockInfo);
+
+            processed++;
+        }
+    }
+
+    private void releaseProcessedSourceBlock(int sourceIndex) {
+        if (sourceIndex >= 0 && sourceIndex < sourceBlocks.size()) {
+            sourceBlocks.set(sourceIndex, RELEASED_SOURCE_BLOCK);
+        }
+    }
+
+    private void finalizePreparedBlocks(int budget) {
+        if (pendingLayerOrder.isEmpty()) {
+            pendingLayerOrder = new ArrayList<>(pendingLayerBuckets.keySet());
+            if (pendingLayerOrder.isEmpty()) {
+                finishPreparation();
+                return;
+            }
+        }
+
+        int processed = 0;
+        while (pendingLayerOrderIndex < pendingLayerOrder.size() && processed < budget) {
+            int y = pendingLayerOrder.get(pendingLayerOrderIndex);
+            LayerBuckets layerBuckets = pendingLayerBuckets.get(y);
+            if (layerBuckets == null) {
+                pendingLayerOrderIndex++;
+                pendingPriorityIndex = 0;
+                pendingPriorityBlockIndex = 0;
+                pendingLayerStartIndex = -1;
+                continue;
+            }
+
+            if (pendingLayerStartIndex < 0) {
+                pendingLayerStartIndex = blocksToPlace.size();
+            }
+
+            while (pendingPriorityIndex < BLOCK_PRIORITY_BUCKETS && processed < budget) {
+                List<BlockInfo> bucket = layerBuckets.get(pendingPriorityIndex);
+                while (pendingPriorityBlockIndex < bucket.size() && processed < budget) {
+                    BlockInfo blockInfo = bucket.get(pendingPriorityBlockIndex++);
+                    blockIndexLookup.put(blockInfo.pos(), blocksToPlace.size());
+                    blocksToPlace.add(blockInfo);
+                    processed++;
+                }
+
+                if (pendingPriorityBlockIndex >= bucket.size()) {
+                    pendingPriorityIndex++;
+                    pendingPriorityBlockIndex = 0;
+                }
+            }
+
+            if (pendingPriorityIndex >= BLOCK_PRIORITY_BUCKETS) {
+                if (blocksToPlace.size() > pendingLayerStartIndex) {
+                    layerRanges.add(new LayerRange(y, pendingLayerStartIndex, blocksToPlace.size() - 1));
+                }
+                pendingLayerBuckets.remove(y);
+                pendingLayerOrderIndex++;
+                pendingPriorityIndex = 0;
+                pendingPriorityBlockIndex = 0;
+                pendingLayerStartIndex = -1;
+            }
+        }
+
+        if (pendingLayerOrderIndex >= pendingLayerOrder.size()) {
+            finishPreparation();
+        }
+    }
+
+    private void finishPreparation() {
+        this.preparationComplete = true;
+        this.pendingLayerBuckets.clear();
+        this.pendingLayerOrder = nn(List.of());
+        this.sourceBlocks = nn(List.of());
+        syncCurrentLayerRangeIndex();
     }
     
     private BlockPos rotatePosition(BlockPos pos) {
@@ -392,20 +519,21 @@ public class ConstructionTask {
         }
 
         if (state.hasProperty(STAIRS_SHAPE_PROPERTY)) {
-            return state.rotate(Rotation.CLOCKWISE_90);
+            return nn(state.rotate(Rotation.CLOCKWISE_90));
         }
 
         for (Property<?> property : state.getProperties()) {
-            if (property instanceof EnumProperty<?>) {
-                Object value = state.getValue(property);
+            Property<?> candidateProperty = nn(property);
+            if (candidateProperty instanceof EnumProperty<?>) {
+                Object value = state.getValue(candidateProperty);
                 if (value instanceof Direction direction) {
                     Direction newDirection = rotateDirection(direction);
-                    return setDirectionEnumValue(state, property, newDirection);
+                    return setDirectionEnumValue(state, candidateProperty, newDirection);
                 }
             }
         }
         
-        return state.rotate(Rotation.CLOCKWISE_90);
+        return nn(state.rotate(Rotation.CLOCKWISE_90));
     }
     
     @Nonnull
@@ -450,7 +578,7 @@ public class ConstructionTask {
     }
 
     public boolean hasNextBlock() {
-        return currentBlockIndex < blocksToPlace.size();
+        return !preparationComplete || currentBlockIndex < totalBlueprintBlocks;
     }
 
     /**
@@ -478,24 +606,36 @@ public class ConstructionTask {
         return runtimeLevel;
     }
 
-    @Nonnull
-    private Set<ChunkPos> collectRequiredWorkflowChunks() {
-        Set<ChunkPos> chunks = new LinkedHashSet<>();
-        chunks.add(new ChunkPos(startPos));
-        chunks.add(new ChunkPos(buildBoxPos));
-        for (BlockInfo blockInfo : blocksToPlace) {
-            chunks.add(new ChunkPos(blockInfo.pos()));
+    private void ensureWorkflowChunksForced(@Nonnull ServerLevel serverLevel) {
+        reconcilePersistedForcedChunks(serverLevel);
+        Set<ChunkPos> desiredChunks = getDesiredRuntimeChunks();
+        Iterator<ChunkPos> iterator = workflowForcedChunks.iterator();
+        while (iterator.hasNext()) {
+            ChunkPos chunkPos = iterator.next();
+            if (desiredChunks.contains(chunkPos)) {
+                continue;
+            }
+            serverLevel.setChunkForced(chunkPos.x, chunkPos.z, false);
+            iterator.remove();
         }
-        for (Direction direction : Direction.values()) {
-            chunks.add(new ChunkPos(buildBoxPos.relative(direction)));
+
+        for (ChunkPos chunkPos : desiredChunks) {
+            ensureWorkflowChunkForced(serverLevel, nn(chunkPos));
         }
-        return Set.copyOf(chunks);
     }
 
-    private void ensureWorkflowChunksForced(@Nonnull ServerLevel serverLevel) {
-        for (ChunkPos chunkPos : requiredWorkflowChunks) {
-            ensureWorkflowChunkForced(serverLevel, chunkPos);
+    private void reconcilePersistedForcedChunks(@Nonnull ServerLevel serverLevel) {
+        if (persistedForcedChunksReconciled) {
+            return;
         }
+
+        for (ChunkPos chunkPos : getManagedWorkflowChunkScope()) {
+            long chunkKey = ChunkPos.asLong(chunkPos.x, chunkPos.z);
+            if (serverLevel.getForcedChunks().contains(chunkKey)) {
+                workflowForcedChunks.add(chunkPos);
+            }
+        }
+        persistedForcedChunksReconciled = true;
     }
 
     private void ensureWorkflowChunkForced(@Nonnull ServerLevel serverLevel, @Nonnull ChunkPos chunkPos) {
@@ -509,7 +649,7 @@ public class ConstructionTask {
 
     private long lastWarningTime = 0;
 
-    private boolean consumeFromNearbyChests(BlockState state) {
+    private boolean consumeFromNearbyChests(@Nonnull BlockState state) {
         ServerLevel serverLevel = getRuntimeLevel();
         if (serverLevel == null) return false;
 
@@ -542,7 +682,7 @@ public class ConstructionTask {
             Component materialInfo = com.xiaoliang.simukraft.utils.MaterialManager.getMaterialRequirementComponent(state);
             Component message = Component.translatable("message.simukraft.construction.need_materials", displayName, materialInfo, 1);
             // 使用原版消息系统广播给所有玩家
-            serverLevel.getServer().getPlayerList().broadcastSystemMessage(message, false);
+            serverLevel.getServer().getPlayerList().broadcastSystemMessage(nn(message), false);
         }
         return false;
     }
@@ -607,6 +747,7 @@ public class ConstructionTask {
         return materialCache.tracksContainer(serverLevel, containerPos);
     }
 
+    @Nullable
     public BlockInfo getNextBlock() {
         return getNextBlock(null);
     }
@@ -615,7 +756,11 @@ public class ConstructionTask {
      * 修复：在消耗材料之前检查方块是否已经存在
      * @param serverLevel 服务器世界，用于检查方块状态。如果为null，则跳过已存在方块检查
      */
-    public BlockInfo getNextBlock(ServerLevel serverLevel) {
+    @Nullable
+    public BlockInfo getNextBlock(@Nullable ServerLevel serverLevel) {
+        if (!preparationComplete) {
+            return null;
+        }
         syncCurrentLayerRangeIndex();
         while (hasNextBlock()) {
             LayerRange currentLayerRange = getCurrentLayerRange();
@@ -624,7 +769,7 @@ public class ConstructionTask {
                 continue;
             }
 
-            BlockInfo next = blocksToPlace.get(currentBlockIndex);
+            BlockInfo next = nn(blocksToPlace.get(currentBlockIndex));
 
             if (serverLevel != null && shouldSkipWithoutPlacement(serverLevel, next)) {
                 currentBlockIndex++;
@@ -745,7 +890,7 @@ public class ConstructionTask {
                         return pos.relative(facing);
                     } else {
                         // 头部在脚的前面，所以脚在头部的后面
-                        return pos.relative(facing.getOpposite());
+                        return pos.relative(nn(facing.getOpposite()));
                     }
                 }
             }
@@ -780,36 +925,6 @@ public class ConstructionTask {
         return info.state().getBlock() == state.getBlock() ? index : -1;
     }
 
-    @Nonnull
-    private static Map<BlockPos, Integer> buildBlockIndexLookup(@Nonnull List<BlockInfo> blocks) {
-        Map<BlockPos, Integer> indexLookup = new HashMap<>(Math.max(16, blocks.size()));
-        for (int i = 0; i < blocks.size(); i++) {
-            indexLookup.put(blocks.get(i).pos(), i);
-        }
-        return indexLookup;
-    }
-
-    @Nonnull
-    private static List<LayerRange> buildLayerRanges(@Nonnull List<BlockInfo> blocks) {
-        if (blocks.isEmpty()) {
-            return List.of();
-        }
-
-        List<LayerRange> ranges = new ArrayList<>();
-        int layerStartIndex = 0;
-        int currentY = blocks.get(0).pos().getY();
-        for (int i = 1; i < blocks.size(); i++) {
-            int y = blocks.get(i).pos().getY();
-            if (y != currentY) {
-                ranges.add(new LayerRange(currentY, layerStartIndex, i - 1));
-                currentY = y;
-                layerStartIndex = i;
-            }
-        }
-        ranges.add(new LayerRange(currentY, layerStartIndex, blocks.size() - 1));
-        return ranges;
-    }
-
     private void syncCurrentLayerRangeIndex() {
         while (currentLayerRangeIndex < layerRanges.size()) {
             LayerRange currentRange = layerRanges.get(currentLayerRangeIndex);
@@ -832,17 +947,6 @@ public class ConstructionTask {
         return layerRanges.get(currentLayerRangeIndex);
     }
 
-    @Nonnull
-    private static List<BlockPos> collectControlBoxPositions(@Nonnull List<BlockInfo> blocks) {
-        List<BlockPos> positions = new ArrayList<>();
-        for (BlockInfo info : blocks) {
-            if (isControlBoxBlock(info.state())) {
-                positions.add(info.pos());
-            }
-        }
-        return Objects.requireNonNull(List.copyOf(positions));
-    }
-
     private static boolean isControlBoxBlock(@Nonnull BlockState state) {
         var blockId = net.minecraftforge.registries.ForgeRegistries.BLOCKS.getKey(state.getBlock());
         if (blockId == null) return false;
@@ -860,7 +964,7 @@ public class ConstructionTask {
 
     public void cancel() {
         this.isCompleted = true;
-        this.currentBlockIndex = blocksToPlace.size();
+        this.currentBlockIndex = totalBlueprintBlocks;
         // 修复：释放所有强制加载的区块
         releaseForcedChunks();
 
@@ -874,13 +978,14 @@ public class ConstructionTask {
      * 性能优化：检查区块是否就绪，避免每 tick 重复检查
      * 只在区块未就绪时执行完整检查逻辑
      */
-    private boolean areChunksReady(ServerLevel serverLevel) {
+    private boolean areChunksReady(@Nonnull ServerLevel serverLevel) {
+        ensureWorkflowChunksForced(serverLevel);
         // 如果已经等待过区块加载，直接返回状态
         if (chunkLoadWaitTicks > 0) {
             return checkAndWaitChunks(serverLevel);
         }
         
-        for (ChunkPos chunkPos : requiredWorkflowChunks) {
+        for (ChunkPos chunkPos : getDesiredRuntimeChunks()) {
             if (!serverLevel.hasChunk(chunkPos.x, chunkPos.z)) {
                 // 发现未加载的区块，进入等待模式
                 return checkAndWaitChunks(serverLevel);
@@ -892,11 +997,12 @@ public class ConstructionTask {
     /**
      * 检查并等待区块加载
      */
-    private boolean checkAndWaitChunks(ServerLevel serverLevel) {
+    private boolean checkAndWaitChunks(@Nonnull ServerLevel serverLevel) {
         int maxWaitTicks = ServerConfig.getBuilderChunkLoadWaitTicks();
         boolean allChunksLoaded = true;
+        Set<ChunkPos> desiredChunks = getDesiredRuntimeChunks();
         
-        for (ChunkPos chunkPos : requiredWorkflowChunks) {
+        for (ChunkPos chunkPos : desiredChunks) {
             if (!serverLevel.hasChunk(chunkPos.x, chunkPos.z)) {
                 allChunksLoaded = false;
                 ensureWorkflowChunkForced(serverLevel, chunkPos);
@@ -940,7 +1046,7 @@ public class ConstructionTask {
     }
 
     public boolean isCompleted() {
-        return isCompleted || currentBlockIndex >= blocksToPlace.size();
+        return isCompleted || (preparationComplete && currentBlockIndex >= totalBlueprintBlocks);
     }
 
     /**
@@ -950,6 +1056,7 @@ public class ConstructionTask {
         currentBlockIndex++;
     }
 
+    @Nullable
     public CustomEntity getBuilder() {
         return builder;
     }
@@ -988,12 +1095,12 @@ public class ConstructionTask {
     }
 
     public Set<ChunkPos> getRequiredWorkflowChunks() {
-        return requiredWorkflowChunks;
+        return Set.copyOf(requiredWorkflowChunks);
     }
 
     public int getProgress() {
-        if (blocksToPlace.isEmpty()) return 100;
-        return (int) ((double) currentBlockIndex / blocksToPlace.size() * 100);
+        if (totalBlueprintBlocks <= 0) return 100;
+        return (int) ((double) currentBlockIndex / totalBlueprintBlocks * 100);
     }
 
     public int getCurrentBlockIndex() {
@@ -1002,21 +1109,23 @@ public class ConstructionTask {
 
     public void setCurrentBlockIndex(int index) {
         // 允许设置索引为 blocksToPlace.size() 表示建造完成
-        this.currentBlockIndex = Math.max(0, Math.min(index, blocksToPlace.size()));
+        this.currentBlockIndex = Math.max(0, Math.min(index, totalBlueprintBlocks));
         this.currentLayerRangeIndex = 0;
-        syncCurrentLayerRangeIndex();
+        if (preparationComplete) {
+            syncCurrentLayerRangeIndex();
+        }
     }
 
     /**
      * 获取总方块数量
      */
     public int getTotalBlocks() {
-        return blocksToPlace.size();
+        return totalBlueprintBlocks;
     }
 
     @Nonnull
     public List<BlockPos> getControlBoxPositions() {
-        return controlBoxPositions;
+        return nn(List.copyOf(controlBoxPositions));
     }
 
     /**
@@ -1033,30 +1142,87 @@ public class ConstructionTask {
      */
     @Nonnull
     public Map<String, Integer> getRequiredMaterials() {
-        Map<String, Integer> materials = new LinkedHashMap<>();
-        
-        for (BlockInfo blockInfo : blocksToPlace) {
-            BlockState state = blockInfo.state();
-            
-            // 跳过空气方块
-            if (state.isAir()) {
-                continue;
-            }
-            
-            // 检查是否需要材料
-            if (!com.xiaoliang.simukraft.utils.MaterialManager.requiresMaterial(state)) {
-                continue;
-            }
-            
-            // 获取方块ID作为材料ID
-            String blockId = com.xiaoliang.simukraft.utils.MaterialManager.getBlockId(state.getBlock());
-            materials.merge(blockId, 1, Integer::sum);
+        return new LinkedHashMap<>(requiredMaterialCounts);
+    }
+
+    @Nonnull
+    private Set<ChunkPos> getDesiredRuntimeChunks() {
+        LinkedHashSet<ChunkPos> chunks = new LinkedHashSet<>();
+        addStaticRuntimeChunks(chunks);
+
+        if (!preparationComplete) {
+            return chunks;
         }
-        
-        return materials;
+
+        LayerRange currentRange = getCurrentLayerRange();
+        if (currentRange != null) {
+            for (int i = currentRange.startIndex(); i <= currentRange.endIndex() && i < blocksToPlace.size(); i++) {
+                chunks.add(new ChunkPos(blocksToPlace.get(i).pos()));
+            }
+        } else if (currentBlockIndex < blocksToPlace.size()) {
+            chunks.add(new ChunkPos(blocksToPlace.get(currentBlockIndex).pos()));
+        }
+
+        if (currentBlockIndex > 0 && currentBlockIndex - 1 < blocksToPlace.size()) {
+            chunks.add(new ChunkPos(blocksToPlace.get(currentBlockIndex - 1).pos()));
+        }
+        if (currentBlockIndex + 1 < blocksToPlace.size()) {
+            chunks.add(new ChunkPos(blocksToPlace.get(currentBlockIndex + 1).pos()));
+        }
+
+        return chunks;
+    }
+
+    @Nonnull
+    private Set<ChunkPos> getManagedWorkflowChunkScope() {
+        return nn(Set.copyOf(requiredWorkflowChunks));
+    }
+
+    private void addStaticRuntimeChunks(@Nonnull Set<ChunkPos> chunks) {
+        chunks.add(new ChunkPos(startPos));
+        chunks.add(new ChunkPos(buildBoxPos));
+        for (Direction direction : Direction.values()) {
+            chunks.add(new ChunkPos(nn(buildBoxPos.relative(nn(direction)))));
+        }
+    }
+
+    private void collectMaterialRequirement(@Nonnull Map<String, Integer> materials, @Nonnull BlockState state) {
+        // 跳过空气方块
+        if (state.isAir()) {
+            return;
+        }
+            
+        // 检查是否需要材料
+        if (!com.xiaoliang.simukraft.utils.MaterialManager.requiresMaterial(state)) {
+            return;
+        }
+
+        // 获取方块ID作为材料ID
+        String blockId = com.xiaoliang.simukraft.utils.MaterialManager.getBlockId(state.getBlock());
+        materials.merge(blockId, 1, (existingCount, addedCount) -> Integer.valueOf(existingCount + addedCount));
     }
 
     private record LayerRange(int y, int startIndex, int endIndex) {
+    }
+
+    private static final class LayerBuckets {
+        private final List<List<BlockInfo>> buckets = List.of(
+                new ArrayList<>(),
+                new ArrayList<>(),
+                new ArrayList<>(),
+                new ArrayList<>(),
+                new ArrayList<>(),
+                new ArrayList<>()
+        );
+
+        private void add(int priority, @Nonnull BlockInfo blockInfo) {
+            buckets.get(priority).add(blockInfo);
+        }
+
+        @Nonnull
+        private List<BlockInfo> get(int priority) {
+            return nn(buckets.get(priority));
+        }
     }
 
     public record BlockInfo(@Nonnull BlockPos pos, @Nonnull BlockState state, @Nullable BlockPos originalNbtPos) {

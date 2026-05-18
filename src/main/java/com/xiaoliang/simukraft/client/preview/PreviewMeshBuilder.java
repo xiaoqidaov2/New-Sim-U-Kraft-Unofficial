@@ -9,17 +9,20 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.block.model.BakedQuad;
 import net.minecraft.client.renderer.texture.OverlayTexture;
-import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.util.RandomSource;
-import net.minecraft.world.level.EmptyBlockGetter;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.level.material.FluidState;
 import net.minecraftforge.client.model.data.ModelData;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -76,6 +79,7 @@ public class PreviewMeshBuilder {
         int solidQuads = 0, cutoutQuads = 0, translucentQuads = 0;
         PoseStack buildPose = new PoseStack();
         RandomSource random = RandomSource.create(42L);
+        PreviewBlockGetter previewBlockGetter = new PreviewBlockGetter(stateMap.keySet(), stateMap);
 
         for (SchematicBlockData block : modelBlocks) {
             BlockState state = block.blockState();
@@ -95,14 +99,13 @@ public class PreviewMeshBuilder {
             buildPose.translate(pos.getX(), pos.getY(), pos.getZ());
             PoseStack.Pose entry = buildPose.last();
 
-            boolean isFullBlock = isFullCube(state);
+            boolean hasVisibleDirectionalFace = false;
             for (Direction dir : Direction.values()) {
-                if (isFullBlock) {
-                    BlockPos neighbor = pos.relative(dir);
-                    BlockState ns = stateMap.get(neighbor);
-                    if (ns != null && isFullCube(ns)) continue;
+                if (!shouldRenderPreviewFace(state, previewBlockGetter, pos, dir)) {
+                    continue;
                 }
 
+                hasVisibleDirectionalFace = true;
                 List<BakedQuad> quads = model.getQuads(state, dir, random);
                 for (BakedQuad quad : quads) {
                     writeQuad(target, entry, quad, state, mc);
@@ -113,11 +116,13 @@ public class PreviewMeshBuilder {
             }
 
             List<BakedQuad> generalQuads = model.getQuads(state, null, random);
-            for (BakedQuad quad : generalQuads) {
-                writeQuad(target, entry, quad, state, mc);
-                if (cat == 0) solidQuads++;
-                else if (cat == 1) cutoutQuads++;
-                else translucentQuads++;
+            if (hasVisibleDirectionalFace || shouldRenderGeneralQuads(state, previewBlockGetter, pos)) {
+                for (BakedQuad quad : generalQuads) {
+                    writeQuad(target, entry, quad, state, mc);
+                    if (cat == 0) solidQuads++;
+                    else if (cat == 1) cutoutQuads++;
+                    else translucentQuads++;
+                }
             }
 
             buildPose.popPose();
@@ -152,17 +157,28 @@ public class PreviewMeshBuilder {
         return 0;
     }
 
-    /**
-     * 严格判断方块是否为完整的 1x1x1 实心方块。
-     * 同时检查 canOcclude 和实际 VoxelShape，排除栅栏、楼梯、台阶、玻璃板等非完整方块。
-     */
-    private static boolean isFullCube(BlockState state) {
-        if (!state.canOcclude()) return false;
-        try {
-            return state.getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO) == Shapes.block();
-        } catch (Exception e) {
-            return false;
+    private static boolean shouldRenderPreviewFace(BlockState state, BlockGetter previewBlockGetter,
+                                                   BlockPos pos, Direction direction) {
+        BlockPos neighborPos = pos.relative(direction);
+        if (Block.shouldRenderFace(state, previewBlockGetter, pos, direction, neighborPos)) {
+            return true;
         }
+
+        BlockState neighborState = previewBlockGetter.getBlockState(neighborPos);
+        return neighborState.isAir() || !neighborState.canOcclude();
+    }
+
+    private static boolean shouldRenderGeneralQuads(BlockState state, BlockGetter previewBlockGetter, BlockPos pos) {
+        if (!state.canOcclude()) {
+            return true;
+        }
+
+        for (Direction direction : Direction.values()) {
+            if (shouldRenderPreviewFace(state, previewBlockGetter, pos, direction)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static VertexBuffer upload(BufferBuilder buf, int quadCount) {
@@ -176,5 +192,55 @@ public class PreviewMeshBuilder {
         vbo.upload(rendered);
         VertexBuffer.unbind();
         return vbo;
+    }
+
+    private static final class PreviewBlockGetter implements BlockGetter {
+        private final int minY;
+        private final int maxY;
+        private final Map<BlockPos, BlockState> states;
+
+        private PreviewBlockGetter(Collection<BlockPos> positions, Map<BlockPos, BlockState> states) {
+            this.states = states;
+            int localMinY = 0;
+            int localMaxY = 0;
+            boolean first = true;
+            for (BlockPos pos : positions) {
+                if (first) {
+                    localMinY = pos.getY();
+                    localMaxY = pos.getY();
+                    first = false;
+                    continue;
+                }
+                localMinY = Math.min(localMinY, pos.getY());
+                localMaxY = Math.max(localMaxY, pos.getY());
+            }
+            this.minY = localMinY;
+            this.maxY = localMaxY;
+        }
+
+        @Override
+        public BlockEntity getBlockEntity(BlockPos pos) {
+            return null;
+        }
+
+        @Override
+        public BlockState getBlockState(BlockPos pos) {
+            return states.getOrDefault(pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
+        }
+
+        @Override
+        public FluidState getFluidState(BlockPos pos) {
+            return getBlockState(pos).getFluidState();
+        }
+
+        @Override
+        public int getHeight() {
+            return maxY + 1;
+        }
+
+        @Override
+        public int getMinBuildHeight() {
+            return minY;
+        }
     }
 }

@@ -23,10 +23,21 @@ import java.util.UUID;
  */
 public class BankControlBoxScreen extends Screen {
     private static final String BANK_JOB_TYPE = "banker";
+    private static final int FOOTER_COLOR = 0x808080;
+    private static final int FOOTER_MARGIN = 8;
+    @Nonnull
+    private static final Component FOOTER_AUTHOR = Component.literal("menglannnn");
+    @Nonnull
+    private static final Component FOOTER_FEEDBACK = Component.literal("bug反馈:3630797734@qq.com");
 
     private final BlockPos controlBoxPos;
+    @Nullable
     private Button hireEmployeeButton;
+    @Nullable
     private Button fireEmployeeButton;
+    @Nullable
+    private Button loanButton;
+    @Nullable
     private Button stockMarketButton;
 
     @Nonnull
@@ -76,10 +87,17 @@ public class BankControlBoxScreen extends Screen {
                 .build());
         this.addRenderableWidget(fireEmployeeButton);
 
+        loanButton = nn(Button.builder(
+                        nn(Component.translatable("gui.bank_control_box.loan")),
+                        button -> nn(this.minecraft).setScreen(new BankLoanScreen(controlBoxPos)))
+                .bounds(125, this.height - 50, 110, 20)
+                .build());
+        this.addRenderableWidget(loanButton);
+
         stockMarketButton = nn(Button.builder(
                         nn(Component.translatable("gui.bank_control_box.stock_market")),
                         button -> nn(this.minecraft).setScreen(new BankStockMarketScreen(controlBoxPos)))
-                .bounds(125, this.height - 50, 110, 45)
+                .bounds(125, this.height - 25, 110, 20)
                 .build());
         this.addRenderableWidget(stockMarketButton);
 
@@ -97,25 +115,33 @@ public class BankControlBoxScreen extends Screen {
     }
 
     public void refreshButtonStates() {
+        Button hireButton = requireHireEmployeeButton();
+        Button fireButton = requireFireEmployeeButton();
+        Button marketButton = requireStockMarketButton();
         boolean hasHiredEmployee = CommercialClientData.hasHiredEmployee(controlBoxPos);
-        nn(hireEmployeeButton).active = !hasHiredEmployee;
-        nn(fireEmployeeButton).active = hasHiredEmployee;
+        hireButton.active = !hasHiredEmployee;
+        fireButton.active = hasHiredEmployee;
+        marketButton.active = hasHiredEmployee;
 
         if (hasHiredEmployee) {
-            nn(hireEmployeeButton).setMessage(nn(Component.translatable("gui.button.hire_employee_with_job",
+            hireButton.setMessage(nn(Component.translatable("gui.button.hire_employee_with_job",
                     getBankJobName()).withStyle(style -> style.withColor(0x666666))));
+            marketButton.setMessage(nn(Component.translatable("gui.bank_control_box.stock_market")
+                    .withStyle(style -> style.withColor(0xFFFFFF))));
             CustomEntity npc = CommercialClientData.getHiredEmployee(controlBoxPos);
             if (npc != null) {
-                nn(fireEmployeeButton).setMessage(nn(Component.translatable("gui.button.fire_employee_with_name", npc.getFullName())));
+                fireButton.setMessage(nn(Component.translatable("gui.button.fire_employee_with_name", npc.getFullName())));
             } else {
-                nn(fireEmployeeButton).setMessage(nn(Component.translatable("gui.button.fire_employee")));
+                fireButton.setMessage(nn(Component.translatable("gui.button.fire_employee")));
             }
             return;
         }
 
-        nn(hireEmployeeButton).setMessage(nn(Component.translatable("gui.button.hire_employee_with_job",
+        hireButton.setMessage(nn(Component.translatable("gui.button.hire_employee_with_job",
                 getBankJobName()).withStyle(style -> style.withColor(0xFFFFFF))));
-        nn(fireEmployeeButton).setMessage(nn(Component.translatable("gui.button.fire_employee")));
+        fireButton.setMessage(nn(Component.translatable("gui.button.fire_employee")));
+        marketButton.setMessage(nn(Component.translatable("gui.bank_control_box.stock_market")
+                .withStyle(style -> style.withColor(0x666666))));
     }
 
     @Nonnull
@@ -160,6 +186,17 @@ public class BankControlBoxScreen extends Screen {
                 10, 65, textColor, false);
 
         super.render(guiGraphics, mouseX, mouseY, partialTicks);
+        renderFooter(guiGraphics);
+    }
+
+    private void renderFooter(@Nonnull GuiGraphics guiGraphics) {
+        int secondLineY = this.height - FOOTER_MARGIN - this.font.lineHeight;
+        int firstLineY = secondLineY - this.font.lineHeight - 2;
+        int authorX = this.width - FOOTER_MARGIN - this.font.width(FOOTER_AUTHOR);
+        int feedbackX = this.width - FOOTER_MARGIN - this.font.width(FOOTER_FEEDBACK);
+
+        guiGraphics.drawString(nn(this.font), FOOTER_AUTHOR, authorX, firstLineY, FOOTER_COLOR, false);
+        guiGraphics.drawString(nn(this.font), FOOTER_FEEDBACK, feedbackX, secondLineY, FOOTER_COLOR, false);
     }
 
     private String getEmployeeStatusKey() {
@@ -170,6 +207,21 @@ public class BankControlBoxScreen extends Screen {
 
     public BlockPos getControlBoxPos() {
         return controlBoxPos;
+    }
+
+    @Nonnull
+    private Button requireHireEmployeeButton() {
+        return nn(this.hireEmployeeButton);
+    }
+
+    @Nonnull
+    private Button requireFireEmployeeButton() {
+        return nn(this.fireEmployeeButton);
+    }
+
+    @Nonnull
+    private Button requireStockMarketButton() {
+        return nn(this.stockMarketButton);
     }
 
     @Override

@@ -95,11 +95,6 @@ public class CityManagementScreen extends ModularUIGuiContainer {
                 true,
                 clickData -> openCityOfficials(cityCorePos)));
 
-        rootGroup.addWidget(createButton(leftX, startY + 5 * (BUTTON_HEIGHT + BUTTON_SPACING), BUTTON_WIDTH, BUTTON_HEIGHT,
-                "gui.city_management.finance",
-                true,
-                clickData -> openCityFinance(cityCorePos)));
-
         rootGroup.addWidget(createButton(leftX, screenHeight - 30, BACK_BUTTON_WIDTH, BACK_BUTTON_HEIGHT,
                 "gui.city_management.back",
                 true,
@@ -180,10 +175,6 @@ public class CityManagementScreen extends ModularUIGuiContainer {
 
     private static void openCityOfficials(BlockPos cityCorePos) {
         Minecraft.getInstance().setScreen(new CityOfficialScreen(cityCorePos));
-    }
-
-    private static void openCityFinance(BlockPos cityCorePos) {
-        Minecraft.getInstance().setScreen(new CityFinanceScreen(cityCorePos));
     }
 
     @Override

@@ -1012,6 +1012,13 @@ public class CustomEntity extends PathfinderMob {
 
             if (!constructionTask.isCompleted() && constructionTask.hasNextBlock()) {
                 if (this.level() instanceof ServerLevel serverLevel) {
+                    if (constructionTask.isPreparing()) {
+                        // 将超大建筑的蓝图转换与排序拆到多个 tick，避免单 tick 卡死。
+                        constructionTask.tickPreparation();
+                        constructionProgress = constructionTask.getProgress();
+                        return;
+                    }
+
                     // menglan: 使用新的速度系统 - 每tick放置小数个方块
                     int npcLevel = com.xiaoliang.simukraft.utils.NPCDataManager.getNPCLevel(serverLevel.getServer(), this.getUUID());
                     double blocksPerTick = com.xiaoliang.simukraft.config.ServerConfig.getBuilderBlocksPerTickDouble(npcLevel);

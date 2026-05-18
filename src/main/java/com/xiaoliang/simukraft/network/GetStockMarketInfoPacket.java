@@ -36,7 +36,7 @@ public class GetStockMarketInfoPacket {
 
             NetworkManager.sendToPlayer(new StockMarketInfoResponsePacket(
                     message.controlBoxPos,
-                    StockMarketService.createSnapshot(player.serverLevel(), player)
+                    StockMarketService.createSnapshot(player.serverLevel(), player, message.controlBoxPos)
             ), player);
         });
         context.get().setPacketHandled(true);

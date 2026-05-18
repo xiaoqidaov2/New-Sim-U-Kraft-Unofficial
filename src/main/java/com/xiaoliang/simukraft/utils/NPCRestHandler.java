@@ -20,6 +20,7 @@ import net.minecraft.world.phys.Vec3;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import javax.annotation.Nullable;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -567,7 +568,7 @@ public class NPCRestHandler {
             if (workPos != null) {
                 // 检查距离
                 double distance = npc.position().distanceTo(new net.minecraft.world.phys.Vec3(workPos.getX() + 0.5, workPos.getY(), workPos.getZ() + 0.5));
-                boolean preferImmediateTeleport = com.xiaoliang.simukraft.building.CommercialBuildingManager.isCommercialJobType(previousJob)
+                boolean preferImmediateTeleport = isCommercialLikeJob(previousJob)
                         || getIndustrialWorkplace(level.getServer(), npcUuid, previousJob) != null;
 
                 if (distance > 10.0 || (preferImmediateTeleport && distance > 3.0)) {
@@ -631,7 +632,7 @@ public class NPCRestHandler {
                 }
             } else {
                 LOGGER.warn("[NPCRestHandler] NPC {} 无法找到工作岗位位置", npc.getFullName());
-                if (com.xiaoliang.simukraft.building.CommercialBuildingManager.isCommercialJobType(previousJob)) {
+                if (isCommercialLikeJob(previousJob)) {
                     LOGGER.warn("[NPCRestHandler] NPC {} 商业岗位恢复时暂未解析到工作点，先保留职业与工作状态，避免交互退化",
                         npc.getFullName());
                     restoreWorkStatus(npc, npcUuid, previousWorkStatus, previousJob, level);
@@ -798,8 +799,8 @@ public class NPCRestHandler {
 
         // 根据职业类型获取对应的工作位置（特殊职业）
         // 使用CommercialBuildingManager统一检查商业建筑职业
-        if (com.xiaoliang.simukraft.building.CommercialBuildingManager.isCommercialJobType(job)) {
-            return getCommercialWorkplace(server, npcUuid);
+        if (isCommercialLikeJob(job)) {
+            return getCommercialWorkplace(server, npcUuid, job);
         }
         
         return switch (job) {
@@ -872,23 +873,99 @@ public class NPCRestHandler {
     /**
      * 获取商业建筑员工的工作位置
      */
-    private static BlockPos getCommercialWorkplace(MinecraftServer server, UUID npcUuid) {
+    private static BlockPos getCommercialWorkplace(MinecraftServer server, UUID npcUuid, String jobType) {
         var employment = com.xiaoliang.simukraft.employment.service.EmploymentServices.get(server)
                 .findByNpc(npcUuid)
                 .filter(assignment -> assignment.workBlockType() == com.xiaoliang.simukraft.employment.domain.WorkBlockType.COMMERCIAL_CONTROL_BOX)
-                .map(com.xiaoliang.simukraft.employment.domain.EmploymentAssignment::workplacePos)
                 .orElse(null);
         if (employment != null) {
-            return employment;
+            BlockPos workplacePos = employment.workplacePos();
+            if (isBankerJob(jobType)) {
+                ServerLevel assignmentLevel = findLevelByDimensionId(server, employment.dimensionId());
+                return assignmentLevel != null ? findSafeBankerStandFloor(workplacePos, assignmentLevel) : workplacePos;
+            }
+            return workplacePos;
         }
 
         Map<BlockPos, com.xiaoliang.simukraft.world.CommercialHiredData.CommercialHireInfo> hiredEmployees = com.xiaoliang.simukraft.world.CommercialHiredData.loadHiredEmployees(server);
         for (Map.Entry<BlockPos, com.xiaoliang.simukraft.world.CommercialHiredData.CommercialHireInfo> entry : hiredEmployees.entrySet()) {
             if (entry.getValue().getNpcUuid().equals(npcUuid)) {
-                return entry.getKey();
+                BlockPos workplacePos = entry.getKey();
+                if (isBankerJob(jobType)) {
+                    ServerLevel fallbackLevel = findLevelContainingBlock(server, workplacePos);
+                    return fallbackLevel != null ? findSafeBankerStandFloor(workplacePos, fallbackLevel) : workplacePos;
+                }
+                return workplacePos;
             }
         }
         return null;
+    }
+
+    private static boolean isCommercialLikeJob(String jobType) {
+        return isBankerJob(jobType)
+                || com.xiaoliang.simukraft.building.CommercialBuildingManager.isCommercialJobType(jobType);
+    }
+
+    private static boolean isBankerJob(String jobType) {
+        return "banker".equals(jobType);
+    }
+
+    @Nullable
+    private static ServerLevel findLevelByDimensionId(MinecraftServer server, String dimensionId) {
+        if (server == null || dimensionId == null || dimensionId.isBlank()) {
+            return null;
+        }
+        for (ServerLevel level : server.getAllLevels()) {
+            if (dimensionId.equals(level.dimension().location().toString())) {
+                return level;
+            }
+        }
+        return null;
+    }
+
+    @Nullable
+    private static ServerLevel findLevelContainingBlock(MinecraftServer server, BlockPos pos) {
+        if (server == null || pos == null) {
+            return null;
+        }
+        for (ServerLevel level : server.getAllLevels()) {
+            if (level.isLoaded(pos)) {
+                return level;
+            }
+        }
+        return null;
+    }
+
+    private static BlockPos findSafeBankerStandFloor(BlockPos controlBoxPos, ServerLevel level) {
+        if (controlBoxPos == null || level == null) {
+            return controlBoxPos;
+        }
+        BlockPos[] candidates = new BlockPos[] {
+                controlBoxPos.north(),
+                controlBoxPos.south(),
+                controlBoxPos.west(),
+                controlBoxPos.east(),
+                controlBoxPos.north().west(),
+                controlBoxPos.north().east(),
+                controlBoxPos.south().west(),
+                controlBoxPos.south().east(),
+                controlBoxPos.north(2),
+                controlBoxPos.south(2),
+                controlBoxPos.west(2),
+                controlBoxPos.east(2)
+        };
+        for (BlockPos candidate : candidates) {
+            if (isStandableBankerFloor(level, candidate)) {
+                return candidate;
+            }
+        }
+        return controlBoxPos;
+    }
+
+    private static boolean isStandableBankerFloor(ServerLevel level, BlockPos floorPos) {
+        return level.getBlockState(floorPos).isFaceSturdy(level, floorPos, Direction.UP)
+                && level.isEmptyBlock(floorPos.above())
+                && level.isEmptyBlock(floorPos.above(2));
     }
 
     /**

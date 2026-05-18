@@ -7,29 +7,40 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.phys.AABB;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @SuppressWarnings("null")
 public class BuildingPreviewManager {
+    private static final int RANGE_ONLY_PREVIEW_VOLUME_THRESHOLD = 32768;
+    private static final int RANGE_ONLY_PREVIEW_EDGE_THRESHOLD = 128;
     private static final List<SchematicBlockData> schematicBlocks = new ArrayList<>();
+    private static final List<SchematicBlockData> surfaceBlocks = new ArrayList<>();
     private static BlockPos previewOrigin = BlockPos.ZERO;
     private static int rotation = 0;
     private static boolean isPreviewActive = false;
+    private static boolean rangeOnlyPreview = false;
     private static String currentBuildingName = "";
     private static String currentCategory = "";
     private static String currentFileName = "";
+    private static int previewRevision = 0;
+    private static int estimatedVolume = 0;
+    private static PreviewDimensions previewDimensions = null;
 
     private static PreviewMesh cachedMesh = null;
     private static BlockPos meshBuildOrigin = BlockPos.ZERO;
 
-    public static void startPreview(String buildingName, String category, String fileName, BlockPos origin) {
+    public static void startPreview(String buildingName, String category, String fileName, String size, BlockPos origin) {
         if (!isOriginAllowed(origin)) {
             return;
         }
@@ -39,13 +50,22 @@ public class BuildingPreviewManager {
         previewOrigin = origin;
         rotation = 0;
         isPreviewActive = true;
+        previewDimensions = parsePreviewDimensions(size);
+        estimatedVolume = previewDimensions != null ? previewDimensions.volume() : 0;
+        rangeOnlyPreview = shouldUseRangeOnlyPreview(previewDimensions);
 
-        loadBlocks();
+        if (rangeOnlyPreview) {
+            activateRangeOnlyPreview();
+        } else {
+            loadBlocks();
+        }
         Simukraft.LOGGER.info(Component.translatable("message.preview.building.start", buildingName, origin).getString());
     }
 
     public static void loadBlocks() {
         schematicBlocks.clear();
+        surfaceBlocks.clear();
+        rangeOnlyPreview = false;
 
         String filePath = "simukraftbuilding/" + currentCategory + "/" + currentFileName + ".nbt";
         List<SchematicNBTLoader.SchematicBlock> blocks = SchematicNBTLoader.loadSchematicBlocks(filePath);
@@ -63,16 +83,31 @@ public class BuildingPreviewManager {
             schematicBlocks.add(new SchematicBlockData(newPos, rotatedState, 15728880, true));
         }
 
+        rebuildSurfaceBlocks();
+        previewRevision++;
         Simukraft.LOGGER.info(Component.translatable("message.preview.building.loaded", schematicBlocks.size()).getString());
         rebuildMesh();
     }
 
+    private static void activateRangeOnlyPreview() {
+        schematicBlocks.clear();
+        surfaceBlocks.clear();
+        closeMesh();
+        previewRevision++;
+        Simukraft.LOGGER.info(Component.translatable("message.preview.building.range_only", currentBuildingName, estimatedVolume).getString());
+    }
+
     private static void rebuildMesh() {
-        if (cachedMesh != null) {
-            cachedMesh.close();
-        }
+        closeMesh();
         meshBuildOrigin = previewOrigin;
         cachedMesh = PreviewMeshBuilder.build(schematicBlocks);
+    }
+
+    private static void closeMesh() {
+        if (cachedMesh != null) {
+            cachedMesh.close();
+            cachedMesh = null;
+        }
     }
 
     public static void movePreview(Direction direction) {
@@ -92,7 +127,11 @@ public class BuildingPreviewManager {
         if (!isOriginAllowed(newOrigin)) {
             return;
         }
-        updateBlockPositions(offset);
+        if (rangeOnlyPreview) {
+            previewRevision++;
+        } else {
+            updateBlockPositions(offset);
+        }
         previewOrigin = newOrigin;
         Simukraft.LOGGER.info(Component.translatable("message.preview.building.moved", previewOrigin).getString());
     }
@@ -105,7 +144,11 @@ public class BuildingPreviewManager {
         if (!isOriginAllowed(newOrigin)) {
             return;
         }
-        updateBlockPositions(offsetPos);
+        if (rangeOnlyPreview) {
+            previewRevision++;
+        } else {
+            updateBlockPositions(offsetPos);
+        }
         previewOrigin = newOrigin;
         Simukraft.LOGGER.info(Component.translatable("message.preview.building.moved_vertical", previewOrigin).getString());
     }
@@ -151,7 +194,11 @@ public class BuildingPreviewManager {
         if (!isOriginAllowed(newOrigin)) {
             return;
         }
-        updateBlockPositions(offset);
+        if (rangeOnlyPreview) {
+            previewRevision++;
+        } else {
+            updateBlockPositions(offset);
+        }
         previewOrigin = newOrigin;
         Simukraft.LOGGER.info(Component.translatable("message.preview.building.moved_camera", previewOrigin, yaw).getString());
     }
@@ -190,6 +237,28 @@ public class BuildingPreviewManager {
             return false;
         }
 
+        if (rangeOnlyPreview) {
+            AABB previewBounds = getPreviewBounds();
+            if (previewBounds == null) {
+                return true;
+            }
+
+            int minChunkX = SectionPosUtil.blockToChunkCoord((int) Math.floor(previewBounds.minX));
+            int maxChunkX = SectionPosUtil.blockToChunkCoord((int) Math.ceil(previewBounds.maxX) - 1);
+            int minChunkZ = SectionPosUtil.blockToChunkCoord((int) Math.floor(previewBounds.minZ));
+            int maxChunkZ = SectionPosUtil.blockToChunkCoord((int) Math.ceil(previewBounds.maxZ) - 1);
+
+            for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
+                for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
+                    java.util.UUID owner = data.getChunkOwner(ChunkPos.asLong(chunkX, chunkZ));
+                    if (!playerCityId.equals(owner)) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
         for (SchematicBlockData block : schematicBlocks) {
             BlockPos pos = block.pos();
             java.util.UUID owner = data.getChunkOwner(new net.minecraft.world.level.ChunkPos(pos).toLong());
@@ -204,18 +273,29 @@ public class BuildingPreviewManager {
         if (!isPreviewActive) return;
 
         rotation = (rotation + 90) % 360;
-        loadBlocks();
+        if (rangeOnlyPreview) {
+            previewRevision++;
+        } else {
+            loadBlocks();
+        }
         Simukraft.LOGGER.info(Component.translatable("message.preview.building.rotated", rotation).getString());
     }
 
     private static void updateBlockPositions(BlockPos offset) {
         List<SchematicBlockData> oldBlocks = new ArrayList<>(schematicBlocks);
+        List<SchematicBlockData> oldSurfaceBlocks = new ArrayList<>(surfaceBlocks);
         schematicBlocks.clear();
+        surfaceBlocks.clear();
 
         for (SchematicBlockData block : oldBlocks) {
             BlockPos newPos = block.pos().offset(offset);
             schematicBlocks.add(new SchematicBlockData(newPos, block.blockState(), block.packedLight(), block.translucent()));
         }
+        for (SchematicBlockData block : oldSurfaceBlocks) {
+            BlockPos newPos = block.pos().offset(offset);
+            surfaceBlocks.add(new SchematicBlockData(newPos, block.blockState(), block.packedLight(), block.translucent()));
+        }
+        previewRevision++;
     }
 
     private static BlockPos rotatePosition(BlockPos pos, int rotation) {
@@ -346,17 +426,23 @@ public class BuildingPreviewManager {
 
     public static void clearPreview() {
         schematicBlocks.clear();
+        surfaceBlocks.clear();
         isPreviewActive = false;
+        rangeOnlyPreview = false;
         rotation = 0;
-        if (cachedMesh != null) {
-            cachedMesh.close();
-            cachedMesh = null;
-        }
+        estimatedVolume = 0;
+        previewDimensions = null;
+        previewRevision++;
+        closeMesh();
         Simukraft.LOGGER.info(Component.translatable("message.preview.building.cleared").getString());
     }
 
     public static List<SchematicBlockData> getActiveBlocks() {
         return new ArrayList<>(schematicBlocks);
+    }
+
+    public static List<SchematicBlockData> getSurfaceBlocks() {
+        return surfaceBlocks;
     }
 
     public static List<BlockPos> getBlockPositions() {
@@ -403,11 +489,124 @@ public class BuildingPreviewManager {
         return schematicBlocks.size();
     }
 
+    public static int getEstimatedVolume() {
+        return estimatedVolume;
+    }
+
+    public static int getPreviewRevision() {
+        return previewRevision;
+    }
+
     public static PreviewMesh getCachedMesh() {
         return cachedMesh;
     }
 
     public static BlockPos getMeshBuildOrigin() {
         return meshBuildOrigin;
+    }
+
+    public static boolean isRangeOnlyPreview() {
+        return rangeOnlyPreview;
+    }
+
+    public static AABB getPreviewBounds() {
+        if (!isPreviewActive || previewDimensions == null) {
+            return null;
+        }
+
+        PreviewDimensions rotatedDimensions = previewDimensions.rotate(rotation);
+        return new AABB(
+                previewOrigin.getX(),
+                previewOrigin.getY(),
+                previewOrigin.getZ(),
+                previewOrigin.getX() + rotatedDimensions.width(),
+                previewOrigin.getY() + rotatedDimensions.height(),
+                previewOrigin.getZ() + rotatedDimensions.depth()
+        );
+    }
+
+    private static void rebuildSurfaceBlocks() {
+        surfaceBlocks.clear();
+        Map<BlockPos, BlockState> stateMap = new HashMap<>(schematicBlocks.size());
+        for (SchematicBlockData block : schematicBlocks) {
+            stateMap.put(block.pos(), block.blockState());
+        }
+
+        for (SchematicBlockData block : schematicBlocks) {
+            BlockState state = block.blockState();
+            if (!state.canOcclude()) {
+                surfaceBlocks.add(block);
+                continue;
+            }
+
+            BlockPos pos = block.pos();
+            boolean isSurface = false;
+            for (Direction direction : Direction.values()) {
+                BlockState neighborState = stateMap.get(pos.relative(direction));
+                if (neighborState == null || !neighborState.canOcclude()) {
+                    isSurface = true;
+                    break;
+                }
+            }
+
+            if (isSurface) {
+                surfaceBlocks.add(block);
+            }
+        }
+    }
+
+    private static boolean shouldUseRangeOnlyPreview(PreviewDimensions dimensions) {
+        if (dimensions == null) {
+            return false;
+        }
+        int maxEdge = Math.max(dimensions.width(), Math.max(dimensions.height(), dimensions.depth()));
+        return dimensions.volume() >= RANGE_ONLY_PREVIEW_VOLUME_THRESHOLD || maxEdge >= RANGE_ONLY_PREVIEW_EDGE_THRESHOLD;
+    }
+
+    private static PreviewDimensions parsePreviewDimensions(String size) {
+        if (size == null || size.isBlank()) {
+            return null;
+        }
+
+        String normalized = size.toLowerCase().replace(" ", "");
+        String[] parts = normalized.split("x");
+        if (parts.length != 3) {
+            return null;
+        }
+
+        try {
+            int width = Integer.parseInt(parts[0]);
+            int height = Integer.parseInt(parts[1]);
+            int depth = Integer.parseInt(parts[2]);
+            if (width <= 0 || height <= 0 || depth <= 0) {
+                return null;
+            }
+            return new PreviewDimensions(width, height, depth);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private record PreviewDimensions(int width, int height, int depth) {
+        private int volume() {
+            return width * height * depth;
+        }
+
+        private PreviewDimensions rotate(int rotation) {
+            int normalizedRotation = Math.floorMod(rotation, 360);
+            if (normalizedRotation == 90 || normalizedRotation == 270) {
+                return new PreviewDimensions(depth, height, width);
+            }
+            return this;
+        }
+    }
+
+    /**
+     * 避免直接依赖服务端区块工具类，按 16 格换算预览占用区块。
+     */
+    private static final class SectionPosUtil {
+        private static int blockToChunkCoord(int blockCoord) {
+            return blockCoord >> 4;
+        }
     }
 }

@@ -11,12 +11,15 @@ import com.xiaoliang.simukraft.entity.CustomEntity;
 import com.xiaoliang.simukraft.entity.FloatingBuildBoxEntity;
 import com.xiaoliang.simukraft.entity.WorkStatus;
 import com.xiaoliang.simukraft.init.ModEntities;
+import com.xiaoliang.simukraft.network.NetworkManager;
+import com.xiaoliang.simukraft.network.ShowToastPacket;
 import com.xiaoliang.simukraft.utils.FileUtils;
 import com.xiaoliang.simukraft.utils.NPCDataManager;
 import com.xiaoliang.simukraft.utils.NPCFamilyManager;
 import com.xiaoliang.simukraft.utils.NPCFoodMarket;
 import com.xiaoliang.simukraft.utils.NPCMarriageManager;
 import com.xiaoliang.simukraft.world.CityData;
+import com.xiaoliang.simukraft.world.CityUpgradeManager;
 import com.xiaoliang.simukraft.world.OfficialInvitationService;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -533,6 +536,8 @@ public class CommandSimukraft {
                     .executes(context -> executeFamilyBirthDebug(context.getSource())))
                 .then(Commands.literal("cla")
                     .executes(context -> executeFamilyClearDebug(context.getSource())))
+                .then(Commands.literal("simufarft")
+                    .executes(context -> executeForceCityMaxLevel(context.getSource())))
         );
 
         dispatcher.register(
@@ -738,6 +743,53 @@ public class CommandSimukraft {
         }
 
         OfficialInvitationService.handleResponse(player, invitationId, accepted);
+        return 1;
+    }
+
+    private static int executeForceCityMaxLevel(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            source.sendFailure(Component.literal("§c只能由玩家执行该命令"));
+            return 0;
+        }
+
+        CityData cityData = CityData.get(player.serverLevel());
+        UUID cityId = cityData.refreshPlayerCityAccess(player);
+        if (cityId == null) {
+            cityId = cityData.getPlayerCityIdByName(player.getGameProfile().getName());
+        }
+        if (cityId == null) {
+            source.sendFailure(Component.literal("§c你当前没有所属城市，无法直接升满级"));
+            return 0;
+        }
+
+        CityData.CityInfo cityInfo = cityData.getCity(cityId);
+        if (cityInfo == null) {
+            source.sendFailure(Component.literal("§c未找到你的城市数据，无法执行满级升级"));
+            return 0;
+        }
+
+        int maxLevel = CityUpgradeManager.getInstance().getAllUpgrades().stream()
+                .mapToInt(CityUpgradeManager.CityUpgrade::level)
+                .max()
+                .orElse(cityInfo.getCityLevel());
+
+        if (cityInfo.getCityLevel() >= maxLevel) {
+            source.sendSuccess(() -> Component.literal(
+                    "§e城市 " + cityInfo.getCityName() + " 已经是满级 (Lv." + cityInfo.getCityLevel() + ")"), true);
+            return 1;
+        }
+
+        int oldLevel = cityInfo.getCityLevel();
+        cityInfo.setCityLevel(maxLevel);
+        cityData.setDirty();
+        NetworkManager.syncCityHUDData(cityId, player.serverLevel());
+
+        String toastType = maxLevel <= 4 ? "w1" : maxLevel <= 8 ? "w2" : "g1";
+        ShowToastPacket.sendToPlayer(player, toastType, maxLevel);
+
+        source.sendSuccess(() -> Component.literal(
+                "§a已将城市 " + cityInfo.getCityName() + " 从 Lv." + oldLevel + " 直接升级到满级 Lv." + maxLevel), true);
         return 1;
     }
 }

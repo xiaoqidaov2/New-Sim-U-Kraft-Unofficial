@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.UUID;
 @SuppressWarnings("null")
 /**
  * 银行股票界面
@@ -31,21 +32,30 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
     private static final int MAX_CANDLE_BODY_WIDTH = 6;
     private static final int MAX_VOLUME_BAR_WIDTH = 4;
     private static final double DRAG_PIXELS_PER_SCROLL_STEP = 12.0D;
+    private static final int CITY_LIST_ENTRY_HEIGHT = 22;
 
     private final BlockPos controlBoxPos;
     @Nullable
     private EditBox buySharesField;
     @Nullable
     private EditBox sellSharesField;
-    private final List<StockMarketData.StockCandle> history = new ArrayList<>();
+    @Nullable
+    private Button sellButton;
+    @Nullable
+    private Button sellAllButton;
+    private final List<StockMarketService.CityStockSnapshot> markets = new ArrayList<>();
     private String localMessage = "";
     private boolean marketInfoLoaded;
     private int currentDay;
-    private double currentPrice = 1.0D;
-    private int ownedShares;
     private double playerFunds;
     private int chartScrollOffset;
     private double chartDragRemainderX;
+    private int cityListScrollOffset;
+    @Nullable
+    private UUID selectedMarketCityId;
+    @Nullable
+    private UUID currentMarketCityId;
+    private String currentMarketCityName = "";
 
     public BankStockMarketScreen(BlockPos controlBoxPos) {
         super(Component.translatable("gui.bank_stock_market.title"));
@@ -85,7 +95,7 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
                 button -> submitTrade(StockTradeActionPacket.ActionType.BUY, requireBuySharesField())
         ).bounds(centerX - 80, bottomY - 25, 50, 18).build()));
 
-        this.addRenderableWidget(nn(Button.builder(
+        this.sellButton = this.addRenderableWidget(nn(Button.builder(
                 nn(Component.translatable("gui.bank_stock_market.sell")),
                 button -> submitTrade(StockTradeActionPacket.ActionType.SELL, requireSellSharesField())
         ).bounds(centerX - 80, bottomY, 50, 18).build()));
@@ -95,9 +105,9 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
                 button -> fillMaxBuyableShares()
         ).bounds(centerX - 25, bottomY - 25, 70, 18).build()));
 
-        this.addRenderableWidget(nn(Button.builder(
+        this.sellAllButton = this.addRenderableWidget(nn(Button.builder(
                 nn(Component.translatable("gui.bank_stock_market.sell_all")),
-                button -> requireSellSharesField().setValue(String.valueOf(ownedShares))
+                button -> requireSellSharesField().setValue(String.valueOf(getSelectedOwnedShares()))
         ).bounds(centerX - 25, bottomY, 70, 18).build()));
 
         this.addRenderableWidget(nn(Button.builder(
@@ -107,6 +117,7 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
 
         this.setInitialFocus(requireBuySharesField());
         requestMarketInfo();
+        updateTradeButtonsState();
     }
 
     @Override
@@ -121,6 +132,9 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
         int candleHeight = getCandleChartHeight();
         int volumeY = getVolumeChartY();
         int volumeHeight = getVolumeChartHeight();
+        StockMarketService.CityStockSnapshot selectedMarket = getSelectedMarket();
+        double currentPrice = selectedMarket == null ? 1.0D : selectedMarket.currentPrice();
+        int ownedShares = selectedMarket == null ? 0 : selectedMarket.ownedShares();
 
         safeGuiGraphics.drawCenteredString(nn(this.font),
                 nn(Component.translatable("gui.bank_stock_market.title")),
@@ -137,6 +151,12 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
                 nn(Component.translatable("gui.bank_stock_market.player_funds", formatCurrency(playerFunds))),
                 chartX + 185, 25, 0xFF55FFFF, false);
         safeGuiGraphics.drawString(nn(this.font),
+                nn(Component.translatable("gui.bank_stock_market.current_city", getCurrentMarketCityLabel())),
+                chartX, 36, 0xFF7FC8FF, false);
+        safeGuiGraphics.drawString(nn(this.font),
+                nn(Component.translatable("gui.bank_stock_market.selected_city", getSelectedMarketName())),
+                chartX + 150, 36, 0xFFFFD27F, false);
+        safeGuiGraphics.drawString(nn(this.font),
                 nn(Component.translatable("gui.bank_stock_market.owned_shares", ownedShares)),
                 chartX, volumeY + volumeHeight + 10, labelColor, false);
         safeGuiGraphics.drawString(nn(this.font),
@@ -148,7 +168,7 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
         drawVolumeFrame(safeGuiGraphics, chartX, volumeY, chartWidth, volumeHeight,
                 nn(Component.translatable("gui.bank_stock_market.volume")));
 
-        if (!marketInfoLoaded || history.isEmpty()) {
+        if (!marketInfoLoaded || selectedMarket == null || selectedMarket.history().isEmpty()) {
             safeGuiGraphics.drawCenteredString(nn(this.font),
                     nn(Component.translatable("gui.bank_stock_market.loading")),
                     centerX, chartY + 90, 0xAAAAAA);
@@ -158,6 +178,14 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
             drawLatestChangeText(safeGuiGraphics, chartX, volumeY + volumeHeight + 24);
             renderCandlestickTooltip(safeGuiGraphics, mouseX, mouseY, chartX, chartY, chartWidth, candleHeight);
             renderVolumeTooltip(safeGuiGraphics, mouseX, mouseY, chartX, volumeY, chartWidth, volumeHeight);
+        }
+
+        renderCityMarketList(safeGuiGraphics, mouseX, mouseY);
+
+        if (!canSellSelectedMarket()) {
+            safeGuiGraphics.drawString(nn(this.font),
+                    nn(Component.translatable("gui.bank_stock_market.sell_locked", getCurrentMarketCityLabel())),
+                    getCityListX(), getCityListY() + getCityListHeight() + 8, 0xFFFF8888, false);
         }
 
         if (!localMessage.isEmpty()) {
@@ -185,8 +213,9 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
 
     private void drawCandlestickChart(GuiGraphics guiGraphics, int x, int y, int width, int height) {
         List<StockMarketData.StockCandle> visibleHistory = getVisibleHistory();
-        double maxPrice = visibleHistory.stream().mapToDouble(StockMarketData.StockCandle::high).max().orElse(currentPrice);
-        double minPrice = visibleHistory.stream().mapToDouble(StockMarketData.StockCandle::low).min().orElse(currentPrice);
+        double fallbackPrice = getSelectedCurrentPrice();
+        double maxPrice = visibleHistory.stream().mapToDouble(StockMarketData.StockCandle::high).max().orElse(fallbackPrice);
+        double minPrice = visibleHistory.stream().mapToDouble(StockMarketData.StockCandle::low).min().orElse(fallbackPrice);
         if (Math.abs(maxPrice - minPrice) < 0.01D) {
             maxPrice += 0.5D;
             minPrice = Math.max(0.1D, minPrice - 0.5D);
@@ -317,8 +346,9 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
             return null;
         }
 
-        double maxPrice = visibleHistory.stream().mapToDouble(StockMarketData.StockCandle::high).max().orElse(currentPrice);
-        double minPrice = visibleHistory.stream().mapToDouble(StockMarketData.StockCandle::low).min().orElse(currentPrice);
+        double fallbackPrice = getSelectedCurrentPrice();
+        double maxPrice = visibleHistory.stream().mapToDouble(StockMarketData.StockCandle::high).max().orElse(fallbackPrice);
+        double minPrice = visibleHistory.stream().mapToDouble(StockMarketData.StockCandle::low).min().orElse(fallbackPrice);
         if (Math.abs(maxPrice - minPrice) < 0.01D) {
             maxPrice += 0.5D;
             minPrice = Math.max(0.1D, minPrice - 0.5D);
@@ -399,7 +429,7 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
     }
 
     private int getChartX() {
-        return this.width / 2 - 165;
+        return this.width / 2 - 190;
     }
 
     private int getChartY() {
@@ -407,7 +437,7 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
     }
 
     private int getChartWidth() {
-        return 330;
+        return 250;
     }
 
     private int getCandleChartHeight() {
@@ -431,7 +461,7 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
     }
 
     private int getMaxChartScrollOffset() {
-        return Math.max(0, history.size() - MAX_VISIBLE_CANDLES);
+        return Math.max(0, getSelectedHistory().size() - MAX_VISIBLE_CANDLES);
     }
 
     private void clampChartScrollOffset() {
@@ -449,7 +479,11 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
     }
 
     private void drawLatestChangeText(GuiGraphics guiGraphics, int x, int y) {
-        StockMarketData.StockCandle latest = history.get(history.size() - 1);
+        List<StockMarketData.StockCandle> selectedHistory = getSelectedHistory();
+        if (selectedHistory.isEmpty()) {
+            return;
+        }
+        StockMarketData.StockCandle latest = selectedHistory.get(selectedHistory.size() - 1);
         int color = latest.dailyChange() >= 0 ? 0xFFFF8080 : 0xFF80FF80;
         guiGraphics.drawString(nn(this.font),
                 nn(Component.translatable("gui.bank_stock_market.daily_change", latest.dailyChange())),
@@ -463,10 +497,11 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
 
     private List<StockMarketData.StockCandle> getVisibleHistory() {
         clampChartScrollOffset();
-        int size = history.size();
+        List<StockMarketData.StockCandle> selectedHistory = getSelectedHistory();
+        int size = selectedHistory.size();
         int toIndex = size - chartScrollOffset;
         int fromIndex = Math.max(0, toIndex - MAX_VISIBLE_CANDLES);
-        return history.subList(fromIndex, Math.max(fromIndex, toIndex));
+        return selectedHistory.subList(fromIndex, Math.max(fromIndex, toIndex));
     }
 
     public void updateMarketInfo(BlockPos responseControlBoxPos, StockMarketService.StockMarketSnapshot snapshot) {
@@ -475,14 +510,17 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
         }
 
         this.currentDay = snapshot.currentDay();
-        this.currentPrice = snapshot.currentPrice();
-        this.ownedShares = snapshot.ownedShares();
         this.playerFunds = snapshot.playerFunds();
-        this.history.clear();
-        this.history.addAll(snapshot.history());
+        this.currentMarketCityId = snapshot.currentMarketCityId();
+        this.currentMarketCityName = snapshot.currentMarketCityName();
+        this.markets.clear();
+        this.markets.addAll(snapshot.markets());
+        this.selectedMarketCityId = resolveNextSelectedMarketId();
+        this.cityListScrollOffset = Math.max(0, Math.min(cityListScrollOffset, getMaxCityListScrollOffset()));
         clampChartScrollOffset();
         this.marketInfoLoaded = true;
         this.localMessage = "";
+        updateTradeButtonsState();
     }
 
     private void requestMarketInfo() {
@@ -490,15 +528,26 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
     }
 
     private void submitTrade(StockTradeActionPacket.ActionType actionType, EditBox field) {
+        StockMarketService.CityStockSnapshot selectedMarket = getSelectedMarket();
+        if (selectedMarket == null) {
+            this.localMessage = "gui.bank_stock_market.error.no_market";
+            return;
+        }
+        if (actionType == StockTradeActionPacket.ActionType.SELL && !canSellSelectedMarket()) {
+            this.localMessage = "gui.bank_stock_market.error.sell_wrong_city";
+            return;
+        }
         int quantity = parseQuantity(field);
         if (quantity <= 0) {
             return;
         }
         this.localMessage = "";
-        NetworkManager.sendToServer(new StockTradeActionPacket(controlBoxPos, actionType, quantity));
+        NetworkManager.sendToServer(new StockTradeActionPacket(controlBoxPos, selectedMarket.cityId(), actionType, quantity));
     }
 
     private void fillMaxBuyableShares() {
+        StockMarketService.CityStockSnapshot selectedMarket = getSelectedMarket();
+        double currentPrice = selectedMarket == null ? 1.0D : selectedMarket.currentPrice();
         int maxShares = (int) Math.floor(playerFunds / Math.max(0.01D, currentPrice));
         requireBuySharesField().setValue(String.valueOf(Math.max(0, maxShares)));
     }
@@ -537,6 +586,11 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (isMouseOverCityList(mouseX, mouseY) && getMaxCityListScrollOffset() > 0) {
+            int scrollDelta = delta < 0 ? 1 : -1;
+            cityListScrollOffset = Math.max(0, Math.min(cityListScrollOffset + scrollDelta, getMaxCityListScrollOffset()));
+            return true;
+        }
         if (isMouseOverChartArea(mouseX, mouseY) && getMaxChartScrollOffset() > 0) {
             int scrollDelta = delta < 0 ? 1 : -1;
             if (scrollChartBy(scrollDelta)) {
@@ -566,6 +620,14 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         chartDragRemainderX = 0.0D;
         return super.mouseReleased(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button == 0 && handleCityListClick(mouseX, mouseY)) {
+            return true;
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override
@@ -602,5 +664,167 @@ public class BankStockMarketScreen extends AbstractTransitionScreen {
 
     private static double roundToCurrency(double amount) {
         return Math.round(amount * 100.0D) / 100.0D;
+    }
+
+    @Nullable
+    private StockMarketService.CityStockSnapshot getSelectedMarket() {
+        if (markets.isEmpty()) {
+            return null;
+        }
+        UUID targetId = selectedMarketCityId != null ? selectedMarketCityId : resolveNextSelectedMarketId();
+        for (StockMarketService.CityStockSnapshot market : markets) {
+            if (market.cityId().equals(targetId)) {
+                return market;
+            }
+        }
+        return markets.get(0);
+    }
+
+    @Nonnull
+    private List<StockMarketData.StockCandle> getSelectedHistory() {
+        StockMarketService.CityStockSnapshot selectedMarket = getSelectedMarket();
+        return selectedMarket == null ? List.of() : selectedMarket.history();
+    }
+
+    private int getSelectedOwnedShares() {
+        StockMarketService.CityStockSnapshot selectedMarket = getSelectedMarket();
+        return selectedMarket == null ? 0 : selectedMarket.ownedShares();
+    }
+
+    private double getSelectedCurrentPrice() {
+        StockMarketService.CityStockSnapshot selectedMarket = getSelectedMarket();
+        return selectedMarket == null ? 1.0D : selectedMarket.currentPrice();
+    }
+
+    private boolean canSellSelectedMarket() {
+        StockMarketService.CityStockSnapshot selectedMarket = getSelectedMarket();
+        return selectedMarket != null && currentMarketCityId != null && currentMarketCityId.equals(selectedMarket.cityId());
+    }
+
+    private void updateTradeButtonsState() {
+        if (sellButton != null) {
+            sellButton.active = canSellSelectedMarket();
+        }
+        if (sellAllButton != null) {
+            sellAllButton.active = canSellSelectedMarket();
+        }
+    }
+
+    @Nullable
+    private UUID resolveNextSelectedMarketId() {
+        if (markets.isEmpty()) {
+            return null;
+        }
+        if (selectedMarketCityId != null) {
+            for (StockMarketService.CityStockSnapshot market : markets) {
+                if (market.cityId().equals(selectedMarketCityId)) {
+                    return selectedMarketCityId;
+                }
+            }
+        }
+        if (currentMarketCityId != null) {
+            for (StockMarketService.CityStockSnapshot market : markets) {
+                if (market.cityId().equals(currentMarketCityId)) {
+                    return currentMarketCityId;
+                }
+            }
+        }
+        return markets.get(0).cityId();
+    }
+
+    private String getSelectedMarketName() {
+        StockMarketService.CityStockSnapshot selectedMarket = getSelectedMarket();
+        return selectedMarket == null ? "-" : selectedMarket.cityName();
+    }
+
+    private String getCurrentMarketCityLabel() {
+        return currentMarketCityName == null || currentMarketCityName.isBlank() ? "-" : currentMarketCityName;
+    }
+
+    private void renderCityMarketList(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        int x = getCityListX();
+        int y = getCityListY();
+        int width = getCityListWidth();
+        int height = getCityListHeight();
+        guiGraphics.fill(x, y, x + width, y + height, 0x66222222);
+        guiGraphics.fill(x, y, x + width, y + 1, 0x99FFFFFF);
+        guiGraphics.fill(x, y + height - 1, x + width, y + height, 0x99FFFFFF);
+        guiGraphics.fill(x, y, x + 1, y + height, 0x99FFFFFF);
+        guiGraphics.fill(x + width - 1, y, x + width, y + height, 0x99FFFFFF);
+        guiGraphics.drawString(nn(this.font), Component.translatable("gui.bank_stock_market.city_list"), x + 6, y + 6, 0xFFFFFFFF, false);
+
+        int listY = y + 20;
+        int visibleCount = Math.max(1, (height - 24) / CITY_LIST_ENTRY_HEIGHT);
+        int endIndex = Math.min(markets.size(), cityListScrollOffset + visibleCount);
+        for (int i = cityListScrollOffset; i < endIndex; i++) {
+            StockMarketService.CityStockSnapshot market = markets.get(i);
+            int rowY = listY + (i - cityListScrollOffset) * CITY_LIST_ENTRY_HEIGHT;
+            boolean selected = market.cityId().equals(selectedMarketCityId);
+            boolean hovered = mouseX >= x + 4 && mouseX <= x + width - 4 && mouseY >= rowY && mouseY <= rowY + CITY_LIST_ENTRY_HEIGHT - 2;
+            int background = selected ? 0x885A7FFF : hovered ? 0x55444444 : 0x33202020;
+            guiGraphics.fill(x + 4, rowY, x + width - 4, rowY + CITY_LIST_ENTRY_HEIGHT - 2, background);
+            guiGraphics.drawString(nn(this.font), truncateText(market.cityName(), 12), x + 8, rowY + 3, 0xFFFFFFFF, false);
+            guiGraphics.drawString(nn(this.font),
+                    Component.literal(formatCurrency(market.currentPrice())),
+                    x + 8, rowY + 12, 0xFF80FF80, false);
+            guiGraphics.drawString(nn(this.font),
+                    Component.literal(String.valueOf(market.ownedShares())),
+                    x + width - 22, rowY + 12, 0xFF7FC8FF, false);
+        }
+    }
+
+    private boolean handleCityListClick(double mouseX, double mouseY) {
+        if (!isMouseOverCityList(mouseX, mouseY)) {
+            return false;
+        }
+        int relativeY = (int) mouseY - (getCityListY() + 20);
+        if (relativeY < 0) {
+            return false;
+        }
+        int index = cityListScrollOffset + (relativeY / CITY_LIST_ENTRY_HEIGHT);
+        if (index < 0 || index >= markets.size()) {
+            return false;
+        }
+        selectedMarketCityId = markets.get(index).cityId();
+        chartScrollOffset = 0;
+        chartDragRemainderX = 0.0D;
+        localMessage = "";
+        updateTradeButtonsState();
+        return true;
+    }
+
+    private boolean isMouseOverCityList(double mouseX, double mouseY) {
+        int x = getCityListX();
+        int y = getCityListY();
+        return mouseX >= x && mouseX <= x + getCityListWidth()
+                && mouseY >= y && mouseY <= y + getCityListHeight();
+    }
+
+    private int getMaxCityListScrollOffset() {
+        int visibleCount = Math.max(1, (getCityListHeight() - 24) / CITY_LIST_ENTRY_HEIGHT);
+        return Math.max(0, markets.size() - visibleCount);
+    }
+
+    private int getCityListX() {
+        return getChartX() + getChartWidth() + 12;
+    }
+
+    private int getCityListY() {
+        return getChartY();
+    }
+
+    private int getCityListWidth() {
+        return 128;
+    }
+
+    private int getCityListHeight() {
+        return getVolumeChartY() + getVolumeChartHeight() - getChartY();
+    }
+
+    private String truncateText(String text, int maxLength) {
+        if (text.length() <= maxLength) {
+            return text;
+        }
+        return text.substring(0, Math.max(0, maxLength - 1)) + "~";
     }
 }
