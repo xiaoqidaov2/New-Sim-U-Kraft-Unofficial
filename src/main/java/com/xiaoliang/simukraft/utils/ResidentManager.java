@@ -59,6 +59,9 @@ public class ResidentManager {
         }
     }
 
+    private record LegacyResidenceMatch(Path skFile, BlockPos controlBoxPos) {
+    }
+
     /**
      * 褰撴柊鐨勪綇瀹呮帶鍒剁鏀剧疆鏃讹紝浼樺厛鍒嗛厤缁欏悓鍩庡競涓璶pcid鏈€灏忕殑NPC
      * @param server Minecraft鏈嶅姟鍣ㄥ疄渚?
@@ -443,7 +446,7 @@ public class ResidentManager {
             for (ServerLevel level : server.getAllLevels()) {
                 for (CustomEntity npc : NPCTaskScheduler.getNPCsInLevel(level)) {
                     if (citizenIds.contains(npc.getUUID())) {
-                        boolean hasResidence = hasResidenceAssigned(server, npc.getUUID());
+                        boolean hasResidence = hasResidenceAssigned(server, npc.getUUID(), npc.getFullName(), cityId);
                         npcList.add(new NPCInfo(
                                 npc.getUUID(),
                                 npc.getFullName(),
@@ -1195,6 +1198,17 @@ public class ResidentManager {
     }
 
     /**
+     * 优先按 resident_uuid 查找，查不到时尝试用旧版 resident 名称自愈并补写 resident_uuid。
+     */
+    public static boolean hasResidenceAssigned(MinecraftServer server, UUID npcUuid, String npcName, UUID cityId) {
+        if (server == null || npcUuid == null) {
+            return false;
+        }
+
+        return getNPCResidenceControlBoxPos(server, npcUuid, npcName, cityId) != null;
+    }
+
+    /**
      * 鏇存柊浣忓畢鍒嗛厤缂撳瓨
      */
     private static void updateResidenceCache(MinecraftServer server) {
@@ -1313,6 +1327,70 @@ public class ResidentManager {
     }
 
     /**
+     * 优先走 resident_uuid；若旧存档尚未写入 resident_uuid，则按 resident 名字和城市归属回填。
+     */
+    public static BlockPos getNPCResidenceControlBoxPos(MinecraftServer server, UUID npcUuid, String npcName, UUID cityId) {
+        BlockPos directMatch = getNPCResidenceControlBoxPos(server, npcUuid);
+        if (directMatch != null) {
+            return directMatch;
+        }
+
+        LegacyResidenceMatch repairedMatch = repairLegacyResidenceBinding(server, npcUuid, npcName, cityId);
+        return repairedMatch != null ? repairedMatch.controlBoxPos() : null;
+    }
+
+    /**
+     * 启动后对已加载 NPC 做一次旧存档住宅绑定自愈，补全 resident_uuid。
+     */
+    public static int repairLegacyResidenceBindings(MinecraftServer server) {
+        if (server == null) {
+            return 0;
+        }
+
+        try {
+            Map<String, UUID> npcUuidByName = new HashMap<>();
+            Map<String, UUID> npcCityIdByName = new HashMap<>();
+            for (ServerLevel level : server.getAllLevels()) {
+                for (CustomEntity npc : NPCTaskScheduler.getNPCsInLevel(level)) {
+                    if (npc == null || npc.isDeadOrDying()) {
+                        continue;
+                    }
+                    String npcName = npc.getFullName();
+                    if (npcName == null || npcName.isBlank()) {
+                        continue;
+                    }
+                    npcUuidByName.putIfAbsent(npcName, npc.getUUID());
+                    npcCityIdByName.putIfAbsent(npcName, npc.getCityId());
+                }
+            }
+
+            int repairedCount = 0;
+            for (Map.Entry<String, UUID> entry : npcUuidByName.entrySet()) {
+                LegacyResidenceMatch match = repairLegacyResidenceBinding(
+                        server,
+                        entry.getValue(),
+                        entry.getKey(),
+                        npcCityIdByName.get(entry.getKey())
+                );
+                if (match != null) {
+                    repairedCount++;
+                }
+            }
+
+            if (repairedCount > 0) {
+                updateResidenceCache(server);
+                lastCacheUpdate = System.currentTimeMillis();
+                LOGGER.info("[ResidentManager] 已为 {} 个旧存档住宅补全 resident_uuid 绑定", repairedCount);
+            }
+
+            return repairedCount;
+        } catch (Exception e) {
+            LOGGER.error("[ResidentManager] 批量修复旧存档住宅绑定失败", e);
+            return 0;
+        }
+    }
+
+    /**
      * 浠庝綇瀹呮枃浠朵腑鑾峰彇鎺у埗绠卞潗鏍?
      */
     private static String getPositionFromResidenceFile(Path skFile, String npcName) {
@@ -1378,6 +1456,116 @@ public class ResidentManager {
             LOGGER.error("Error getting position from residence file by UUID: " + skFile.getFileName(), e);
             return null;
         }
+    }
+
+    private static LegacyResidenceMatch repairLegacyResidenceBinding(MinecraftServer server, UUID npcUuid, String npcName, UUID cityId) {
+        if (server == null || npcUuid == null || npcName == null || npcName.isBlank()) {
+            return null;
+        }
+
+        try {
+            Path worldDir = getWorldPath(server);
+            Path residenceDir = worldDir.resolve(FileUtils.MODE_DIR).resolve(RESIDENCE_DIR);
+            if (!Files.exists(residenceDir)) {
+                return null;
+            }
+
+            List<Path> skFiles = findSkFiles(residenceDir);
+            for (Path skFile : skFiles) {
+                LegacyResidenceMatch repaired = repairLegacyResidenceBindingInFile(skFile, npcUuid, npcName, cityId);
+                if (repaired != null) {
+                    removeFromHomeless(server, npcName);
+                    return repaired;
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.error("[ResidentManager] 修复旧存档住宅绑定失败: {} ({})", npcName, npcUuid, e);
+        }
+
+        return null;
+    }
+
+    private static LegacyResidenceMatch repairLegacyResidenceBindingInFile(Path skFile, UUID npcUuid, String npcName, UUID cityId) {
+        try {
+            if (!Files.exists(skFile)) {
+                return null;
+            }
+
+            List<String> lines = Files.readAllLines(skFile, StandardCharsets.UTF_8);
+            String fileCityId = null;
+            String residentName = null;
+            String residentUuidText = null;
+            int residentUuidLineIndex = -1;
+            String position = null;
+
+            for (int i = 0; i < lines.size(); i++) {
+                String trimmedLine = lines.get(i).trim();
+                if (trimmedLine.startsWith("cityid:")) {
+                    fileCityId = trimmedLine.substring("cityid:".length()).trim();
+                } else if (trimmedLine.startsWith("resident:") && !trimmedLine.startsWith("resident_uuid:")) {
+                    residentName = trimmedLine.substring("resident:".length()).trim();
+                } else if (trimmedLine.startsWith("resident_uuid:")) {
+                    residentUuidText = trimmedLine.substring("resident_uuid:".length()).trim();
+                    residentUuidLineIndex = i;
+                } else if (trimmedLine.startsWith("position:")) {
+                    position = trimmedLine.substring("position:".length()).trim();
+                }
+            }
+
+            if (residentName == null || residentName.isBlank() || !residentName.equals(npcName)) {
+                return null;
+            }
+
+            if (cityId != null && fileCityId != null && !fileCityId.isBlank() && !cityId.toString().equals(fileCityId)) {
+                return null;
+            }
+
+            if (residentUuidText != null && !residentUuidText.isBlank()) {
+                try {
+                    UUID storedUuid = UUID.fromString(residentUuidText);
+                    if (!npcUuid.equals(storedUuid)) {
+                        return null;
+                    }
+                    BlockPos existingPos = parseResidencePosition(position);
+                    if (existingPos != null) {
+                        return new LegacyResidenceMatch(skFile, existingPos);
+                    }
+                    return null;
+                } catch (IllegalArgumentException ignored) {
+                    // 旧存档或脏数据的 resident_uuid 非法时，继续按名字自愈。
+                }
+            }
+
+            List<String> updatedLines = new ArrayList<>(lines);
+            if (residentUuidLineIndex >= 0) {
+                updatedLines.set(residentUuidLineIndex, "resident_uuid: " + npcUuid);
+            } else {
+                updatedLines.add("resident_uuid: " + npcUuid);
+            }
+            Files.write(skFile, updatedLines, StandardCharsets.UTF_8);
+
+            BlockPos repairedPos = parseResidencePosition(position);
+            if (repairedPos == null) {
+                String fileName = skFile.getFileName().toString().replace(".sk", "");
+                String[] parts = fileName.split("_");
+                if (parts.length == 3) {
+                    repairedPos = new BlockPos(
+                            Integer.parseInt(parts[0]),
+                            Integer.parseInt(parts[1]),
+                            Integer.parseInt(parts[2])
+                    );
+                }
+            }
+
+            if (repairedPos != null) {
+                LOGGER.info("[ResidentManager] 已修复旧存档住宅绑定: {} -> {}", npcName, repairedPos);
+                return new LegacyResidenceMatch(skFile, repairedPos);
+            }
+        } catch (Exception e) {
+            LOGGER.error("[ResidentManager] 修复住宅文件失败: {}", skFile, e);
+        }
+
+        return null;
     }
 
     private static BlockPos parseResidencePosition(String position) {

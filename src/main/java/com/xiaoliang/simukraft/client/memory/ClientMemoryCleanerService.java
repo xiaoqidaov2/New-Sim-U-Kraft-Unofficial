@@ -35,10 +35,8 @@ public final class ClientMemoryCleanerService {
     private static final AtomicLong WORLD_TICKS = new AtomicLong(0L);
     private static final AtomicLong LAST_HEALTH_CHECK_TICK = new AtomicLong(Long.MIN_VALUE);
     private static final AtomicLong LAUNCH_RETRY_COUNT = new AtomicLong(0L);
-
     private static volatile Path activeExecutablePath;
     private static volatile Process launchedProcess;
-
     private ClientMemoryCleanerService() {
     }
 

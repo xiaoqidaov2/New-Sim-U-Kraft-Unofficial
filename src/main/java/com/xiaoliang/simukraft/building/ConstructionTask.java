@@ -38,8 +38,10 @@ import javax.annotation.Nullable;
 
 public class ConstructionTask {
     private static final long MATERIAL_SLEEP_TICKS = 60L;
-    private static final int PREPARATION_PARSE_BATCH_SIZE = 192;
-    private static final int PREPARATION_FINALIZE_BATCH_SIZE = 384;
+    private static final int PREPARATION_PARSE_BATCH_SIZE = 384;
+    private static final int PREPARATION_FINALIZE_BATCH_SIZE = 768;
+    private static final int PREPARATION_PARSE_BATCH_MAX = 4096;
+    private static final int PREPARATION_FINALIZE_BATCH_MAX = 8192;
     private static final int BLOCK_PRIORITY_BUCKETS = 6;
     @Nonnull
     private static final Property<Direction> FACING_PROPERTY = requireProperty(BlockStateProperties.FACING);
@@ -278,14 +280,21 @@ public class ConstructionTask {
             return;
         }
 
-        processPendingSourceBlocks(PREPARATION_PARSE_BATCH_SIZE);
+        processPendingSourceBlocks(getPreparationParseBatchSize());
         if (pendingSourceIndex >= sourceBlocks.size()) {
-            finalizePreparedBlocks(PREPARATION_FINALIZE_BATCH_SIZE);
+            finalizePreparedBlocks(getPreparationFinalizeBatchSize());
         }
     }
 
     public boolean isPreparing() {
         return !preparationComplete;
+    }
+
+    /**
+     * 只有真正生成出可施工队列后，才算进入可放置阶段。
+     */
+    public boolean hasReadyBlocksToPlace() {
+        return preparationComplete && currentBlockIndex < blocksToPlace.size();
     }
 
     private void processPendingSourceBlocks(int budget) {
@@ -578,7 +587,7 @@ public class ConstructionTask {
     }
 
     public boolean hasNextBlock() {
-        return !preparationComplete || currentBlockIndex < totalBlueprintBlocks;
+        return !preparationComplete || currentBlockIndex < blocksToPlace.size();
     }
 
     /**
@@ -1046,7 +1055,7 @@ public class ConstructionTask {
     }
 
     public boolean isCompleted() {
-        return isCompleted || (preparationComplete && currentBlockIndex >= totalBlueprintBlocks);
+        return isCompleted || (preparationComplete && currentBlockIndex >= blocksToPlace.size());
     }
 
     /**
@@ -1200,6 +1209,22 @@ public class ConstructionTask {
         // 获取方块ID作为材料ID
         String blockId = com.xiaoliang.simukraft.utils.MaterialManager.getBlockId(state.getBlock());
         materials.merge(blockId, 1, (existingCount, addedCount) -> Integer.valueOf(existingCount + addedCount));
+    }
+
+    private int getPreparationParseBatchSize() {
+        if (totalBlueprintBlocks <= 0) {
+            return PREPARATION_PARSE_BATCH_SIZE;
+        }
+        int dynamicBudget = Math.max(PREPARATION_PARSE_BATCH_SIZE, totalBlueprintBlocks / 16);
+        return Math.min(PREPARATION_PARSE_BATCH_MAX, dynamicBudget);
+    }
+
+    private int getPreparationFinalizeBatchSize() {
+        if (totalBlueprintBlocks <= 0) {
+            return PREPARATION_FINALIZE_BATCH_SIZE;
+        }
+        int dynamicBudget = Math.max(PREPARATION_FINALIZE_BATCH_SIZE, totalBlueprintBlocks / 8);
+        return Math.min(PREPARATION_FINALIZE_BATCH_MAX, dynamicBudget);
     }
 
     private record LayerRange(int y, int startIndex, int endIndex) {

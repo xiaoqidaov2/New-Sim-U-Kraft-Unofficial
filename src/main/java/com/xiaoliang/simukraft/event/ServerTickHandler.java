@@ -66,6 +66,7 @@ public class ServerTickHandler {
 
             if (startupRestoreDelayTicks >= 0) {
                 if (startupRestoreDelayTicks-- == 0) {
+                    ResidentManager.repairLegacyResidenceBindings(server);
                     restoreHiredNpcWorkStates(server);
                     startupRestoreDelayTicks = -1;
                 }

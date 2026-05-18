@@ -1,10 +1,13 @@
 package com.xiaoliang.simukraft.network;
 
+import com.xiaoliang.simukraft.entity.CustomEntity;
 import com.xiaoliang.simukraft.utils.ResidentManager;
+import com.xiaoliang.simukraft.utils.NPCTaskScheduler;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
 
+import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
@@ -31,8 +34,25 @@ public class RequestNPCResidencePacket {
             ServerPlayer player = ctx.get().getSender();
             if (player == null) return;
 
-            // 在服务端查询NPC居住信息
-            boolean hasResidence = ResidentManager.hasResidenceAssigned(player.getServer(), npcName);
+            UUID npcUuid = null;
+            UUID cityId = null;
+            for (var level : player.getServer().getAllLevels()) {
+                for (CustomEntity npc : NPCTaskScheduler.getNPCsInLevel(level)) {
+                    if (npcName.equals(npc.getFullName())) {
+                        npcUuid = npc.getUUID();
+                        cityId = npc.getCityId();
+                        break;
+                    }
+                }
+                if (npcUuid != null) {
+                    break;
+                }
+            }
+
+            // 在服务端查询NPC居住信息；旧存档缺 resident_uuid 时顺带做一次自愈补写
+            boolean hasResidence = npcUuid != null
+                    ? ResidentManager.hasResidenceAssigned(player.getServer(), npcUuid, npcName, cityId)
+                    : ResidentManager.hasResidenceAssigned(player.getServer(), npcName);
             String position = null;
             if (hasResidence) {
                 position = ResidentManager.getNPCResidencePosition(player.getServer(), npcName);

@@ -826,7 +826,7 @@ public class CustomEntity extends PathfinderMob {
             if (getWorkSubState() != WorkSubState.LUNCH_BREAK && getWorkSubState() != WorkSubState.BUYING_FOOD) {
                 // 建筑师：检查是否有未完成的建造任务
                 if ("builder".equals(currentJob) && constructionTask != null
-                        && !constructionTask.isCompleted() && constructionTask.hasNextBlock()) {
+                        && !constructionTask.isCompleted() && constructionTask.hasReadyBlocksToPlace()) {
                     hasActiveWork = true;
                 }
 
@@ -1249,8 +1249,13 @@ public class CustomEntity extends PathfinderMob {
             return;
         }
 
-        // 检查NPC是否已有住宅分配
-        boolean hasResidence = ResidentManager.hasResidenceAssigned(this.level().getServer(), fullName);
+        // 兼容旧存档：优先按UUID检查，并在必要时把旧 resident 名称绑定自动回填成 resident_uuid。
+        boolean hasResidence = ResidentManager.hasResidenceAssigned(
+                this.level().getServer(),
+                this.getUUID(),
+                fullName,
+                this.cityId
+        );
 
         if (!hasResidence) {
             // 尝试分配住宅
@@ -1924,7 +1929,7 @@ public class CustomEntity extends PathfinderMob {
     private boolean hasActiveConstructionTask() {
         return this.constructionTask != null
                 && !this.constructionTask.isCompleted()
-                && this.constructionTask.hasNextBlock();
+                && this.constructionTask.hasReadyBlocksToPlace();
     }
 
     private void enterBuilderStandbyMode() {

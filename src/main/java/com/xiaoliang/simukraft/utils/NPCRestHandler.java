@@ -2737,8 +2737,8 @@ public class NPCRestHandler {
             return null;
         }
 
-        // 住宅归属必须以住宅控制盒 resident_uuid 绑定为准，避免按名字匹配回错家。
-        return ResidentManager.getNPCResidenceControlBoxPos(server, npc.getUUID());
+        // 住宅归属优先按 resident_uuid 绑定；旧存档缺少 resident_uuid 时，按名字+城市自愈补写。
+        return ResidentManager.getNPCResidenceControlBoxPos(server, npc.getUUID(), npc.getFullName(), npc.getCityId());
     }
 
     public static BlockPos getFamilyHomePosition(CustomEntity npc, MinecraftServer server) {
