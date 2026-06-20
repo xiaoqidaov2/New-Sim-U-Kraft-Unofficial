@@ -85,8 +85,8 @@ public class NPCPathFinder {
         }
 
         PriorityQueue<NPCPathNode> openSet = new PriorityQueue<>();
-        Set<String> closedSet = new HashSet<>();
-        Map<String, NPCPathNode> nodeMap = new HashMap<>();
+        Set<Long> closedSet = new HashSet<>();
+        Map<Long, NPCPathNode> nodeMap = new HashMap<>();
         NPCPathNode targetNode = createNode(normalizedEnd, NPCPathNode.NodeType.WALKABLE, NPCPathNode.MovementAction.TRAVERSE);
         NPCPathNode startNode = createNode(normalizedStart, NPCPathNode.NodeType.WALKABLE, NPCPathNode.MovementAction.TRAVERSE);
         startNode.gCost = 0.0D;
@@ -176,7 +176,7 @@ public class NPCPathFinder {
             return;
         }
         for (NPCPathNode candidate : createSurfaceNodesForSupportBlock(supportPos, NPCPathNode.NodeType.WALKABLE, NPCPathNode.MovementAction.TRAVERSE)) {
-            if (candidate.key.equals(from.key) || !isSurfaceNodeStandable(candidate)) {
+            if (candidate.key == from.key || !isSurfaceNodeStandable(candidate)) {
                 continue;
             }
             NPCPathNode node = createNeighbor(from, candidate, NPCPathNode.NodeType.WALKABLE);
@@ -225,10 +225,10 @@ public class NPCPathFinder {
     private NPCPathNode findBestColumnNeighbor(NPCPathNode from, BlockPos column, boolean allowFall) {
         NPCPathNode bestNode = null;
         double bestScore = Double.MAX_VALUE;
-        Set<String> visited = new HashSet<>();
+        Set<Long> visited = new HashSet<>();
         for (int dy = -2; dy <= 2; dy++) {
             for (NPCPathNode candidateNode : createSurfaceNodes(column.offset(0, dy, 0), NPCPathNode.NodeType.WALKABLE, NPCPathNode.MovementAction.TRAVERSE)) {
-                if (candidateNode.key.equals(from.key) || !visited.add(candidateNode.key)) {
+                if (candidateNode.key == from.key || !visited.add(candidateNode.key)) {
                     continue;
                 }
                 if (!isSurfaceNodeStandable(candidateNode)) {
@@ -536,7 +536,7 @@ public class NPCPathFinder {
         if (shape.isEmpty()) {
             return;
         }
-        Set<String> added = new HashSet<>();
+        Set<Long> added = new HashSet<>();
         List<AABB> boxes = shape.toAabbs();
 
         // menglannnn: 对于楼梯/台阶，基于碰撞箱生成所有可能的站立点，不依赖朝向
@@ -556,7 +556,7 @@ public class NPCPathFinder {
      * menglannnn: 为楼梯/台阶生成表面节点 - 基于碰撞箱，兼容任意朝向
      * 遍历所有碰撞box，为每个顶部表面生成可站立节点
      */
-    private void addStairSurfaceNodes(List<NPCPathNode> nodes, Set<String> added, List<AABB> boxes, BlockPos blockPos, BlockPos nodePos, NPCPathNode.NodeType type, NPCPathNode.MovementAction action) {
+    private void addStairSurfaceNodes(List<NPCPathNode> nodes, Set<Long> added, List<AABB> boxes, BlockPos blockPos, BlockPos nodePos, NPCPathNode.NodeType type, NPCPathNode.MovementAction action) {
         // 按高度分组，找到所有独特的顶部表面高度
         Map<Double, List<AABB>> heightGroups = new HashMap<>();
         for (AABB box : boxes) {
@@ -607,7 +607,7 @@ public class NPCPathFinder {
                 standX = trapdoorAdjusted.standX;
                 standZ = trapdoorAdjusted.standZ;
                 BlockPos footNodePos = BlockPos.containing(standX, standY, standZ);
-                String key = NPCPathNode.createKey(standX, standY, standZ);
+                long key = NPCPathNode.createKey(standX, standY, standZ);
                 if ((nodePos == null || footNodePos.equals(nodePos)) && added.add(key)) {
                     nodes.add(createSurfaceNode(footNodePos, standX, standY, standZ, type, action));
                 }
@@ -615,7 +615,7 @@ public class NPCPathFinder {
         }
     }
 
-    private void addExposedTopSurfaceNodes(List<NPCPathNode> nodes, Set<String> added, List<AABB> boxes, AABB baseBox, BlockPos blockPos, BlockPos nodePos, NPCPathNode.NodeType type, NPCPathNode.MovementAction action) {
+    private void addExposedTopSurfaceNodes(List<NPCPathNode> nodes, Set<Long> added, List<AABB> boxes, AABB baseBox, BlockPos blockPos, BlockPos nodePos, NPCPathNode.NodeType type, NPCPathNode.MovementAction action) {
         List<double[]> regions = new ArrayList<>();
         regions.add(new double[]{baseBox.minX, baseBox.maxX, baseBox.minZ, baseBox.maxZ});
         for (AABB upperBox : boxes) {
@@ -641,7 +641,7 @@ public class NPCPathFinder {
             double standY = blockPos.getY() + baseBox.maxY;
             double standZ = blockPos.getZ() + (region[2] + region[3]) * 0.5D;
             BlockPos footNodePos = BlockPos.containing(standX, standY, standZ);
-            String key = NPCPathNode.createKey(standX, standY, standZ);
+            long key = NPCPathNode.createKey(standX, standY, standZ);
             if ((nodePos == null || footNodePos.equals(nodePos)) && added.add(key)) {
                 nodes.add(createSurfaceNode(footNodePos, standX, standY, standZ, type, action));
             }
