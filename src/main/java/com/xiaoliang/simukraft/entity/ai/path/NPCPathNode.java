@@ -11,7 +11,7 @@ public class NPCPathNode implements Comparable<NPCPathNode> {
     public double standX;
     public double standY;
     public double standZ;
-    public String key;
+    public long key; // 使用 long 替代 String 作为键值，避免字符串拼接开销
     public double stepCost;
     public double terrainCost;
     public String costReason;
@@ -45,6 +45,12 @@ public class NPCPathNode implements Comparable<NPCPathNode> {
         FALL,
         DOOR
     }
+    
+    // 坐标偏移常量，用于将坐标编码为 long
+    private static final int X_OFFSET = 1000000;
+    private static final int Y_OFFSET = 1000000;
+    private static final int Z_OFFSET = 1000000;
+    private static final long SCALE_FACTOR = 16L;
     
     public NPCPathNode(BlockPos pos) {
         this.pos = pos;
@@ -93,8 +99,16 @@ public class NPCPathNode implements Comparable<NPCPathNode> {
         this.key = createKey(standX, standY, standZ);
     }
 
-    public static String createKey(double x, double y, double z) {
-        return Math.round(x * 16.0D) + ":" + Math.round(y * 16.0D) + ":" + Math.round(z * 16.0D);
+    /**
+     * 将三维坐标编码为单个 long 值，避免字符串拼接的性能开销
+     * 坐标范围：X/Z: [-62500, 62500], Y: [0, 125000] (Minecraft 世界范围内安全)
+     */
+    public static long createKey(double x, double y, double z) {
+        long ix = Math.round(x * SCALE_FACTOR) + X_OFFSET;
+        long iy = Math.round(y * SCALE_FACTOR) + Y_OFFSET;
+        long iz = Math.round(z * SCALE_FACTOR) + Z_OFFSET;
+        // 使用位运算组合三个坐标：ix(20bits) | iy(21bits) << 20 | iz(20bits) << 41
+        return (ix & 0xFFFFFL) | ((iy & 0x1FFFFFL) << 20) | ((iz & 0xFFFFFL) << 41);
     }
 
     @Override
@@ -107,12 +121,12 @@ public class NPCPathNode implements Comparable<NPCPathNode> {
         if (this == obj) return true;
         if (!(obj instanceof NPCPathNode)) return false;
         NPCPathNode other = (NPCPathNode) obj;
-        return this.key.equals(other.key);
+        return this.key == other.key;
     }
     
     @Override
     public int hashCode() {
-        return key.hashCode();
+        return Long.hashCode(key);
     }
     
     @Override
