@@ -1,4 +1,26 @@
-```
-# CI/CD
-.github/workflows/
-```
+# ==== 构建与 IDE ====
+/build/
+.gradle/
+*.iws
+*.iml
+*.ipr
+.idea/
+.vscode/
+.settings/
+.classpath
+.project
+.DS_Store
+Thumbs.db
+
+# ==== Forge 运行目录 ====
+/run/
+/run-server/
+/run-data/
+
+# ==== 构建产物 ====
+*.jar
+*.log
+*.class
+
+# ==== 本地敏感 ====
+local.properties
