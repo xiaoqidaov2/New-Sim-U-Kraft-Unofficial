@@ -1,4 +1,7 @@
 ```
-# CI/CD
+# GitHub workflow artifacts
 .github/workflows/
+
+# Original rules preserved
+.gitignore
 ```
