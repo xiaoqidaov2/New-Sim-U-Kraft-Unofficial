@@ -1,5 +1,6 @@
 package com.xiaoliang.simukraft.utils;
 
+import com.xiaoliang.simukraft.Simukraft;
 import com.xiaoliang.simukraft.building.ControlBoxDataManager;
 import com.xiaoliang.simukraft.building.MedicalBuildingConfig;
 import com.xiaoliang.simukraft.building.MedicalBuildingManager;
@@ -78,6 +79,43 @@ public final class NPCFamilyManager {
     private static final Map<String, Long> hospitalQueueMessageTimes = new ConcurrentHashMap<>();
     private static boolean nightAffectionTriggered = false;
     private static long lastPregnancyDayCheck = Long.MIN_VALUE;
+
+    static {
+        registerCleanupHandlers();
+    }
+
+    private static void registerCleanupHandlers() {
+        GlobalResourceCleaner.registerCleanableResource("NPCFamilyManager-activeSessions", () -> {
+            activeSessions.clear();
+            Simukraft.LOGGER.debug("[NPCFamilyManager] 已清理 activeSessions");
+        });
+
+        GlobalResourceCleaner.registerCleanableResource("NPCFamilyManager-pregnancyManaged", () -> {
+            pregnancyManagedNpcUuids.clear();
+            Simukraft.LOGGER.debug("[NPCFamilyManager] 已清理 pregnancyManagedNpcUuids");
+        });
+
+        GlobalResourceCleaner.registerCleanableResource("NPCFamilyManager-hospitalCache", () -> {
+            hospitalTargetCache.clear();
+            laborStartGameTimes.clear();
+            laborBedAssignments.clear();
+            hospitalQueueMessageTimes.clear();
+            Simukraft.LOGGER.debug("[NPCFamilyManager] 已清理医院相关缓存");
+        });
+    }
+
+    public static void cleanupAllCaches() {
+        activeSessions.clear();
+        pregnancyManagedNpcUuids.clear();
+        hospitalTargetCache.clear();
+        laborStartGameTimes.clear();
+        laborBedAssignments.clear();
+        hospitalQueueMessageTimes.clear();
+        nightAffectionTriggered = false;
+        lastPregnancyDayCheck = Long.MIN_VALUE;
+        
+        Simukraft.LOGGER.info("[NPCFamilyManager] 所有缓存已清理");
+    }
 
     private NPCFamilyManager() {
     }

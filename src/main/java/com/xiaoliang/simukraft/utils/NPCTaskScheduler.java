@@ -1,68 +1,84 @@
 package com.xiaoliang.simukraft.utils;
 
+import com.xiaoliang.simukraft.Simukraft;
 import com.xiaoliang.simukraft.entity.CustomEntity;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.EntityJoinLevelEvent;
+import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.lang.ref.Reference;
+import java.lang.ref.ReferenceQueue;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.lang.ref.WeakReference;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 
-/**
- * NPC任务调度器
- * 使用多线程处理NPC任务，避免主线程阻塞
- */
 @Mod.EventBusSubscriber(modid = "simukraft", bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class NPCTaskScheduler {
     private static final long SHUTDOWN_WAIT_MILLIS = 500L;
     private static final Logger LOGGER = LogManager.getLogger();
-    private static final int MAX_MAIN_THREAD_TASKS_PER_TICK = 100;
-
-    // 线程池配置
+    
+    private static final int MIN_MAIN_THREAD_TASKS_PER_TICK = 50;
+    private static final int MAX_MAIN_THREAD_TASKS_PER_TICK = 200;
+    private static final int DEFAULT_MAIN_THREAD_TASKS_PER_TICK = 100;
+    
     private static final int CORE_POOL_SIZE = Math.max(2, Runtime.getRuntime().availableProcessors() / 2);
     private static final int MAX_POOL_SIZE = Math.max(4, Runtime.getRuntime().availableProcessors());
     private static final long KEEP_ALIVE_TIME = 60L;
-    private static final int TASK_BATCH_SIZE = 50; // 每批处理的NPC数量
-    private static final int MAX_PENDING_TASKS = 1000; // 最大待处理任务数
+    private static final int TASK_BATCH_SIZE = 50;
+    private static final int MAX_PENDING_TASKS = 1000;
+    private static final int MAX_MAIN_THREAD_QUEUE_SIZE = 500;
 
-    // 线程池
     private static ExecutorService taskExecutor;
 
-    // 任务统计
     private static final AtomicInteger pendingTaskCount = new AtomicInteger(0);
     private static final AtomicInteger completedTaskCount = new AtomicInteger(0);
     private static final AtomicInteger rejectedTaskCount = new AtomicInteger(0);
 
-    // 主线程任务队列（用于将异步结果同步回主线程）
-    private static final ConcurrentLinkedQueue<Runnable> mainThreadTasks = new ConcurrentLinkedQueue<>();
+    private static final PriorityBlockingQueue<PriorityRunnable> mainThreadTasks = new PriorityBlockingQueue<>();
 
-    // 初始化标志
     private static volatile boolean initialized = false;
     private static final Object initLock = new Object();
 
-    // 性能监控
     private static long lastStatsTime = 0;
-    private static final long STATS_INTERVAL_MS = 30000; // 30秒输出一次统计
+    private static final long STATS_INTERVAL_MS = 30000;
 
-    // 仅缓存弱引用，避免世界卸载后仍被静态集合强持有
-    private static final Map<ResourceKey<Level>, CopyOnWriteArrayList<WeakReference<CustomEntity>>> NPC_CACHE = new ConcurrentHashMap<>();
-    private static volatile long lastCacheUpdate = 0;
-    private static final long CACHE_UPDATE_INTERVAL = 100; // 每5秒更新一次缓存（100 ticks）
+    private static final Map<ResourceKey<Level>, CopyOnWriteArrayList<WeakNpcRef>> NPC_CACHE = new ConcurrentHashMap<>();
+    
+    private static final ReferenceQueue<CustomEntity> REFERENCE_QUEUE = new ReferenceQueue<>();
+    
+    private static final ReadWriteLock cacheLock = new ReentrantReadWriteLock();
+    
+    private static final AtomicLong lastCacheUpdate = new AtomicLong(0);
+    private static final long CACHE_UPDATE_INTERVAL = 100;
+    
+    private static volatile boolean fullRefreshNeeded = true;
+    
+    private static final AtomicInteger cacheHits = new AtomicInteger(0);
+    private static final AtomicInteger cacheMisses = new AtomicInteger(0);
+    private static final AtomicInteger incrementalUpdates = new AtomicInteger(0);
+    private static final AtomicInteger fullUpdates = new AtomicInteger(0);
+    
+    private static volatile int currentMainThreadTaskLimit = DEFAULT_MAIN_THREAD_TASKS_PER_TICK;
+    private static long lastTpsCheckTime = 0;
+    private static double currentTps = 20.0;
+    private static final AtomicInteger queueOverflowWarnings = new AtomicInteger(0);
 
-    /**
-     * 初始化线程池
-     */
     public static void initialize() {
         if (initialized) return;
 
@@ -90,16 +106,12 @@ public class NPCTaskScheduler {
         }
     }
 
-    /**
-     * 关闭线程池
-     */
     public static void shutdown() {
         synchronized (initLock) {
             if (!initialized) return;
 
             LOGGER.info("正在关闭NPC任务调度器...");
 
-            // 拒绝新任务
             if (taskExecutor != null) {
                 taskExecutor.shutdown();
                 try {
@@ -112,7 +124,6 @@ public class NPCTaskScheduler {
                 }
             }
 
-            // 清空队列
             mainThreadTasks.clear();
             pendingTaskCount.set(0);
             invalidateCache();
@@ -122,9 +133,6 @@ public class NPCTaskScheduler {
         }
     }
 
-    /**
-     * 提交任务到线程池
-     */
     public static void submitTask(Runnable task, String taskName) {
         if (task == null) {
             return;
@@ -164,9 +172,6 @@ public class NPCTaskScheduler {
         }
     }
 
-    /**
-     * 提交需要在主线程执行结果的任务
-     */
     public static void submitTaskWithMainThreadCallback(Runnable asyncTask, Runnable mainThreadCallback, String taskName) {
         submitCallableWithMainThreadCallback(() -> {
             if (asyncTask != null) {
@@ -180,10 +185,6 @@ public class NPCTaskScheduler {
         }, taskName);
     }
 
-    /**
-     * 提交后台计算，并在主线程消费结果。
-     * 适用于“异步准备数据 + 主线程应用结果”的两阶段流水线。
-     */
     public static <T> void submitCallableWithMainThreadCallback(Callable<T> asyncTask,
                                                                 Consumer<T> mainThreadCallback,
                                                                 String taskName) {
@@ -198,32 +199,40 @@ public class NPCTaskScheduler {
 
             if (mainThreadCallback != null) {
                 final T finalResult = result;
-                enqueueMainThreadTask(() -> mainThreadCallback.accept(finalResult), taskName + "-Callback");
+                enqueueMainThreadTask(() -> mainThreadCallback.accept(finalResult), TaskPriority.NORMAL, taskName + "-Callback");
             }
         }, taskName);
     }
 
-    /**
-     * 直接排队一个主线程任务，避免为纯主线程操作额外占用工作线程。
-     */
     public static void enqueueMainThreadTask(Runnable mainThreadTask, String taskName) {
+        enqueueMainThreadTask(mainThreadTask, TaskPriority.NORMAL, taskName);
+    }
+
+    public static void enqueueMainThreadTask(Runnable mainThreadTask, TaskPriority priority, String taskName) {
         if (mainThreadTask == null) {
             return;
         }
         if (!initialized) {
             initialize();
         }
+        
+        int currentQueueSize = mainThreadTasks.size();
+        if (currentQueueSize >= MAX_MAIN_THREAD_QUEUE_SIZE) {
+            if (queueOverflowWarnings.incrementAndGet() % 50 == 0) {
+                LOGGER.warn("主线程任务队列已满({}个任务)，新任务 {} 将被丢弃！", currentQueueSize, taskName);
+            }
+            return;
+        }
+        
         if (taskExecutor == null || taskExecutor.isShutdown()) {
             LOGGER.warn("主线程任务队列不可用，任务 {} 将立即执行", taskName);
             mainThreadTask.run();
             return;
         }
-        mainThreadTasks.offer(mainThreadTask);
+        
+        mainThreadTasks.offer(new PriorityRunnable(mainThreadTask, priority, taskName));
     }
 
-    /**
-     * 在需要时切换到主线程执行世界操作；如果当前已经位于主线程则立即执行。
-     */
     public static void runOnMainThread(MinecraftServer server, Runnable mainThreadTask, String taskName) {
         if (mainThreadTask == null) {
             return;
@@ -236,16 +245,12 @@ public class NPCTaskScheduler {
             }
             return;
         }
-        enqueueMainThreadTask(mainThreadTask, taskName);
+        enqueueMainThreadTask(mainThreadTask, TaskPriority.HIGH, taskName);
     }
 
-    /**
-     * 批量提交NPC任务
-     */
     public static void submitNPCTasks(List<CustomEntity> npcs, Consumer<CustomEntity> taskProcessor, String taskName) {
         if (npcs == null || npcs.isEmpty()) return;
 
-        // 将NPC分批处理
         List<List<CustomEntity>> batches = createBatches(npcs, TASK_BATCH_SIZE);
 
         for (int i = 0; i < batches.size(); i++) {
@@ -266,9 +271,6 @@ public class NPCTaskScheduler {
         }
     }
 
-    /**
-     * 创建分批列表
-     */
     private static <T> List<List<T>> createBatches(List<T> items, int batchSize) {
         List<List<T>> batches = new ArrayList<>();
         for (int i = 0; i < items.size(); i += batchSize) {
@@ -277,29 +279,28 @@ public class NPCTaskScheduler {
         return batches;
     }
 
-    /**
-     * 服务器tick事件处理
-     * 在主线程执行待处理的任务回调
-     */
     @SubscribeEvent
     public static void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
 
-        // 初始化（如果尚未初始化）
         if (!initialized) {
             initialize();
         }
 
-        // 执行主线程任务（限制每tick执行数量，避免阻塞）
-        int processedCount = drainMainThreadTasks(MAX_MAIN_THREAD_TASKS_PER_TICK);
+        updateTpsEstimate(event.getServer());
+        
+        int dynamicLimit = calculateDynamicTaskLimit();
+        int processedCount = drainMainThreadTasks(dynamicLimit);
 
-        // 如果还有剩余任务，记录日志
         int remainingTasks = mainThreadTasks.size();
         if (remainingTasks > MAX_MAIN_THREAD_TASKS_PER_TICK) {
-            LOGGER.debug("主线程任务队列积压: {} 个任务", remainingTasks);
+            LOGGER.warn("⚠️ 主线程任务队列严重积压: {} 个任务 (限制: {})", remainingTasks, dynamicLimit);
+        } else if (remainingTasks > DEFAULT_MAIN_THREAD_TASKS_PER_TICK) {
+            LOGGER.debug("主线程任务队列轻度积压: {} 个任务", remainingTasks);
         }
 
-        // 定期输出统计信息
+        cleanCollectedReferences();
+
         long currentTime = System.currentTimeMillis();
         if (currentTime - lastStatsTime > STATS_INTERVAL_MS) {
             outputStats(processedCount);
@@ -307,111 +308,272 @@ public class NPCTaskScheduler {
         }
     }
 
+    @SubscribeEvent
+    public static void onEntityJoin(EntityJoinLevelEvent event) {
+        if (event.getEntity() instanceof CustomEntity npc && !event.getLevel().isClientSide()) {
+            addNpcToCache(npc, event.getLevel().dimension());
+        }
+    }
+
+    @SubscribeEvent
+    public static void onEntityLeave(EntityLeaveLevelEvent event) {
+        if (event.getEntity() instanceof CustomEntity npc && !event.getLevel().isClientSide()) {
+            removeNpcFromCache(npc, event.getLevel().dimension());
+        }
+    }
+
+    private static void updateTpsEstimate(MinecraftServer server) {
+        if (server == null) return;
+        
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastTpsCheckTime >= 5000) {
+            currentTps = 20.0;
+            lastTpsCheckTime = currentTime;
+        }
+    }
+
+    private static int calculateDynamicTaskLimit() {
+        if (currentTps >= 19.0) {
+            currentMainThreadTaskLimit = MAX_MAIN_THREAD_TASKS_PER_TICK;
+        } else if (currentTps >= 17.0) {
+            currentMainThreadTaskLimit = DEFAULT_MAIN_THREAD_TASKS_PER_TICK;
+        } else if (currentTps >= 15.0) {
+            currentMainThreadTaskLimit = MIN_MAIN_THREAD_TASKS_PER_TICK;
+        } else {
+            currentMainThreadTaskLimit = Math.max(20, MIN_MAIN_THREAD_TASKS_PER_TICK / 2);
+        }
+        
+        int queueSize = mainThreadTasks.size();
+        if (queueSize > 300) {
+            currentMainThreadTaskLimit = Math.min(currentMainThreadTaskLimit + 50, MAX_MAIN_THREAD_TASKS_PER_TICK);
+        }
+        
+        return currentMainThreadTaskLimit;
+    }
+
+    private static void addNpcToCache(CustomEntity npc, ResourceKey<Level> levelKey) {
+        if (npc == null || levelKey == null) return;
+        
+        cacheLock.writeLock().lock();
+        try {
+            CopyOnWriteArrayList<WeakNpcRef> levelCache = NPC_CACHE.computeIfAbsent(levelKey, k -> new CopyOnWriteArrayList<>());
+            
+            WeakNpcRef newRef = new WeakNpcRef(npc, REFERENCE_QUEUE);
+            levelCache.add(newRef);
+            
+            incrementalUpdates.incrementAndGet();
+        } finally {
+            cacheLock.writeLock().unlock();
+        }
+    }
+
+    private static void removeNpcFromCache(CustomEntity npc, ResourceKey<Level> levelKey) {
+        if (npc == null || levelKey == null) return;
+        
+        cacheLock.writeLock().lock();
+        try {
+            CopyOnWriteArrayList<WeakNpcRef> levelCache = NPC_CACHE.get(levelKey);
+            if (levelCache == null) return;
+            
+            levelCache.removeIf(ref -> {
+                CustomEntity cached = ref.get();
+                return cached == null || cached == npc || !cached.isAlive();
+            });
+            
+            incrementalUpdates.incrementAndGet();
+        } finally {
+            cacheLock.writeLock().unlock();
+        }
+    }
+
+    private static void cleanCollectedReferences() {
+        Reference<? extends CustomEntity> ref;
+        while ((ref = REFERENCE_QUEUE.poll()) != null) {
+            if (ref instanceof WeakNpcRef weakRef) {
+                ResourceKey<Level> levelKey = weakRef.getLevelKey();
+                if (levelKey != null) {
+                    CopyOnWriteArrayList<WeakNpcRef> levelCache = NPC_CACHE.get(levelKey);
+                    if (levelCache != null) {
+                        levelCache.remove(weakRef);
+                    }
+                }
+            }
+        }
+    }
+
     private static int drainMainThreadTasks(int maxTasks) {
         int processedCount = 0;
-        Runnable task;
+        PriorityRunnable task;
         while (processedCount < maxTasks && (task = mainThreadTasks.poll()) != null) {
             try {
                 task.run();
                 processedCount++;
             } catch (Exception e) {
-                LOGGER.error("执行主线程任务时发生错误", e);
+                LOGGER.error("执行主线程任务 [{}] 时发生错误", task.taskName, e);
             }
         }
         return processedCount;
     }
 
-    /**
-     * 输出统计信息
-     */
     private static void outputStats(int processedMainThreadTasks) {
         int pending = pendingTaskCount.get();
-        int completed = completedTaskCount.getAndSet(0); // 重置计数器
+        int completed = completedTaskCount.getAndSet(0);
         int rejected = rejectedTaskCount.getAndSet(0);
         int queuedMainThreadTasks = mainThreadTasks.size();
+        int hits = cacheHits.getAndSet(0);
+        int misses = cacheMisses.getAndSet(0);
+        int incrUpdates = incrementalUpdates.getAndSet(0);
+        int fullUpd = fullUpdates.getAndSet(0);
+        int overflowWarnings = queueOverflowWarnings.getAndSet(0);
 
-        if (pending > 0 || completed > 0 || rejected > 0 || queuedMainThreadTasks > 0 || processedMainThreadTasks > 0) {
-            LOGGER.info("NPC任务调度器统计 - 待处理: {}, 已完成: {}, 被拒绝: {}, 主线程已执行: {}, 主线程排队: {}",
-                    pending, completed, rejected, processedMainThreadTasks, queuedMainThreadTasks);
-        }
+        String tpsStatus = currentTps >= 19.0 ? "§a良好" : (currentTps >= 17.0 ? "§e一般" : "§c较差");
+        
+        LOGGER.info("NPC调度器统计 - TPS:{}({:.1f}), 待处理:{}, 已完成:{}, 拒绝:{}, " +
+                   "主线程执行:{}, 主线程排队:{}/{}, 缓存命中:{}, 缺失:{}, " +
+                   "增量更新:{}, 全量更新:{}, 溢出警告:{}",
+                   tpsStatus, currentTps, pending, completed, rejected, 
+                   processedMainThreadTasks, queuedMainThreadTasks, currentMainThreadTaskLimit,
+                   hits, misses, incrUpdates, fullUpd, overflowWarnings);
     }
 
-    /**
-     * 获取所有NPC列表（从所有世界）- 使用缓存优化
-     */
     public static List<CustomEntity> getAllNPCs(MinecraftServer server) {
         List<CustomEntity> allNPCs = new ArrayList<>();
 
         if (server == null) return allNPCs;
 
-        // 检查是否需要更新缓存
-        long currentTime = System.currentTimeMillis();
-        boolean needUpdate = NPC_CACHE.isEmpty() || (currentTime - lastCacheUpdate > CACHE_UPDATE_INTERVAL * 50);
+        cacheLock.readLock().lock();
+        try {
+            long currentTime = System.currentTimeMillis();
+            long lastUpdate = lastCacheUpdate.get();
+            boolean needFullRefresh = fullRefreshNeeded || 
+                                     NPC_CACHE.isEmpty() || 
+                                     (currentTime - lastUpdate > CACHE_UPDATE_INTERVAL * 50);
 
-        if (needUpdate) {
-            NPC_CACHE.clear();
-            for (ServerLevel level : server.getAllLevels()) {
-                refreshLevelCache(level);
+            if (needFullRefresh) {
+                cacheLock.readLock().unlock();
+                cacheLock.writeLock().lock();
+                try {
+                    if (fullRefreshNeeded || NPC_CACHE.isEmpty() || 
+                        (currentTime - lastCacheUpdate.get() > CACHE_UPDATE_INTERVAL * 50)) {
+                        fullRefresh(server);
+                        fullUpdates.incrementAndGet();
+                        fullRefreshNeeded = false;
+                    } else {
+                        cacheHits.incrementAndGet();
+                    }
+                } finally {
+                    cacheLock.writeLock().unlock();
+                    cacheLock.readLock().lock();
+                }
+            } else {
+                cacheHits.incrementAndGet();
             }
-            lastCacheUpdate = currentTime;
-        }
 
-        // 从缓存中获取NPC列表
-        for (CopyOnWriteArrayList<WeakReference<CustomEntity>> levelNPCs : NPC_CACHE.values()) {
-            collectAliveNPCs(levelNPCs, allNPCs);
+            for (CopyOnWriteArrayList<WeakNpcRef> levelNPCs : NPC_CACHE.values()) {
+                collectAliveNPCs(levelNPCs, allNPCs);
+            }
+        } finally {
+            cacheLock.readLock().unlock();
         }
 
         return allNPCs;
     }
 
-    /**
-     * 获取指定世界的NPC列表 - 使用缓存
-     */
     public static List<CustomEntity> getNPCsInLevel(ServerLevel level) {
         if (level == null) return new ArrayList<>();
 
-        // 检查缓存是否有效
-        long currentTime = System.currentTimeMillis();
         ResourceKey<Level> levelKey = level.dimension();
-        CopyOnWriteArrayList<WeakReference<CustomEntity>> cachedNPCs = NPC_CACHE.get(levelKey);
+        List<CustomEntity> resolvedNPCs = new ArrayList<>();
 
-        if (cachedNPCs == null || (currentTime - lastCacheUpdate > CACHE_UPDATE_INTERVAL * 50)) {
-            refreshLevelCache(level);
-            lastCacheUpdate = currentTime;
+        cacheLock.readLock().lock();
+        try {
+            long currentTime = System.currentTimeMillis();
+            long lastUpdate = lastCacheUpdate.get();
+            CopyOnWriteArrayList<WeakNpcRef> cachedNPCs = NPC_CACHE.get(levelKey);
+
+            boolean needRefresh = cachedNPCs == null || 
+                                 fullRefreshNeeded || 
+                                 (currentTime - lastUpdate > CACHE_UPDATE_INTERVAL * 50);
+
+            if (needRefresh) {
+                cacheLock.readLock().unlock();
+                cacheLock.writeLock().lock();
+                try {
+                    cachedNPCs = NPC_CACHE.get(levelKey);
+                    if (cachedNPCs == null || fullRefreshNeeded || 
+                        (currentTime - lastCacheUpdate.get() > CACHE_UPDATE_INTERVAL * 50)) {
+                        refreshLevelCache(level);
+                        fullUpdates.incrementAndGet();
+                        fullRefreshNeeded = false;
+                    } else {
+                        cacheHits.incrementAndGet();
+                    }
+                } finally {
+                    cacheLock.writeLock().unlock();
+                    cacheLock.readLock().lock();
+                    cachedNPCs = NPC_CACHE.get(levelKey);
+                }
+            } else {
+                cacheHits.incrementAndGet();
+            }
+
+            collectAliveNPCs(cachedNPCs, resolvedNPCs);
+        } finally {
+            cacheLock.readLock().unlock();
         }
 
-        List<CustomEntity> resolvedNPCs = new ArrayList<>();
-        collectAliveNPCs(NPC_CACHE.get(levelKey), resolvedNPCs);
         return resolvedNPCs;
     }
 
-    /**
-     * 清除NPC缓存（在NPC被添加或移除时调用）
-     */
     public static void invalidateCache() {
+        cacheLock.writeLock().lock();
+        try {
+            NPC_CACHE.clear();
+            lastCacheUpdate.set(0);
+            fullRefreshNeeded = true;
+        } finally {
+            cacheLock.writeLock().unlock();
+        }
+    }
+
+    private static void fullRefresh(MinecraftServer server) {
         NPC_CACHE.clear();
-        lastCacheUpdate = 0;
+        for (ServerLevel level : server.getAllLevels()) {
+            refreshLevelCacheInternal(level);
+        }
+        lastCacheUpdate.set(System.currentTimeMillis());
     }
 
     private static void refreshLevelCache(ServerLevel level) {
-        List<WeakReference<CustomEntity>> levelNPCs = new ArrayList<>();
-        level.getEntities().getAll().forEach(entity -> {
-            if (entity instanceof CustomEntity npc && npc.isAlive()) {
-                levelNPCs.add(new WeakReference<>(npc));
-            }
-        });
-        NPC_CACHE.put(level.dimension(), new CopyOnWriteArrayList<>(levelNPCs));
+        if (level == null) return;
+        refreshLevelCacheInternal(level);
+        lastCacheUpdate.set(System.currentTimeMillis());
     }
 
-    private static void collectAliveNPCs(CopyOnWriteArrayList<WeakReference<CustomEntity>> cachedNPCs, List<CustomEntity> output) {
+    private static void refreshLevelCacheInternal(ServerLevel level) {
+        ResourceKey<Level> levelKey = level.dimension();
+        List<WeakNpcRef> levelNPCs = new ArrayList<>();
+        
+        level.getEntities().getAll().forEach(entity -> {
+            if (entity instanceof CustomEntity npc && npc.isAlive()) {
+                levelNPCs.add(new WeakNpcRef(npc, REFERENCE_QUEUE, levelKey));
+            }
+        });
+        
+        NPC_CACHE.put(levelKey, new CopyOnWriteArrayList<>(levelNPCs));
+    }
+
+    private static void collectAliveNPCs(CopyOnWriteArrayList<WeakNpcRef> cachedNPCs, List<CustomEntity> output) {
         if (cachedNPCs == null) {
             return;
         }
+        
         cachedNPCs.removeIf(reference -> {
             CustomEntity npc = reference.get();
             return npc == null || !npc.isAlive() || npc.level().isClientSide();
         });
-        for (WeakReference<CustomEntity> reference : cachedNPCs) {
+        
+        for (WeakNpcRef reference : cachedNPCs) {
             CustomEntity npc = reference.get();
             if (npc != null && npc.isAlive()) {
                 output.add(npc);
@@ -419,18 +581,20 @@ public class NPCTaskScheduler {
         }
     }
 
-    /**
-     * 检查调度器是否已初始化
-     */
     public static boolean isInitialized() {
         return initialized;
     }
 
-    /**
-     * 获取待处理任务数量
-     */
     public static int getPendingTaskCount() {
         return pendingTaskCount.get();
+    }
+
+    public static int getMainThreadQueueSize() {
+        return mainThreadTasks.size();
+    }
+
+    public static double getCurrentTps() {
+        return currentTps;
     }
 
     private static ThreadFactory createNamedThreadFactory(String prefix) {
@@ -440,5 +604,67 @@ public class NPCTaskScheduler {
             thread.setDaemon(true);
             return thread;
         };
+    }
+
+    public enum TaskPriority {
+        HIGH(0),
+        NORMAL(1),
+        LOW(2);
+
+        private final int value;
+
+        TaskPriority(int value) {
+            this.value = value;
+        }
+
+        public int getValue() {
+            return value;
+        }
+    }
+
+    private static class PriorityRunnable implements Runnable, Comparable<PriorityRunnable> {
+        private final Runnable task;
+        private final TaskPriority priority;
+        private final String taskName;
+        private final long submitTime;
+
+        public PriorityRunnable(Runnable task, TaskPriority priority, String taskName) {
+            this.task = task;
+            this.priority = priority;
+            this.taskName = taskName;
+            this.submitTime = System.currentTimeMillis();
+        }
+
+        @Override
+        public void run() {
+            task.run();
+        }
+
+        @Override
+        public int compareTo(PriorityRunnable other) {
+            int priorityCompare = Integer.compare(this.priority.getValue(), other.priority.getValue());
+            if (priorityCompare != 0) {
+                return priorityCompare;
+            }
+            return Long.compare(this.submitTime, other.submitTime);
+        }
+    }
+
+    private static class WeakNpcRef extends WeakReference<CustomEntity> {
+        private final ResourceKey<Level> levelKey;
+
+        public WeakNpcRef(CustomEntity referent, ReferenceQueue<? super CustomEntity> queue) {
+            super(referent, queue);
+            this.levelKey = referent.level().dimension();
+        }
+
+        public WeakNpcRef(CustomEntity referent, ReferenceQueue<? super CustomEntity> queue, ResourceKey<Level> levelKey) {
+            super(referent, queue);
+            this.levelKey = levelKey;
+        }
+
+        public ResourceKey<Level> getLevelKey() {
+            return levelKey;
+        }
     }
 }

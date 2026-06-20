@@ -1,5 +1,7 @@
 package com.xiaoliang.simukraft.utils;
 
+
+import com.xiaoliang.simukraft.Simukraft;
 import com.xiaoliang.simukraft.config.ServerConfig;
 import com.xiaoliang.simukraft.client.preview.SchematicNBTLoader;
 import com.xiaoliang.simukraft.entity.CustomEntity;
@@ -23,6 +25,7 @@ import org.apache.logging.log4j.Logger;
 import javax.annotation.Nullable;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import com.xiaoliang.simukraft.Simukraft;
 
 /**
  * NPC休息处理流
@@ -86,6 +89,72 @@ public class NPCRestHandler {
     private static final Map<String, Integer> restDispatchSequenceByWindow = new ConcurrentHashMap<>();
     private static final Map<String, Optional<BlockPos>> homeTeleportNbtPosCache = new ConcurrentHashMap<>();
     private static final Map<String, Optional<BlockPos>> residentialControlBoxNbtPosCache = new ConcurrentHashMap<>();
+
+    static {
+        registerCleanupHandlers();
+    }
+
+    private static void registerCleanupHandlers() {
+        GlobalResourceCleaner.registerCleanableResource("NPCRestHandler-restingNPCs", () -> {
+            restingNPCs.clear();
+            Simukraft.LOGGER.debug("[NPCRestHandler] 已清理 restingNPCs ({}个)", restingNPCs.size());
+        });
+
+        GlobalResourceCleaner.registerCleanableResource("NPCRestHandler-goingToWorkNPCs", () -> {
+            goingToWorkNPCs.clear();
+            Simukraft.LOGGER.debug("[NPCRestHandler] 已清理 goingToWorkNPCs");
+        });
+
+        GlobalResourceCleaner.registerCleanableResource("NPCRestHandler-pendingHomePathStartTicks", () -> {
+            pendingHomePathStartTicks.clear();
+            Simukraft.LOGGER.debug("[NPCRestHandler] 已清理 pendingHomePathStartTicks");
+        });
+
+        GlobalResourceCleaner.registerCleanableResource("NPCRestHandler-dispatchPlans", () -> {
+            pendingRestDispatchPlans.clear();
+            restDispatchSequenceByWindow.clear();
+            Simukraft.LOGGER.debug("[NPCRestHandler] 已清理 dispatch plans");
+        });
+
+        GlobalResourceCleaner.registerCleanableResource("NPCRestHandler-nbtCaches", () -> {
+            homeTeleportNbtPosCache.clear();
+            residentialControlBoxNbtPosCache.clear();
+            Simukraft.LOGGER.debug("[NPCRestHandler] 已清理 NBT 位置缓存");
+        });
+
+        GlobalResourceCleaner.registerCleanableResource("NPCRestHandler-stateMaps", () -> {
+            npcLastBedTime.clear();
+            npcSubStates.clear();
+            npcHomePositions.clear();
+            npcPathfindingStatus.clear();
+            npcPreviousWorkStatus.clear();
+            npcPreviousJob.clear();
+            npcPreviousPlanningTaskId.clear();
+            npcManualWakeUpTime.clear();
+            Simukraft.LOGGER.debug("[NPCRestHandler] 已清理状态Map");
+        });
+    }
+
+    public static void cleanupAllCaches() {
+        restingNPCs.clear();
+        goingToWorkNPCs.clear();
+        pendingHomePathStartTicks.clear();
+        pendingRestDispatchPlans.clear();
+        restDispatchSequenceByWindow.clear();
+        homeTeleportNbtPosCache.clear();
+        residentialControlBoxNbtPosCache.clear();
+        npcLastBedTime.clear();
+        npcSubStates.clear();
+        npcHomePositions.clear();
+        npcPathfindingStatus.clear();
+        npcPreviousWorkStatus.clear();
+        npcPreviousJob.clear();
+        npcPreviousPlanningTaskId.clear();
+        npcManualWakeUpTime.clear();
+
+        Simukraft.LOGGER.info("[NPCRestHandler] ✅ 所有缓存已清理，释放内存");
+    }
+
 
     /**
      * NPC休息数据类
@@ -802,7 +871,7 @@ public class NPCRestHandler {
         if (isCommercialLikeJob(job)) {
             return getCommercialWorkplace(server, npcUuid, job);
         }
-        
+
         return switch (job) {
             case "builder" -> getBuilderWorkplace(server, npcUuid);
             case "planner" -> getPlannerWorkplace(server, npcUuid);
@@ -817,7 +886,7 @@ public class NPCRestHandler {
      * 支持任意职业类型的工业建筑
      */
     private static BlockPos getIndustrialWorkplace(MinecraftServer server, UUID npcUuid, String jobType) {
-        Map<BlockPos, com.xiaoliang.simukraft.world.IndustrialHiredData.IndustrialHireInfo> hiredEmployees = 
+        Map<BlockPos, com.xiaoliang.simukraft.world.IndustrialHiredData.IndustrialHireInfo> hiredEmployees =
             com.xiaoliang.simukraft.world.IndustrialHiredData.loadHiredEmployees(server);
         for (Map.Entry<BlockPos, com.xiaoliang.simukraft.world.IndustrialHiredData.IndustrialHireInfo> entry : hiredEmployees.entrySet()) {
             com.xiaoliang.simukraft.world.IndustrialHiredData.IndustrialHireInfo hireInfo = entry.getValue();
@@ -1003,8 +1072,8 @@ public class NPCRestHandler {
 
         try {
             // 验证taskInfo的必需字段
-            if (taskInfo.buildingName == null || taskInfo.category == null || 
-                taskInfo.startPos == null || taskInfo.buildBoxPos == null || 
+            if (taskInfo.buildingName == null || taskInfo.category == null ||
+                taskInfo.startPos == null || taskInfo.buildBoxPos == null ||
                 taskInfo.facing == null || taskInfo.displayName == null) {
                 LOGGER.warn("[NPCRestHandler] 建造任务数据不完整，无法恢复 - NPC: {}",
                     npc.getFullName());

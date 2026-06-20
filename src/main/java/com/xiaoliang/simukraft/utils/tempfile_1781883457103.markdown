@@ -1,0 +1,179 @@
+NEW_FILE_CODE
+# 主线程任务队列积压优化指南
+
+## 🎯 优化目标
+
+解决NPC任务调度器中主线程任务队列积压问题，提升服务器性能和稳定性。
+
+## 📊 优化内容
+
+### 1. 优先级队列机制
+- **HIGH**: 关键任务（如玩家交互、重要状态同步）
+- **NORMAL**: 普通任务（如NPC状态更新、数据同步）
+- **LOW**: 低优先级任务（如日志记录、统计信息）
+
+### 2. 动态任务限制
+根据TPS自动调整每tick处理的任务数量：
+
+| TPS范围 | 每tick处理任务数 | 说明 |
+|---------|-----------------|------|
+| ≥19.0   | 200个           | 服务器性能良好，全力处理 |
+| 17.0-18.9 | 100个         | 正常水平，保持平衡 |
+| 15.0-16.9 | 50个          | 性能下降，减少负载 |
+| <15.0   | 20-25个         | 严重卡顿，最小化处理 |
+
+### 3. 背压控制
+- 队列上限：**500个任务**
+- 超过上限时自动丢弃新任务并记录警告
+- 防止内存溢出和无限增长
+
+### 4. 智能扩容
+当队列积压超过300个任务时，临时提升处理能力50个任务/tick
+
+## 🔧 使用方法
+
+### 基本用法
+// 1. 普通任务入队（默认NORMAL优先级） NPCTaskScheduler.enqueueMainThreadTask(() -> { // 在主线程执行的代码 npc.updateStatus(); }, "UpdateNPCStatus");
+// 2. 指定优先级 NPCTaskScheduler.enqueueMainThreadTask( () -> npc.syncToClient(), NPCTaskScheduler.TaskPriority.HIGH, "SyncNPC" );
+// 3. 在服务器主线程运行（如果已在主线程则直接执行） NPCTaskScheduler.runOnMainThread(server, () -> { worldData.save(); }, "SaveWorldData");
+// 4. 异步任务+主线程回调 NPCTaskScheduler.submitCallableWithMainThreadCallback( () -> { // 在后台线程执行耗时操作 return heavyComputation(); }, result -> { // 在主线程处理结果 applyResult(result); }, "HeavyComputation" );
+### 优先级选择指南
+
+#### HIGH 优先级 - 立即处理
+/ 玩家相关操作 NPCTaskScheduler.enqueueMainThreadTask( () -> player.sendMessage(message), TaskPriority.HIGH, "PlayerMessage" );
+// 重要状态同步 NPCTaskScheduler.enqueueMainThreadTask( () -> syncCriticalData(), TaskPriority.HIGH, "CriticalSync" );
+#### NORMAL 优先级 - 常规处理
+// NPC状态更新 NPCTaskScheduler.enqueueMainThreadTask( () -> npc.updateWorkStatus(), TaskPriority.NORMAL, "NPCWorkUpdate" );
+// 数据保存 NPCTaskScheduler.enqueueMainThreadTask( () -> saveNPCData(), TaskPriority.NORMAL, "SaveNPCData" );
+#### LOW 优先级 - 延迟处理
+// 日志记录 NPCTaskScheduler.enqueueMainThreadTask( () -> logStatistics(), TaskPriority.LOW, "LogStats" );
+// 性能监控 NPCTaskScheduler.enqueueMainThreadTask( () -> updateMetrics(), TaskPriority.LOW, "UpdateMetrics" );
+## 📈 监控与调试
+
+### 1. 查看实时统计
+每30秒自动输出统计信息：
+NPC调度器统计 - TPS:良好(19.5), 待处理:5, 已完成:150, 拒绝:0, 主线程执行:100, 主线程排队:45/200, 缓存命中:850, 缺失:50, 增量更新:120, 全量更新:5, 溢出警告:0
+**关键指标解读**:
+- `TPS:良好(19.5)`: 服务器性能状态
+- `主线程排队:45/200`: 当前队列大小/当前限制
+- `拒绝:0`: 被丢弃的任务数（应该为0）
+- `溢出警告:0`: 队列超限警告次数
+
+### 2. 主动监控
+// 获取当前队列大小 int queueSize = NPCTaskScheduler.getMainThreadQueueSize();
+// 获取当前TPS double tps = NPCTaskScheduler.getCurrentTps();
+// 定期生成报告 MainThreadTaskMonitor.checkAndReport(server);
+### 3. 性能调优建议
+
+#### 场景1: 队列持续积压 (>200个任务)
+**症状**: 日志显示 `主线程排队:250/200`
+
+**解决方案**:
+// 1. 检查是否有不必要的任务提交 // 2. 将部分任务改为异步执行 NPCTaskScheduler.submitTask(() -> { // 在后台线程处理 processData(); }, "ProcessData");
+// 3. 合并相似任务 // 不要这样做： for (NPC npc : npcs) { NPCTaskScheduler.enqueueMainThreadTask(() -> npc.update(), "Update"); }
+// 改为批量处理： NPCTaskScheduler.enqueueMainThreadTask(() -> { for (NPC npc : npcs) { npc.update(); } }, "BatchUpdate");
+#### 场景2: TPS下降 (<15)
+**症状**: TPS持续低于15，队列处理缓慢
+
+**解决方案**:
+// 系统会自动降低每tick处理数量到50个 // 可以手动触发垃圾回收 System.gc();
+// 或者暂停低优先级任务 // 在ServerTickHandler中添加： if (NPCTaskScheduler.getCurrentTps() < 15.0) { // 跳过非关键更新 return; }
+#### 场景3: 任务被拒绝
+**症状**: 日志显示 `有 X 个任务被拒绝`
+
+**解决方案**:
+// 1. 检查队列上限是否合理 // 在NPCTaskScheduler中调整： private static final int MAX_MAIN_THREAD_QUEUE_SIZE = 500; // 增加到1000
+// 2. 优化任务提交逻辑，避免短时间大量提交 // 3. 实现任务合并机制
+## ⚙️ 配置参数
+
+### 可调参数说明
+
+// 位于NPCTaskScheduler类顶部
+// 每tick处理任务数范围 MIN_MAIN_THREAD_TASKS_PER_TICK = 50; // 最小值（卡顿时） MAX_MAIN_THREAD_TASKS_PER_TICK = 200; // 最大值（流畅时） DEFAULT_MAIN_THREAD_TASKS_PER_TICK = 100; // 默认值
+// 队列容量 MAX_MAIN_THREAD_QUEUE_SIZE = 500; // 最大队列长度
+// TPS阈值调整点 if (currentTps >= 19.0) { ... } // 优秀 else if (currentTps >= 17.0) { ... } // 良好 else if (currentTps >= 15.0) { ... } // 一般 else { ... } // 较差
+
+### 自定义配置示例
+// 对于高性能服务器，可以提升上限 private static final int MAX_MAIN_THREAD_TASKS_PER_TICK = 300; private static final int MAX_MAIN_THREAD_QUEUE_SIZE = 800;
+// 对于低配服务器，降低下限保证稳定性 private static final int MIN_MAIN_THREAD_TASKS_PER_TICK = 30;
+
+## 🧪 测试方案
+
+### 压力测试
+// 创建100个NPC同时提交任务 @Test public void testHeavyLoad() { List<CustomEntity> npcs = createTestNPCs(100);
+long startTime = System.currentTimeMillis();
+
+for (CustomEntity npc : npcs) {
+NPCTaskScheduler.enqueueMainThreadTask(
+() -> npc.update(),
+"TestUpdate"
+);
+}
+
+int queueSize = NPCTaskScheduler.getMainThreadQueueSize();
+assertTrue(queueSize <= 500, "队列不应超过上限");
+
+LOGGER.info("提交了100个任务，当前队列大小: {}", queueSize);
+}
+
+### 优先级测试
+
+@Test public void testPriorityOrdering() { PriorityRunnable high = new PriorityRunnable( () -> {}, TaskPriority.HIGH, "High" ); PriorityRunnable normal = new PriorityRunnable( () -> {}, TaskPriority.NORMAL, "Normal" ); PriorityRunnable low = new PriorityRunnable( () -> {}, TaskPriority.LOW, "Low" );
+assertTrue(high.compareTo(normal) < 0, "HIGH应优先于NORMAL");
+assertTrue(normal.compareTo(low) < 0, "NORMAL应优先于LOW");
+}
+
+## 🚨 常见问题
+
+### Q1: 为什么我的任务被拒绝了？
+**A**: 队列已满（≥500个任务）。检查：
+1. 是否有死循环不断提交任务
+2. 是否有任务执行时间过长阻塞队列
+3. 考虑提升 `MAX_MAIN_THREAD_QUEUE_SIZE`
+
+### Q2: TPS很高但队列还是积压？
+**A**: 可能是任务提交速度远超处理速度。解决：
+1. 合并相似任务，减少提交频率
+2. 将非关键任务改为异步执行
+3. 实现任务去重机制
+
+### Q3: 如何判断优化是否生效？
+**A**: 观察以下指标：
+- ✅ `主线程排队` 保持在 <100
+- ✅ `拒绝` 数量为 0
+- ✅ `TPS` 稳定在 19-20
+- ✅ `溢出警告` 为 0
+
+### Q4: 能否完全禁用这个优化？
+**A**: 可以，回退到固定限制模式：
+
+private static int calculateDynamicTaskLimit() { return DEFAULT_MAIN_THREAD_TASKS_PER_TICK; // 固定100 }
+
+## 📝 最佳实践
+
+1. **合理使用优先级**: 只有真正紧急的任务才用HIGH
+2. **批量处理**: 多个小任务合并成一个大任务
+3. **异步优先**: 能不占用主线程的操作都放后台
+4. **定期监控**: 关注日志中的统计信息
+5. **及时清理**: 避免提交永远不会执行的任务
+
+## 🎯 预期效果
+
+优化后应该看到：
+- 📉 队列积压减少 **60-80%**
+- 📈 TPS提升 **2-4个点**（在NPC密集场景）
+- 🎮 游戏卡顿明显减轻
+- 💾 内存使用更稳定（防止OOM）
+
+---
+
+**最后更新**: 2025-06-19  
+**维护者**: NSUK开发团队
+
+
+
+
+
+
+
+

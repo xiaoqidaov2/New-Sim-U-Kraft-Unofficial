@@ -85,7 +85,6 @@ public class Simukraft {
         ModMenus.MENUS.register(modEventBus);
         ModRecipeSerializers.RECIPE_SERIALIZERS.register(modEventBus);
 
-        // 注册服务器配置
         context.registerConfig(ModConfig.Type.COMMON, ServerConfig.SPEC);
         context.registerConfig(ModConfig.Type.CLIENT, ClientConfigSpec.SPEC);
 
@@ -95,6 +94,8 @@ public class Simukraft {
         MinecraftForge.EVENT_BUS.addListener(this::onRegisterCommands);
         MinecraftForge.EVENT_BUS.addListener(this::onEntityJoin);
 
+        MinecraftForge.EVENT_BUS.register(com.xiaoliang.simukraft.utils.NPCTaskScheduler.class);
+        LOGGER.info("[Simukraft] NPC任务调度器事件监听器已注册");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
@@ -243,6 +244,8 @@ public class Simukraft {
             ClientToastHUDOverlay.clearAllToasts();
             hasLoadedData = false;
             ClientMemoryCleanerService.onClientLoggedOut();
+            
+            com.xiaoliang.simukraft.utils.GlobalResourceCleaner.cleanupAll();
         }
 
         private static com.xiaoliang.simukraft.client.gui.ConfigButtonHandler configButtonHandler;
